@@ -1,24 +1,3 @@
-/* ---------------------------------------------------------------------
- * Copyright (C) 2010 - 2015 by the deal.II authors and
- *                              Jean-Paul Pelteret and Andrew McBride
- *
- * This file is part of the deal.II library.
- *
- * The deal.II library is free software; you can use it, redistribute
- * it, and/or modify it under the terms of the GNU Lesser General
- * Public License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * The full text of the license can be found in the file LICENSE at
- * the top level of the deal.II distribution.
- *
- * ---------------------------------------------------------------------
- */
-
-/*
- * Authors: Jean-Paul Pelteret, University of Erlangen-Nuremberg,
- *          Andrew McBride, University of Cape Town, 2015, 2017
- */
-
 // own headers
 #include <boost/preprocessor/facilities/empty.hpp>
 #include <boost/preprocessor/list/at.hpp>
