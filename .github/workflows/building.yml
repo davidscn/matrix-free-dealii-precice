@@ -1,0 +1,29 @@
+name: Building
+
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: setup
+      run: |
+         command="sudo apt-get -y update && \
+                  git clone https://github.com/${{ github.repository }} && \
+                  cd matrix-free-dealii-precice && \
+                  git fetch origin ${{ github.ref }} && \
+                  git checkout FETCH_HEAD && \
+                  cmake . && \
+                  make";
+         
+         echo $command
+         
+         docker pull dealii/dealii:master-focal
+         docker run -t dealii/dealii:master-focal /bin/sh -c "$command";
