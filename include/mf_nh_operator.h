@@ -99,7 +99,8 @@ operator|=(MFMask &f1, MFMask f2)
   return f1;
 }
 
-inline constexpr bool operator&(MFMask f1, MFMask f2)
+inline constexpr bool
+operator&(MFMask f1, MFMask f2)
 {
   return (static_cast<std::underlying_type<MFMask>::type>(f1) &
           static_cast<std::underlying_type<MFMask>::type>(f2)) != 0;
@@ -390,7 +391,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::initialize(
   data_reference = data_reference_;
   displacement   = &displacement_;
 
-  const unsigned int n_cells = data_reference_->n_macro_cells();
+  const unsigned int n_cells = data_reference_->n_cell_batches();
   FEEvaluation<dim, fe_degree, n_q_points_1d, dim, number> phi(
     *data_reference_);
   if (caching == "scalar")
@@ -435,7 +436,7 @@ template <int dim, int fe_degree, int n_q_points_1d, typename number>
 void
 NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::cache()
 {
-  const unsigned int n_cells = data_reference->n_macro_cells();
+  const unsigned int n_cells = data_reference->n_cell_batches();
 
   FEEvaluation<dim, fe_degree, n_q_points_1d, dim, number> phi_reference(
     *data_reference);
@@ -461,7 +462,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::cache()
               const VectorizedArray<number> det_F = determinant(F);
 
               for (unsigned int i = 0;
-                   i < data_current->n_components_filled(cell);
+                   i < data_current->n_active_entries_per_cell_batch(cell);
                    ++i)
                 Assert(det_F[i] > 0,
                        ExcMessage(
@@ -482,7 +483,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::cache()
               const VectorizedArray<number> det_F = determinant(F);
 
               for (unsigned int i = 0;
-                   i < data_current->n_components_filled(cell);
+                   i < data_current->n_active_entries_per_cell_batch(cell);
                    ++i)
                 Assert(det_F[i] > 0,
                        ExcMessage(
@@ -654,7 +655,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::vmult_add(
 
   // FIXME: use cell_loop, should work even though we need
   // both matrix-free data objects.
-  Assert(data_current->n_macro_cells() == data_reference->n_macro_cells(),
+  Assert(data_current->n_cell_batches() == data_reference->n_cell_batches(),
          ExcInternalError());
 
   // MatrixFree::cell_loop() is more complicated than a simple
@@ -672,7 +673,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::vmult_add(
                          dst,
                          src,
                          std::make_pair<unsigned int, unsigned int>(
-                           0, data_current->n_macro_cells()));
+                           0, data_current->n_cell_batches()));
 
   // 3. communicate results with MPI
   if (mask & MFMask::MPI)
@@ -901,7 +902,9 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
 
   // make sure all filled cells have the same ID
 #ifdef DEBUG
-  for (unsigned int i = 1; i < data_current->n_components_filled(cell); ++i)
+  for (unsigned int i = 1;
+       i < data_current->n_active_entries_per_cell_batch(cell);
+       ++i)
     {
       const unsigned int other_id =
         data_current->get_cell_iterator(cell, i)->material_id();
@@ -915,9 +918,11 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
 #endif
 
   // make sure both MatrixFree objects use the same cells
-  AssertDimension(data_current->n_components_filled(cell),
-                  data_reference->n_components_filled(cell));
-  for (unsigned int i = 0; i < data_current->n_components_filled(cell); ++i)
+  AssertDimension(data_current->n_active_entries_per_cell_batch(cell),
+                  data_reference->n_active_entries_per_cell_batch(cell));
+  for (unsigned int i = 0;
+       i < data_current->n_active_entries_per_cell_batch(cell);
+       ++i)
     Assert(data_current->get_cell_iterator(cell, i) ==
              data_reference->get_cell_iterator(cell, i),
            ExcMessage("Cell block " + std::to_string(cell) + " element " +
@@ -975,7 +980,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
                      ExcMessage("Cached scalar and det_F do not match"));
 
               for (unsigned int i = 0;
-                   i < data_current->n_components_filled(cell);
+                   i < data_current->n_active_entries_per_cell_batch(cell);
                    ++i)
                 Assert(det_F[i] > 0,
                        ExcMessage("det_F[" + std::to_string(i) +
@@ -1089,7 +1094,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
               const VectorizedArray<number> &JxW_current = phi_current.JxW(q);
               VectorizedArray<number>        JxW_scale   = phi_reference.JxW(q);
               for (unsigned int i = 0;
-                   i < data_current->n_components_filled(cell);
+                   i < data_current->n_active_entries_per_cell_batch(cell);
                    ++i)
                 {
                   Assert(std::abs(JxW_current[i]) > 0., ExcInternalError());
@@ -1104,7 +1109,8 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
                       std::to_string(i) + " out of " +
                       std::to_string(VectorizedArray<number>::size()) +
                       ", filled " +
-                      std::to_string(data_current->n_components_filled(cell)) +
+                      std::to_string(
+                        data_current->n_active_entries_per_cell_batch(cell)) +
                       " : " + std::to_string(det_F[i]) +
                       "!=" + std::to_string(1. / JxW_scale[i]) + " " +
                       std::to_string(std::abs(JxW_scale[i] * det_F[i] - 1.))));
@@ -1179,7 +1185,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
               const VectorizedArray<number> JxW_current = phi_current.JxW(q);
               VectorizedArray<number>       JxW_scale   = phi_reference.JxW(q);
               for (unsigned int i = 0;
-                   i < data_current->n_components_filled(cell);
+                   i < data_current->n_active_entries_per_cell_batch(cell);
                    ++i)
                 {
                   Assert(std::abs(JxW_current[i]) > 0., ExcInternalError());
@@ -1194,7 +1200,8 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
                       std::to_string(i) + " out of " +
                       std::to_string(VectorizedArray<number>::size()) +
                       ", filled " +
-                      std::to_string(data_current->n_components_filled(cell)) +
+                      std::to_string(
+                        data_current->n_active_entries_per_cell_batch(cell)) +
                       " : " + std::to_string(det_F[i]) +
                       "!=" + std::to_string(1. / JxW_scale[i]) + " " +
                       std::to_string(std::abs(JxW_scale[i] * det_F[i] - 1.))));
@@ -1233,29 +1240,14 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
           dealii::internal::FEEvaluationImplCollocation<
             dim,
             n_q_points_1d - 1,
-            dim,
-            NumberType>::evaluate(data_reference->get_shape_info(),
+            NumberType>::evaluate(dim,
+                                  EvaluationFlags::gradients,
+                                  data_reference->get_shape_info(),
                                   cached_position,
                                   nullptr,
                                   ref_grads,
                                   nullptr,
-                                  nullptr,
-                                  false,
-                                  true,
-                                  false);
-
-          // Newer deal.II version
-          //          dealii::internal::FEEvaluationImplCollocation<
-          //            dim,
-          //            n_q_points_1d - 1,
-          //            NumberType>::evaluate(dim,
-          //                                  EvaluationFlags::gradients,
-          //                                  data_reference->get_shape_info(),
-          //                                  cached_position,
-          //                                  nullptr,
-          //                                  ref_grads,
-          //                                  nullptr,
-          //                                  nullptr);
+                                  nullptr);
 
           for (unsigned int q = 0; q < phi_current.n_q_points; ++q)
             {
@@ -1441,7 +1433,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::compute_diagonal()
                       diagonal_vector,
                       dummy,
                       std::make_pair<unsigned int, unsigned int>(
-                        0, data_current->n_macro_cells()));
+                        0, data_current->n_cell_batches()));
   diagonal_vector.compress(VectorOperation::add);
 
   // data_current->cell_loop (&NeoHookOperator::local_diagonal_cell,
