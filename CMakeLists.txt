@@ -97,34 +97,6 @@ TARGET_LINK_LIBRARIES(${TARGET}
     ${TARGETLIB}
   )
 
-#
-# Likwid, configure with:
-# -DWITH_LIKWID=TRUE -DLIKWID_DIR=/path/to/prefix
-#
-IF (WITH_LIKWID)
-  FIND_LIBRARY(LIKWID_LIBRARY
-    NAMES likwid
-    HINTS ${LIKWID_DIR}/lib
-    NO_DEFAULT_PATH
-  )
-  IF(LIKWID_LIBRARY STREQUAL "LIKWID_LIBRARY-NOTFOUND")
-    MESSAGE("-- Build without Likwid")
-    SET(WITH_LIKWID "FALSE")
-  ELSE()
-    MESSAGE("-- Use Likwid from ${LIKWID_DIR}")
-    TARGET_LINK_LIBRARIES(${TARGETLIB}
-      "${LIKWID_LIBRARY}"
-    )
-    # TODO: use FIND_PATH() to look for the headers
-    INCLUDE_DIRECTORIES ("${LIKWID_DIR}/include")
-
-    # Finally, add necessary flags:
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DLIKWID_PERFMON")
-  ENDIF()
-ELSE()
-  MESSAGE("-- Build without Likwid")
-ENDIF ()
-
 INCLUDE_DIRECTORIES (${CMAKE_CURRENT_BINARY_DIR}/include)
 
 #
