@@ -54,12 +54,6 @@ static const unsigned int debug_level = 1;
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/precondition_selector.h>
 #include <deal.II/lac/solver_cg.h>
-//#include <deal.II/lac/sparse_direct.h>
-//#include <deal.II/lac/trilinos_precondition.h>
-//#include <deal.II/lac/trilinos_solver.h>
-//#include <deal.II/lac/trilinos_sparse_matrix.h>
-//#include <deal.II/lac/trilinos_sparsity_pattern.h>
-//#include <deal.II/lac/trilinos_vector.h>
 
 #include <deal.II/multigrid/mg_coarse.h>
 #include <deal.II/multigrid/mg_constrained_dofs.h>
@@ -1725,9 +1719,6 @@ namespace Cook_Membrane
                                   mf_data_reference,
                                   solution_total,
                                   parameters.mf_caching);
-        //        mf_ad_nh_operator.initialize(mf_data_current,
-        //                                     mf_data_reference,
-        //                                     solution_total);
 
         // print memory consumption by MF
         if (print_mf_memory)
@@ -2762,83 +2753,43 @@ namespace Cook_Membrane
                                  (debug_level > 0 ? true : false));
 
     pcout << " SLV " << std::flush;
-    if (parameters.type_lin == "CG" || parameters.type_lin == "MF_CG" ||
-        parameters.type_lin == "MF_AD_CG")
+    if (parameters.type_lin == "MF_CG")
       {
         SolverCG<LinearAlgebra::distributed::Vector<double>> solver_CG(
           solver_control);
         constraints.set_zero(newton_update);
 
-        if (parameters.type_lin == "CG")
+        if (parameters.preconditioner_type == "jacobi")
           {
-            AssertThrow(false, ExcMessage("Has been removed!"));
+            PreconditionJacobi<
+              NeoHookOperator<dim, degree, n_q_points_1d, double>>
+              preconditioner;
+            preconditioner.initialize(mf_nh_operator,
+                                      parameters.preconditioner_relaxation);
+
+            solver_CG.solve(mf_nh_operator,
+                            newton_update,
+                            system_rhs,
+                            preconditioner);
           }
-        else if (parameters.type_lin == "MF_AD_CG")
+        else if (parameters.preconditioner_type == "none")
           {
-            AssertThrow(false, ExcMessage("Has been removed!"));
-
-            AssertThrow(parameters.preconditioner_type == "jacobi",
-                        ExcNotImplemented());
-            //            PreconditionJacobi<
-            //              NeoHookOperatorAD<dim, degree, n_q_points_1d,
-            //              double>> preconditioner;
-            //            preconditioner.initialize(mf_ad_nh_operator,
-            //                                      parameters.preconditioner_relaxation);
-
-            //            solver_CG.solve(mf_ad_nh_operator,
-            //                            newton_update,
-            //                            system_rhs,
-            //                            preconditioner);
+            solver_CG.solve(mf_nh_operator,
+                            newton_update,
+                            system_rhs,
+                            PreconditionIdentity());
           }
         else
           {
-            Assert(parameters.type_lin == "MF_CG", ExcInternalError());
-
-            if (parameters.preconditioner_type == "jacobi")
-              {
-                PreconditionJacobi<
-                  NeoHookOperator<dim, degree, n_q_points_1d, double>>
-                  preconditioner;
-                preconditioner.initialize(mf_nh_operator,
-                                          parameters.preconditioner_relaxation);
-
-                solver_CG.solve(mf_nh_operator,
-                                newton_update,
-                                system_rhs,
-                                preconditioner);
-              }
-            else if (parameters.preconditioner_type == "none")
-              {
-                solver_CG.solve(mf_nh_operator,
-                                newton_update,
-                                system_rhs,
-                                PreconditionIdentity());
-              }
-            else
-              {
-                Assert(parameters.preconditioner_type == "gmg",
-                       ExcInternalError());
-                solver_CG.solve(mf_nh_operator,
-                                newton_update,
-                                system_rhs,
-                                *multigrid_preconditioner);
-              }
+            Assert(parameters.preconditioner_type == "gmg", ExcInternalError());
+            solver_CG.solve(mf_nh_operator,
+                            newton_update,
+                            system_rhs,
+                            *multigrid_preconditioner);
           }
 
         lin_it  = solver_control.last_step();
         lin_res = solver_control.last_value();
-      }
-    else if (parameters.type_lin == "Direct")
-      {
-        //        TrilinosWrappers::SolverDirect A_direct(solver_control);
-        //        A_direct.initialize(tangent_matrix);
-
-        //        A_direct.solve(newton_update_trilinos, system_rhs_trilinos);
-
-        //        copy_trilinos(newton_update, newton_update_trilinos);
-
-        lin_it  = 1;
-        lin_res = 0.0;
       }
     else
       Assert(false, ExcMessage("Linear solver type not implemented"));
