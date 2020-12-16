@@ -12,7 +12,6 @@
 
 #include <deal.II/multigrid/mg_constrained_dofs.h>
 
-#include <config.h>
 #include <material.h>
 
 // Define an operation that takes two tensors $ \mathbf{A} $ and

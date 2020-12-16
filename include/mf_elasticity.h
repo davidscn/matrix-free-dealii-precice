@@ -79,7 +79,6 @@ static const unsigned int debug_level = 1;
 #include <deal.II/physics/elasticity/kinematics.h>
 #include <deal.II/physics/elasticity/standard_tensors.h>
 
-#include <config.h>
 #include <material.h>
 //#include <mf_ad_nh_operator.h>
 #include <mf_nh_operator.h>

@@ -2,8 +2,6 @@
 #  CMake script for the step-<XYZ> tutorial program:
 ##
 
-OPTION(WITH_BREAKDOWN "Hack breackdown measurements of MF vmult() with LIKWID" OFF)
-
 # Set the name of the project and target:
 SET(TARGET "main")
 SET(TARGETLIB "mf_elasticity")
@@ -22,6 +20,8 @@ SET(CLEAN_UP_FILES
   # a custom list of globs, e.g. *.log *.vtk
   *.vtk
 )
+
+MESSAGE(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
 # Usually, you will not need to modify anything beyond this point...
 
@@ -98,12 +98,6 @@ TARGET_LINK_LIBRARIES(${TARGET}
   )
 
 INCLUDE_DIRECTORIES (${CMAKE_CURRENT_BINARY_DIR}/include)
-
-#
-# Create a config file
-#
-CONFIGURE_FILE(${CMAKE_SOURCE_DIR}/include/config.h.in
-               ${CMAKE_CURRENT_BINARY_DIR}/include/config.h)
 
 #
 # Custom "debug" and "release" make targets:
