@@ -1191,14 +1191,15 @@ namespace Cook_Membrane
   }
 
 
-  void merge(parallel::distributed::Triangulation<3> &    dst,
-             const std::vector<const Triangulation<2> *> &triangulations,
-             const double                                 scale,
-             const Point<3> &                             center_dim_1,
-             const Point<3> &                             center_dim_2,
-             const Point<3> &                             center_dim_3,
-             const double                                 extrusion_height,
-             const unsigned int                           extrusion_slices)
+  void
+  merge(parallel::distributed::Triangulation<3> &    dst,
+        const std::vector<const Triangulation<2> *> &triangulations,
+        const double                                 scale,
+        const Point<3> &                             center_dim_1,
+        const Point<3> &                             center_dim_2,
+        const Point<3> &                             center_dim_3,
+        const double                                 extrusion_height,
+        const unsigned int                           extrusion_slices)
   {
     Triangulation<2> triangulation_2d;
     GridGenerator::merge_triangulations(triangulations,
@@ -1231,14 +1232,15 @@ namespace Cook_Membrane
     dst.set_manifold(3, cylindrical_manifold_3);
   }
 
-  void merge(parallel::distributed::Triangulation<2> &    dst,
-             const std::vector<const Triangulation<2> *> &triangulations,
-             const double                                 scale,
-             const Point<2> &                             center_dim_1,
-             const Point<2> &                             center_dim_2,
-             const Point<2> &                             center_dim_3,
-             const double /*extrusion_height*/,
-             const unsigned int /*extrusion_slices*/)
+  void
+  merge(parallel::distributed::Triangulation<2> &    dst,
+        const std::vector<const Triangulation<2> *> &triangulations,
+        const double                                 scale,
+        const Point<2> &                             center_dim_1,
+        const Point<2> &                             center_dim_2,
+        const Point<2> &                             center_dim_3,
+        const double /*extrusion_height*/,
+        const unsigned int /*extrusion_slices*/)
 
   {
     GridGenerator::merge_triangulations(triangulations,
@@ -2918,12 +2920,13 @@ namespace Cook_Membrane
     data_out.write_vtu_in_parallel(filename, mpi_communicator);
 
     // output MG mesh
-    const std::string mg_mesh = parameters.output_folder + "mg_mesh";
-    GridOut           grid_out;
-    grid_out.write_mesh_per_processor_as_vtu(triangulation,
-                                             mg_mesh,
-                                             true,
-                                             /*artificial*/ false);
+    // Creates processor partition
+    //    const std::string mg_mesh = parameters.output_folder + "mg_mesh";
+    //    GridOut           grid_out;
+    //    grid_out.write_mesh_per_processor_as_vtu(triangulation,
+    //                                             mg_mesh,
+    //                                             true,
+    //                                             /*artificial*/ false);
   }
 
 } // namespace Cook_Membrane
