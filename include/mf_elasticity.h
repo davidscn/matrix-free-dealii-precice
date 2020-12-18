@@ -1830,11 +1830,8 @@ namespace Cook_Membrane
     TimerOutput::Scope t(timer, "Assemble linear system");
     pcout << " ASM " << std::flush;
 
-    //    tangent_matrix      = 0.0;
     system_rhs = 0.0;
-    //    system_rhs_trilinos = 0.0;
 
-    FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
     Vector<double>     cell_rhs(dofs_per_cell);
     std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
@@ -1861,14 +1858,15 @@ namespace Cook_Membrane
           bool skip_assembly_on_this_cell = parameters.skip_tangent_assembly;
           // be conservative and do not skip assembly of boundary cells
           // regardless of BC
+          // Changed, I removed the code parts
           for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
                ++face)
             if (cell->face(face)->at_boundary())
-              skip_assembly_on_this_cell = false;
+              skip_assembly_on_this_cell = true;
 
           fe_values.reinit(cell);
           cell_rhs    = 0.;
-          cell_matrix = 0.;
+
           cell->get_dof_indices(local_dof_indices);
 
           // We first need to find the solution gradients at quadrature points
@@ -1919,58 +1917,9 @@ namespace Cook_Membrane
               // loop over j first to make caching a bit more
               // straight-forward without recourse to symmetry
               for (unsigned int j = 0; j < dofs_per_cell; ++j)
-                {
-                  cell_rhs(j) -= (symm_grad_Nx[j] * tau) * JxW;
+                cell_rhs(j) -= (symm_grad_Nx[j] * tau) * JxW;
 
-                  if (skip_assembly_on_this_cell)
-                    continue;
-
-                  const SymmetricTensor<2, dim> Jc_symm_grad_Nx_j =
-                    cell_mat->act_Jc(det_F, b_bar, b, symm_grad_Nx[j]);
-
-#ifdef COMPONENT_LESS_GEOM_TANGENT
-                  const Tensor<2, dim> Jg_grad_Nx_j =
-                    egeo_grad(grad_Nx[j], tau_ns);
-#else
-                  const unsigned int component_j =
-                    fe.system_to_component_index(j).first;
-                  const Tensor<1, dim> tau_grad_Nx_j_comp_j =
-                    tau_ns * grad_Nx[j][component_j];
-#endif
-                  for (unsigned int i = 0; i <= j; ++i)
-                    {
-                      // This is the $\mathsf{\mathbf{k}}_{\mathbf{u}
-                      // \mathbf{u}}$ contribution. It comprises a material
-                      // contribution, and a geometrical stress contribution
-                      // which is only added along the local matrix diagonals:
-                      cell_matrix(i, j) +=
-                        (symm_grad_Nx[i] *
-                         Jc_symm_grad_Nx_j) // The material contribution:
-                        * JxW;
-
-#ifdef COMPONENT_LESS_GEOM_TANGENT
-                      // geometrical stress contribution
-                      cell_matrix(i, j) +=
-                        scalar_product(grad_Nx[i], Jg_grad_Nx_j) * JxW;
-#else
-                      const unsigned int component_i =
-                        fe.system_to_component_index(i).first;
-                      if (component_i ==
-                          component_j) // geometrical stress contribution
-                        cell_matrix(i, j) +=
-                          (grad_Nx[i][component_i] * tau_grad_Nx_j_comp_j) *
-                          JxW;
-#endif
-                    }
-                }
             } // end loop over quadrature points
-
-          // Finally, we need to copy the lower half of the local matrix into
-          // the upper half:
-          if (!skip_assembly_on_this_cell)
-            for (unsigned int j = 0; j < dofs_per_cell; ++j)
-              for (unsigned int i = j + 1; i < dofs_per_cell; ++i)
-                cell_matrix(i, j) = cell_matrix(j, i);
 
           // Next we assemble the Neumann contribution. We first check to see it
           // the cell face exists on a boundary on which a traction is applied
@@ -2010,36 +1959,23 @@ namespace Cook_Membrane
                   }
               }
 
-          if (parameters.skip_tangent_assembly)
-            constraints.distribute_local_to_global(cell_rhs,
-                                                   local_dof_indices,
-                                                   system_rhs,
-                                                   cell_matrix);
-          //          system_rhs.print(std::cout);
-          //          else
-          //            constraints.distribute_local_to_global(cell_matrix,
-          //                                                   cell_rhs,
-          //                                                   local_dof_indices,
-          //                                                   tangent_matrix,
-          //                                                   system_rhs_trilinos);
+          constraints.distribute_local_to_global(cell_rhs,
+                                                 local_dof_indices,
+                                                 system_rhs);
+
+          AssertThrow(parameters.skip_tangent_assembly == true,
+                      ExcInternalError());
         }
-
-    //    if (!parameters.skip_tangent_assembly)
-    //      tangent_matrix.compress(VectorOperation::add);
-
-    //    system_rhs_trilinos.compress(VectorOperation::add);
 
     // Determine the true residual error for the problem.  That is, determine
     // the error in the residual for the unconstrained degrees of freedom. Note
     // that to do so, we need to ignore constrained DOFs by setting the residual
     // in these vector components to zero. That will not affect the solution of
     // linear system, though.
-    //    constraints.set_zero(system_rhs_trilinos);
     constraints.set_zero(system_rhs);
+
     error_residual.norm = system_rhs.l2_norm();
     error_residual.u    = system_rhs.l2_norm();
-
-    //    copy_trilinos(system_rhs, system_rhs_trilinos);
   }
 
 
