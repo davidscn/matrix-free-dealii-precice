@@ -391,8 +391,6 @@ namespace Cook_Membrane
     std::vector<std::shared_ptr<MatrixFree<dim, float>>> mg_mf_data_reference;
 
     NeoHookOperator<dim, degree, n_q_points_1d, double> mf_nh_operator;
-    //    NeoHookOperatorAD<dim, degree, n_q_points_1d, double>
-    //    mf_ad_nh_operator;
 
     typedef NeoHookOperator<dim, degree, n_q_points_1d, float> LevelMatrixType;
 
@@ -567,7 +565,6 @@ namespace Cook_Membrane
       }
 
     mf_nh_operator.set_material(material_vec, material_inclusion_vec);
-    //    mf_ad_nh_operator.set_material(material_vec, material_inclusion_vec);
 
     // print some data about how we run:
     const int n_tasks =
@@ -1089,24 +1086,6 @@ namespace Cook_Membrane
     locally_relevant_dofs.clear();
     DoFTools::extract_locally_relevant_dofs(dof_handler, locally_relevant_dofs);
 
-    //    tangent_matrix.clear();
-    if (!parameters.skip_tangent_assembly)
-      {
-        // Setup the sparsity pattern and tangent matrix
-        //        TrilinosWrappers::SparsityPattern sp(locally_owned_dofs,
-        //                                             mpi_communicator);
-
-        //        DoFTools::make_sparsity_pattern(dof_handler,
-        //                                        sp,
-        //                                        constraints,
-        //                                        /* keep_constrained_dofs */
-        //                                        false,
-        //                                        Utilities::MPI::this_mpi_process(
-        //                                          mpi_communicator));
-
-        //        sp.compress();
-        //        tangent_matrix.reinit(sp);
-      }
 
     // We then set up storage vectors
     system_rhs.reinit(locally_owned_dofs,
@@ -1125,8 +1104,6 @@ namespace Cook_Membrane
                          locally_relevant_dofs,
                          mpi_communicator);
 
-    //    newton_update_trilinos.reinit(locally_owned_dofs, mpi_communicator);
-    //    system_rhs_trilinos.reinit(locally_owned_dofs, mpi_communicator);
 
     // switch to ghost mode:
     solution_n.update_ghost_values();
@@ -1417,12 +1394,6 @@ namespace Cook_Membrane
                 << std::endl;
         deallog << "Solution total: " << solution_total.l2_norm() << std::endl;
       }
-    if (parameters.type_lin == "MF_AD_CG")
-      {
-        AssertThrow(false, ExcMessage("Has been removed!"));
-        //        mf_ad_nh_operator.cache();
-        //        mf_ad_nh_operator.compute_diagonal();
-      }
 
     for (unsigned int level = 0; level <= max_level; ++level)
       {
@@ -1522,7 +1493,6 @@ namespace Cook_Membrane
     // set_debug() is deprecated, keep this commented for now
     // if (debug_level > 2)
     //   multigrid->set_debug(5);
-
 
     multigrid->connect_coarse_solve(
       [&](const bool start, const unsigned int level) {
@@ -1685,127 +1655,6 @@ namespace Cook_Membrane
 
         // setup matrix-free part:
         setup_matrix_free(newton_iteration);
-
-        // check vmult of matrix-based and matrix-free for a random vector:
-        {
-          //          constraints.set_zero(src_trilinos);
-          //          copy_trilinos(src, src_trilinos);
-
-          const unsigned int n_times = 10;
-
-          //          MPI_Barrier(mpi_communicator);
-          if (!parameters.skip_tangent_assembly)
-            for (unsigned int i = 0; i < n_times; ++i)
-              {
-                TimerOutput::Scope t(timer, "vmult (Trilinos)");
-
-                // VMult trilinos
-                //                tangent_matrix.vmult(dst_mb, src_trilinos);
-              }
-
-          // adjust ghost according to MF data
-          adjust_ghost_range_if_necessary(
-            mf_data_current->get_vector_partitioner(), dst_mf);
-          adjust_ghost_range_if_necessary(
-            mf_data_current->get_vector_partitioner(), src);
-
-          // 1. zero
-          MPI_Barrier(mpi_communicator);
-          for (unsigned int i = 0; i < n_times; ++i)
-            {
-              TimerOutput::Scope t(timer, "vmult (MF) zero");
-              dst_mf = 0.;
-            }
-
-          // 2. MPI comm
-          MPI_Barrier(mpi_communicator);
-          for (unsigned int i = 0; i < n_times; ++i)
-            {
-              TimerOutput::Scope t(timer, "vmult (MF) MPI");
-              src.update_ghost_values();
-              dst_mf.compress(VectorOperation::add);
-            }
-
-          // to get timing within the cell loop for RW, SF and QD
-          // we need 3 measurements:
-          // 3.1 Local loop
-          MPI_Barrier(mpi_communicator);
-          for (unsigned int i = 0; i < n_times; ++i)
-            {
-              TimerOutput::Scope t(timer, "vmult (MF) Cell loop");
-              mf_nh_operator.template vmult<MFMask::CellLoop>(dst_mf, src);
-            }
-
-          // 3.2 Local loop with RW only
-          MPI_Barrier(mpi_communicator);
-          for (unsigned int i = 0; i < n_times; ++i)
-            {
-              TimerOutput::Scope t(timer, "vmult (MF) RW");
-              mf_nh_operator.template vmult<MFMask::RW>(dst_mf, src);
-            }
-
-          // 3.3 Local loop with RW and SF
-          MPI_Barrier(mpi_communicator);
-          for (unsigned int i = 0; i < n_times; ++i)
-            {
-              TimerOutput::Scope t(timer, "vmult (MF) RWSF");
-              mf_nh_operator.template vmult<MFMask::RWSF>(dst_mf, src);
-            }
-
-          MPI_Barrier(mpi_communicator);
-          for (unsigned int i = 0; i < n_times; ++i)
-            {
-              TimerOutput::Scope t(timer, "vmult (MF)");
-
-              mf_nh_operator.vmult(dst_mf, src);
-            }
-
-//#ifdef DEBUG
-#ifdef DEAL_II_WITH_TRILINOS
-          if (!parameters.skip_tangent_assembly)
-            {
-              LinearAlgebra::distributed::Vector<double> diff(newton_update);
-
-              copy_trilinos(diff, dst_mb);
-              diff.add(-1, dst_mf);
-
-              // FIXME: looks like there are some severe round-off errors.
-              const double ulp = 1.e+10;
-
-              for (unsigned int i = 0; i < diff.local_size(); ++i)
-                Assert(std::abs(diff.local_element(i)) <=
-                         std::numeric_limits<double>::epsilon() * ulp *
-                           std::abs(dst_mf.local_element(i)),
-                       ExcMessage("MF and MB are different on local element " +
-                                  std::to_string(i) + ": " +
-                                  std::to_string(dst_mf.local_element(i)) +
-                                  " diff " +
-                                  std::to_string(diff.local_element(i)) +
-                                  " at Newton iteration " +
-                                  std::to_string(newton_iteration)));
-
-              // now check Jacobi preconditioner
-              TrilinosWrappers::PreconditionJacobi trilinos_jacobi;
-              trilinos_jacobi.initialize(tangent_matrix, 0.8);
-              trilinos_jacobi.vmult(dst_mb, src_trilinos);
-              mf_nh_operator.precondition_Jacobi(dst_mf, src, 0.8);
-
-              copy_trilinos(diff, dst_mb);
-              diff.add(-1, dst_mf);
-              for (unsigned int i = 0; i < diff.local_size(); ++i)
-                Assert(std::abs(diff.local_element(i)) <=
-                         100000. * std::numeric_limits<double>::epsilon() *
-                           std::abs(dst_mf.local_element(i)),
-                       ExcMessage(
-                         "MF and MB Jacobi are different on local element " +
-                         std::to_string(i) + ": " +
-                         std::to_string(dst_mf.local_element(i)) + " diff " +
-                         std::to_string(diff.local_element(i)) +
-                         " at Newton iteration " +
-                         std::to_string(newton_iteration)));
-            }
-#endif
-        }
 
         const std::tuple<unsigned int, double, double> lin_solver_output =
           solve_linear_system(newton_update, newton_update);
