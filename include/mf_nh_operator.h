@@ -1132,6 +1132,8 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
                 grad_Nx_v * tau_ns;
               phi_current.submit_gradient(
                 (jc_part + geo) * inv_det_F
+                // phi_current.submit_value(
+                //   phi_current.get_value(q) * rho * inv_det_F
                 // Note: We need to integrate over the reference element,
                 // thus we divide by det_F so that FEEvaluation with
                 // mapping does the right thing.

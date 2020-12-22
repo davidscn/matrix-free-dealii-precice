@@ -4,7 +4,7 @@
 
 using namespace dealii;
 
-namespace Cook_Membrane
+namespace FSI
 {
   // @sect3{Run-time parameters}
   //
@@ -18,7 +18,7 @@ namespace Cook_Membrane
     public:
       std::string output_folder           = std::string("");
       bool        output_solution         = true;
-      bool        always_assemble_tangent = true;
+      bool        always_assemble_tangent = false;
       bool        output_abs_norms        = false;
 
       std::vector<Point<dim>> output_points;
@@ -191,7 +191,7 @@ namespace Cook_Membrane
         prm.add_parameter("Type",
                           type,
                           "Type of the problem",
-                          Patterns::Selection("Cook|Holes"));
+                          Patterns::Selection("Cook"));
       }
       prm.leave_subsection();
     }
@@ -280,7 +280,7 @@ namespace Cook_Membrane
         prm.add_parameter("Preconditioner type",
                           preconditioner_type,
                           "Type of preconditioner",
-                          Patterns::Selection("jacobi|ssor|amg|gmg|none"));
+                          Patterns::Selection("jacobi|gmg|none"));
 
         prm.add_parameter("Preconditioner relaxation",
                           preconditioner_relaxation,

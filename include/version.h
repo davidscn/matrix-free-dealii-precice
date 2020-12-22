@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace Cook_Membrane
+namespace FSI
 {
   extern const std::string GIT_REVISION;
   extern const std::string GIT_BRANCH;

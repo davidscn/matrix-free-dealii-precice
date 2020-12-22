@@ -1,6 +1,6 @@
 #include <version.h>
 
-namespace Cook_Membrane
+namespace FSI
 {
   const std::string GIT_REVISION ("@GIT_REVISION@");
   const std::string GIT_BRANCH ("@GIT_BRANCH@");

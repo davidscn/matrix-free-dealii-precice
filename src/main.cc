@@ -38,11 +38,11 @@ int
 main(int argc, char *argv[])
 {
   using namespace dealii;
-  using namespace Cook_Membrane;
+  using namespace FSI;
 
   try
     {
-      deallog.depth_console(3);
+      deallog.depth_console(0);
       const std::string parameter_filename =
         argc > 1 ? argv[1] : "parameters.prm";
 
@@ -60,11 +60,6 @@ main(int argc, char *argv[])
         // Disable multi-threading to have a better comparision with Trilinos
         Utilities::MPI::MPI_InitFinalize mpi_initialization(
           argc, argv, 1/*dealii::numbers::invalid_unsigned_int*/);
-
-        if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
-          std::cout
-            << "Assembly method: Residual and linearisation are computed manually."
-            << std::endl;
 
         typedef double     NumberType;
         const unsigned int degree     = fesystem.poly_degree;
