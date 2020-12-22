@@ -313,7 +313,7 @@ namespace FSI
     // current value of increment solution
     LinearAlgebra::distributed::Vector<double> solution_delta;
 
-    // current total solution:  solution_tota = solution_n + solution_delta
+    // current total solution:  solution_total = solution_n + solution_delta
     LinearAlgebra::distributed::Vector<double> solution_total;
 
     LinearAlgebra::distributed::Vector<double> newton_update;
@@ -1345,9 +1345,6 @@ namespace FSI
 
     print_conv_header();
 
-    LinearAlgebra::distributed::Vector<double> src(newton_update),
-      dst_mf(newton_update);
-
     // We now perform a number of Newton iterations to iteratively solve the
     // nonlinear problem.  Since the problem is fully nonlinear and we are
     // using a full Newton method, the data stored in the tangent matrix and
@@ -1581,14 +1578,9 @@ namespace FSI
           const auto &cell_mat =
             (cell->material_id() == 2 ? material_inclusion : material);
 
-          bool skip_assembly_on_this_cell = parameters.skip_tangent_assembly;
           // be conservative and do not skip assembly of boundary cells
           // regardless of BC
-          // Changed, I removed the code parts
-          for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
-               ++face)
-            if (cell->face(face)->at_boundary())
-              skip_assembly_on_this_cell = true;
+          // Changed, I removed the code parts and assembly is always skipped
 
           fe_values.reinit(cell);
           cell_rhs = 0.;
@@ -1601,14 +1593,9 @@ namespace FSI
           fe_values[u_fe].get_function_gradients(solution_total,
                                                  solution_grads_u_total);
 
-          // Now we build the local cell stiffness matrix. Since the global and
-          // local system matrices are symmetric, we can exploit this property
-          // by building only the lower half of the local matrix and copying the
-          // values to the upper half.
-          //
-          // In doing so, we first extract some configuration dependent
-          // variables from our QPH history objects for the current quadrature
-          // point.
+          // Now we build the residual. In doing so, we first extract some
+          // configuration dependent variables from our QPH history objects for
+          // the current quadrature point.
           for (unsigned int q_point = 0; q_point < n_q_points; ++q_point)
             {
               const Tensor<2, dim, NumberType> &grad_u =
@@ -1688,9 +1675,6 @@ namespace FSI
           constraints.distribute_local_to_global(cell_rhs,
                                                  local_dof_indices,
                                                  system_rhs);
-
-          AssertThrow(parameters.skip_tangent_assembly == true,
-                      ExcInternalError());
         }
 
     // Determine the true residual error for the problem.  That is, determine

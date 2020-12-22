@@ -16,10 +16,9 @@ namespace FSI
     class Misc
     {
     public:
-      std::string output_folder           = std::string("");
-      bool        output_solution         = true;
-      bool        always_assemble_tangent = false;
-      bool        output_abs_norms        = false;
+      std::string output_folder    = std::string("");
+      bool        output_solution  = true;
+      bool        output_abs_norms = false;
 
       std::vector<Point<dim>> output_points;
 
@@ -47,12 +46,6 @@ namespace FSI
         prm.add_parameter("Output solution",
                           output_solution,
                           "Output solution and mesh",
-                          Patterns::Bool());
-
-        prm.add_parameter("Always assemble tangent",
-                          always_assemble_tangent,
-                          "Always assemble tangent matrix "
-                          "regardless of the solver",
                           Patterns::Bool());
 
         prm.add_parameter("Output absolute norms",
@@ -418,8 +411,6 @@ namespace FSI
 
     {
     public:
-      bool skip_tangent_assembly;
-
       AllParameters(const std::string &input_file);
 
       void
@@ -455,10 +446,7 @@ namespace FSI
       prm.parse_input(input_file);
 
       AssertDimension(dim, this->dim);
-
-      skip_tangent_assembly = (!this->always_assemble_tangent &&
-                               (type_lin.find("MF") != std::string::npos));
     }
 
   } // namespace Parameters
-} // namespace Cook_Membrane
+} // namespace FSI
