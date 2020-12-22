@@ -25,7 +25,7 @@ jobs:
                   git checkout FETCH_HEAD && \
                   cmake . && \
                   make && \
-                  make test";
+                  ctest -V";
 
          echo $command
 

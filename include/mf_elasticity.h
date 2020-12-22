@@ -674,9 +674,7 @@ namespace FSI
     // for post-processing, print average CG iterations over the whole run:
     bcout << std::endl
           << "Average CG iter = " << (total_n_cg_iterations / total_n_cg_solve)
-          << std::endl
-          << "Total CG iter = " << total_n_cg_iterations << std::endl
-          << "Total CG solve = " << total_n_cg_solve << std::endl;
+          << std::endl;
   }
 
 
