@@ -24,7 +24,8 @@ jobs:
                   git fetch origin ${{ github.ref }} && \
                   git checkout FETCH_HEAD && \
                   cmake . && \
-                  make";
+                  make && \
+                  ctest -V";
 
          echo $command
 
