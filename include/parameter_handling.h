@@ -134,7 +134,7 @@ namespace FSI
     // Make adjustments to the problem geometry and its discretisation.
     struct Geometry
     {
-      unsigned int elements_per_edge   = 32;
+      unsigned int elements_per_edge   = 2;
       double       scale               = 1e-3;
       unsigned int dim                 = 2;
       unsigned int n_global_refinement = 0;
@@ -233,14 +233,12 @@ namespace FSI
     // nonlinear motion occurs within a Newton increment.
     struct LinearSolver
     {
-      std::string  type_lin                              = "CG";
       double       tol_lin                               = 1e-6;
       unsigned int max_iterations_lin                    = 1;
       std::string  preconditioner_type                   = "jacobi";
       double       preconditioner_relaxation             = 0.65;
-      double       preconditioner_aggregation_threshold  = 1e-4;
       unsigned int cond_number_cg_iterations             = 20;
-      std::string  mf_caching                            = "scalar";
+      std::string  mf_caching                            = "tensor4";
       bool         mf_coarse_chebyshev                   = true;
       bool         mf_coarse_chebyshev_accurate_eigenval = true;
       unsigned int mf_chebyshev_n_cg_iterations          = 30;
@@ -254,11 +252,6 @@ namespace FSI
     {
       prm.enter_subsection("Linear solver");
       {
-        prm.add_parameter("Solver type",
-                          type_lin,
-                          "Type of solver used to solve the linear system",
-                          Patterns::Selection("CG|Direct|MF_CG|MF_AD_CG"));
-
         prm.add_parameter("Residual",
                           tol_lin,
                           "Linear solver residual (scaled by residual norm)",
@@ -278,11 +271,6 @@ namespace FSI
         prm.add_parameter("Preconditioner relaxation",
                           preconditioner_relaxation,
                           "Preconditioner relaxation value",
-                          Patterns::Double(0.0));
-
-        prm.add_parameter("Preconditioner AMG aggregation threshold",
-                          preconditioner_aggregation_threshold,
-                          "Preconditioner AMG aggregation threshold",
                           Patterns::Double(0.0));
 
         prm.add_parameter("Condition number CG iterations",

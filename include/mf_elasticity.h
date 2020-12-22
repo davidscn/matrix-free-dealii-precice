@@ -1793,47 +1793,42 @@ namespace FSI
                                  (debug_level > 0 ? true : false));
 
     pcout << " SLV " << std::flush;
-    if (parameters.type_lin == "MF_CG")
+    SolverCG<LinearAlgebra::distributed::Vector<double>> solver_CG(
+      solver_control);
+    constraints.set_zero(newton_update);
+
+    if (parameters.preconditioner_type == "jacobi")
       {
-        SolverCG<LinearAlgebra::distributed::Vector<double>> solver_CG(
-          solver_control);
-        constraints.set_zero(newton_update);
+        PreconditionJacobi<NeoHookOperator<dim, degree, n_q_points_1d, double>>
+          preconditioner;
+        preconditioner.initialize(mf_nh_operator,
+                                  parameters.preconditioner_relaxation);
 
-        if (parameters.preconditioner_type == "jacobi")
-          {
-            PreconditionJacobi<
-              NeoHookOperator<dim, degree, n_q_points_1d, double>>
-              preconditioner;
-            preconditioner.initialize(mf_nh_operator,
-                                      parameters.preconditioner_relaxation);
-
-            solver_CG.solve(mf_nh_operator,
-                            newton_update,
-                            system_rhs,
-                            preconditioner);
-          }
-        else if (parameters.preconditioner_type == "none")
-          {
-            solver_CG.solve(mf_nh_operator,
-                            newton_update,
-                            system_rhs,
-                            PreconditionIdentity());
-          }
-        else
-          {
-            AssertThrow(parameters.preconditioner_type == "gmg",
-                        ExcMessage("Preconditioner type not implemented"));
-            solver_CG.solve(mf_nh_operator,
-                            newton_update,
-                            system_rhs,
-                            *multigrid_preconditioner);
-          }
-
-        lin_it  = solver_control.last_step();
-        lin_res = solver_control.last_value();
+        solver_CG.solve(mf_nh_operator,
+                        newton_update,
+                        system_rhs,
+                        preconditioner);
+      }
+    else if (parameters.preconditioner_type == "none")
+      {
+        solver_CG.solve(mf_nh_operator,
+                        newton_update,
+                        system_rhs,
+                        PreconditionIdentity());
       }
     else
-      Assert(false, ExcMessage("Linear solver type not implemented"));
+      {
+        AssertThrow(parameters.preconditioner_type == "gmg",
+                    ExcMessage("Preconditioner type not implemented"));
+        solver_CG.solve(mf_nh_operator,
+                        newton_update,
+                        system_rhs,
+                        *multigrid_preconditioner);
+      }
+
+    lin_it  = solver_control.last_step();
+    lin_res = solver_control.last_value();
+
 
     timer.leave_subsection();
 

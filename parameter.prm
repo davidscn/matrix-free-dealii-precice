@@ -9,21 +9,33 @@ subsection Finite element system
 end
 
 subsection Misc
-   set Output points = 48.0e-3, 60.0e-3
-  set Always assemble tangent = false
+   # Points in undeformed configuration to output unknown fields
+   set Output points   = 48.0e-3, 60.0e-3
+
+   # Output solution and mesh
+   set Output solution = true
+
+   # Output absolute norms during convergence
+   set Output absolute norms = false
 end
 
 subsection Boundary conditions
+  # Dirichlet functions for each boundary ID
   set Dirichlet IDs and expressions = 1:0,0
+
+  # Dirichlet component mask for each boundary ID
   set Dirichlet IDs and component mask = 1:true,true
+
+  # Neumann functions for each boundary ID
   set Neumann IDs and expressions = 11:0,t/(16.0e-6)
 end
 
 
 subsection Geometry
-  # Number of elements per long edge of the beam
-  set Elements per edge  = 2
+  # Dimension of the problem
+  set Dimension = 2
 
+  # Number of global refinements
   set Global refinement  = 4
 
   # Global grid scaling factor
@@ -32,11 +44,11 @@ end
 
 
 subsection Linear solver
-  # Linear solver iterations (multiples of the system matrix size)
-  set Max iteration multiplier  = 1
-
   # Linear solver residual (scaled by residual norm)
   set Residual                  = 1e-6
+
+  # Linear solver iterations (multiples of the system matrix size)
+  set Max iteration multiplier  = 1
 
   # Preconditioner type
   set Preconditioner type        = gmg
@@ -44,8 +56,20 @@ subsection Linear solver
   # Preconditioner relaxation value
   set Preconditioner relaxation  = 0.65
 
-  # Type of solver used to solve the linear system
-  set Solver type               = MF_CG
+  # Number of CG iterations to estimate condition number
+  set Condition number CG iterations = 20
+
+  # Type of caching for matrix-free operator
+  set MF caching = tensor2
+
+  # Use Chebyshev smoother as coarse level solver
+  set MF Chebyshev coarse = true
+
+  # Accurately estimate eigenvalues for coarse level Chebyshev solver
+  set MF Chebyshev coarse accurate eigenvalues = true
+  
+  # Number of CG iterations to estiamte condition number for Chebyshev smoother
+  set MF Chebyshev number CG iterations = 30
 end
 
 
@@ -55,6 +79,9 @@ subsection Material properties
 
   # Shear modulus
   set Shear modulus   = 0.4225e6
+
+  # Formulation of the energy function
+  set Formulation = 1
 end
 
 
@@ -65,8 +92,14 @@ subsection Nonlinear solver
   # Displacement error tolerance
   set Tolerance displacement        = 1.0e-6
 
+  # Displacement update absolute tolerance
+  set Absolute tolerance displacement = 0.0
+
   # Force residual tolerance
   set Tolerance force               = 1.0e-9
+
+  # Force residual absolute tolerance
+  set Absolute tolerance force = 0.0
 end
 
 
@@ -77,5 +110,3 @@ subsection Time
   # Time step size
   set Time step size = 0.1
 end
-
-
