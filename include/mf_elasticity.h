@@ -879,17 +879,23 @@ namespace FSI
     dof_handler.distribute_mg_dofs();
     DoFRenumbering::Cuthill_McKee(dof_handler);
 
+    std::locale s = pcout.get_stream().getloc();
+    pcout.get_stream().imbue(std::locale(""));
     pcout << "Triangulation:"
           << "\n  Number of active cells: "
           << triangulation.n_global_active_cells()
           << "\n  Number of degrees of freedom: " << dof_handler.n_dofs()
           << std::endl;
+    pcout.get_stream().imbue(s);
 
+    std::locale f = bcout.get_stream().getloc();
+    bcout.get_stream().imbue(std::locale(""));
     bcout << "Triangulation:"
           << "\n  Number of active cells: "
           << triangulation.n_global_active_cells()
           << "\n  Number of degrees of freedom: " << dof_handler.n_dofs()
           << std::endl;
+    bcout.get_stream().imbue(f);
 
     locally_owned_dofs = dof_handler.locally_owned_dofs();
     locally_relevant_dofs.clear();

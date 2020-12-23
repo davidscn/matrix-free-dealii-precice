@@ -27,6 +27,8 @@ subsection Geometry
 
   # Global grid scaling factor
   set Grid scale         = 1e-3
+
+  set Type               = Cook
 end
 
 
@@ -42,9 +44,6 @@ subsection Linear solver
 
   # Preconditioner relaxation value
   set Preconditioner relaxation  = 0.65
-
-  # Type of solver used to solve the linear system
-  set Solver type               = MF_CG
 end
 
 
@@ -54,6 +53,7 @@ subsection Material properties
 
   # Shear modulus
   set Shear modulus   = 0.4225e6
+  set Formulation     = 0
 end
 
 

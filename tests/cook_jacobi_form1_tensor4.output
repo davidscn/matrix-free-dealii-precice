@@ -1,57 +1,57 @@
 Grid:
   Reference volume: 0.00144
 Triangulation:
-  Number of active cells: 1024
-  Number of degrees of freedom: 2178
+  Number of active cells: 256
+  Number of degrees of freedom: 578
 
 Timestep 1 @ 0.1s
 Converged in 4 Newton iterations
 Solution @ 0.048 0.06
-  displacement: -0.0013688 0.00178887
+  displacement: -0.00131538 0.00173938
 
 Timestep 2 @ 0.2s
 Converged in 4 Newton iterations
 Solution @ 0.048 0.06
-  displacement: -0.00273759 0.00344397
+  displacement: -0.00263022 0.00335411
 
 Timestep 3 @ 0.3s
 Converged in 4 Newton iterations
 Solution @ 0.048 0.06
-  displacement: -0.00409118 0.00497031
+  displacement: -0.00393116 0.00484865
 
 Timestep 4 @ 0.4s
 Converged in 4 Newton iterations
 Solution @ 0.048 0.06
-  displacement: -0.00541724 0.00637538
+  displacement: -0.0052073 0.00622959
 
 Timestep 5 @ 0.5s
 Converged in 4 Newton iterations
 Solution @ 0.048 0.06
-  displacement: -0.00670641 0.00766831
+  displacement: -0.00645021 0.00750489
 
 Timestep 6 @ 0.6s
 Converged in 4 Newton iterations
 Solution @ 0.048 0.06
-  displacement: -0.00795203 0.00885897
+  displacement: -0.00765372 0.00868327
 
 Timestep 7 @ 0.7s
 Converged in 4 Newton iterations
 Solution @ 0.048 0.06
-  displacement: -0.00914979 0.0099574
+  displacement: -0.00881371 0.00977362
 
 Timestep 8 @ 0.8s
 Converged in 4 Newton iterations
 Solution @ 0.048 0.06
-  displacement: -0.0102973 0.0109734
+  displacement: -0.00992772 0.0107847
 
 Timestep 9 @ 0.9s
 Converged in 4 Newton iterations
 Solution @ 0.048 0.06
-  displacement: -0.0113937 0.011916
+  displacement: -0.0109946 0.0117248
 
 Timestep 10 @ 1s
 Converged in 4 Newton iterations
 Solution @ 0.048 0.06
-  displacement: -0.0124392 0.0127938
+  displacement: -0.0120144 0.0126016
 
-Average CG iter = 548
+Average CG iter = 255
