@@ -10,7 +10,7 @@ end
 
 subsection Misc
    # Points in undeformed configuration to output unknown fields
-   set Output points   = 48.0e-3, 60.0e-3
+   set Output points   = 0.6, 0.2
 
    # Output solution and mesh
    set Output solution = true
@@ -27,7 +27,7 @@ subsection Boundary conditions
   set Dirichlet IDs and component mask = 1:true,true
 
   # Neumann functions for each boundary ID
-  set Neumann IDs and expressions = 11:0,t/(16.0e-6)
+  set Neumann IDs and expressions = 11:0,t*(-19.44599873)
 end
 
 
@@ -40,6 +40,8 @@ subsection Geometry
 
   # Global grid scaling factor
   set Grid scale         = 1e-3
+
+  set Type       = CSM
 end
 
 
@@ -75,10 +77,10 @@ end
 
 subsection Material properties
   # Poisson's ratio
-  set Poisson's ratio = 0.3
+  set Poisson's ratio = 0.4
 
   # Shear modulus
-  set Shear modulus   = 0.4225e6
+  set Shear modulus   = 0.5e6
 
   # Formulation of the energy function
   set Formulation = 1
@@ -108,5 +110,5 @@ subsection Time
   set End time       = 1
 
   # Time step size
-  set Time step size = 0.1
+  set Time step size = 0.2
 end

@@ -140,7 +140,7 @@ namespace FSI
       unsigned int n_global_refinement = 0;
       unsigned int extrusion_slices    = 5;
       double       extrusion_height    = 1;
-      std::string  type                = "Cook";
+      std::string  type                = "CSM";
 
       void
       add_parameters(ParameterHandler &prm);
@@ -184,7 +184,7 @@ namespace FSI
         prm.add_parameter("Type",
                           type,
                           "Type of the problem",
-                          Patterns::Selection("Cook"));
+                          Patterns::Selection("CSM|Cook"));
       }
       prm.leave_subsection();
     }
@@ -195,9 +195,9 @@ namespace FSI
     // neo-Hookean material.
     struct Materials
     {
-      double       nu                   = 0.3;
-      double       mu                   = 0.4225e6;
-      unsigned int material_formulation = 0;
+      double       nu                   = 0.4;
+      double       mu                   = 0.5e6;
+      unsigned int material_formulation = 1;
 
       void
       add_parameters(ParameterHandler &prm);
@@ -238,7 +238,7 @@ namespace FSI
       std::string  preconditioner_type                   = "jacobi";
       double       preconditioner_relaxation             = 0.65;
       unsigned int cond_number_cg_iterations             = 20;
-      std::string  mf_caching                            = "tensor4";
+      std::string  mf_caching                            = "scalar";
       bool         mf_coarse_chebyshev                   = true;
       bool         mf_coarse_chebyshev_accurate_eigenval = true;
       unsigned int mf_chebyshev_n_cg_iterations          = 30;

@@ -720,7 +720,79 @@ namespace FSI
   {
     // material_id 2 is currently used for the inclusion material, which is 100
     // x stiffer (mu) than the usual material
-    if (parameters.type == "Cook")
+    if (parameters.type == "CSM")
+      {
+        uint n_x = 5;
+        uint n_y = 1;
+        uint n_z = 1;
+
+        const std::vector<unsigned int> repetitions =
+          dim == 2 ? std::vector<unsigned int>({n_x, n_y}) :
+                     std::vector<unsigned int>({n_x, n_y, n_z});
+
+        const Point<dim> bottom_left =
+          (dim == 3 ? Point<dim>(0.24899, 0.19, -0.005) :
+                      Point<dim>(0.24899, 0.19));
+        const Point<dim> top_right =
+          dim == 3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21);
+
+        GridGenerator::subdivided_hyper_rectangle(triangulation,
+                                                  repetitions,
+                                                  bottom_left,
+                                                  top_right,
+                                                  /*colorize*/ true);
+
+        // Since we wish to apply a Neumann BC to the right-hand surface, we
+        // must find the cell faces in this part of the domain and mark them
+        // with a distinct boundary ID number. The faces we are looking for are
+        // on the +x surface and will get boundary ID 11. Dirichlet boundaries
+        // exist on the left-hand face of the beam (this fixed boundary will get
+        // ID 1) and on the +Z and -Z faces (which correspond to ID 2 and we
+        // will use to impose the plane strain condition)
+        //        const double tol_boundary = 1e-6;
+        // NOTE: we need to set IDs regardless of cell being locally owned or
+        // not as in the global refinement cells will be repartitioned and faces
+        // of their parents should have right IDs
+
+        const unsigned int clamped_mesh_id              = 1;
+        const unsigned int out_of_plane_clamped_mesh_id = 2;
+        const unsigned int interface_boundary_id        = 11;
+
+        // boundary IDs are obtained through colorize = true
+
+        uint id_flap_long_bottom         = 2; // x direction
+        uint id_flap_long_top            = 3;
+        uint id_flap_short_bottom        = 0; // y direction
+        uint id_flap_short_top           = 1;
+        uint id_flap_out_of_plane_bottom = 4; // z direction
+        uint id_flap_out_of_plane_top    = 5;
+
+
+        // Iterate over all cells and set the IDs
+        for (const auto &cell : triangulation.active_cell_iterators())
+          {
+            for (const auto &face : cell->face_iterators())
+              if (face->at_boundary() == true)
+                {
+                  // Boundaries for the interface
+                  if (face->boundary_id() == id_flap_short_top ||
+                      face->boundary_id() == id_flap_long_bottom ||
+                      face->boundary_id() == id_flap_long_top)
+                    face->set_boundary_id(interface_boundary_id);
+                  // Boundaries clamped in all directions
+                  else if (face->boundary_id() == id_flap_short_bottom)
+                    face->set_boundary_id(clamped_mesh_id);
+                  // Boundaries clamped out-of-plane (z) direction
+                  else if (face->boundary_id() == id_flap_out_of_plane_bottom ||
+                           face->boundary_id() == id_flap_out_of_plane_top)
+                    face->set_boundary_id(out_of_plane_clamped_mesh_id);
+                  // on the coarse mesh reset material ID
+                }
+            cell->set_material_id(0);
+          }
+        //        GridTools::scale(parameters.scale, triangulation);
+      }
+    else if (parameters.type == "Cook")
       {
         // Divide the beam, but only along the x- and y-coordinate directions
         std::vector<unsigned int> repetitions(dim,
