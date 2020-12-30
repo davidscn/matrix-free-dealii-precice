@@ -13,10 +13,10 @@ using namespace dealii;
  * \sigma^{tot}_{jl} = \delta_{ik} \tau^{tot}_{jl} $.
  *
  */
-template <int dim, typename NumberType>
-inline Tensor<2, dim, NumberType>
-egeo_grad(const Tensor<2, dim, NumberType> &grad_Nx,
-          const Tensor<2, dim, NumberType> &tau_tot)
+template <int dim, typename Number>
+inline Tensor<2, dim, Number>
+egeo_grad(const Tensor<2, dim, Number> &grad_Nx,
+          const Tensor<2, dim, Number> &tau_tot)
 {
   // the product is actually  GradN * tau^T but due to symmetry of tau we can do
   // GradN * tau
@@ -24,19 +24,19 @@ egeo_grad(const Tensor<2, dim, NumberType> &grad_Nx,
 }
 
 
-template <typename number>
-number
-divide_by_dim(const number &x, const int dim)
+template <typename Number>
+Number
+divide_by_dim(const Number &x, const int dim)
 {
   return x / dim;
 }
 
-template <typename number>
-VectorizedArray<number>
-divide_by_dim(const VectorizedArray<number> &x, const int dim)
+template <typename Number>
+VectorizedArray<Number>
+divide_by_dim(const VectorizedArray<Number> &x, const int dim)
 {
-  VectorizedArray<number> res(x);
-  for (unsigned int i = 0; i < VectorizedArray<number>::n_array_elements; i++)
+  VectorizedArray<Number> res(x);
+  for (unsigned int i = 0; i < VectorizedArray<Number>::n_array_elements; i++)
     res[i] *= 1.0 / dim;
 
   return res;
@@ -70,7 +70,7 @@ divide_by_dim(const VectorizedArray<number> &x, const int dim)
 // store the current state (characterized by the values or measures  of the
 // displacement field) so that we can compute the elastic coefficients
 // linearized around the current state.
-template <int dim, typename NumberType>
+template <int dim, typename Number>
 class Material_Compressible_Neo_Hook_One_Field
 {
 public:
@@ -93,16 +93,16 @@ public:
 
   // The first function is the total energy
   // $\Psi = \Psi_{\textrm{iso}} + \Psi_{\textrm{vol}}$.
-  NumberType
-  get_Psi(const NumberType &                         det_F,
-          const SymmetricTensor<2, dim, NumberType> &b_bar,
-          const SymmetricTensor<2, dim, NumberType> &b) const
+  Number
+  get_Psi(const Number &                         det_F,
+          const SymmetricTensor<2, dim, Number> &b_bar,
+          const SymmetricTensor<2, dim, Number> &b) const
   {
     if (formulation == 0)
       return get_Psi_vol(det_F) + get_Psi_iso(b_bar);
     else if (formulation == 1)
       {
-        const NumberType ln_J = std::log(det_F);
+        const Number ln_J = std::log(det_F);
         return mu / 2.0 * (trace(b) - dim - 2.0 * ln_J) - lambda * ln_J * ln_J;
       }
     else
@@ -164,19 +164,19 @@ public:
   // \mathfrak{c}_{ijkl} = F_{iA} F_{jB} \mathfrak{C}_{ABCD} F_{kC} F_{lD}$
   // where $ \mathfrak{C} = 4 \frac{\partial^2 \Psi(\mathbf{C})}{\partial
   // \mathbf{C} \partial \mathbf{C}}$
-  SymmetricTensor<2, dim, NumberType>
-  act_Jc(const NumberType &                         det_F,
-         const SymmetricTensor<2, dim, NumberType> &b_bar,
-         const SymmetricTensor<2, dim, NumberType> & /*b*/,
-         const SymmetricTensor<2, dim, NumberType> &src) const
+  SymmetricTensor<2, dim, Number>
+  act_Jc(const Number &                         det_F,
+         const SymmetricTensor<2, dim, Number> &b_bar,
+         const SymmetricTensor<2, dim, Number> & /*b*/,
+         const SymmetricTensor<2, dim, Number> &src) const
   {
-    SymmetricTensor<2, dim, NumberType> res;
+    SymmetricTensor<2, dim, Number> res;
 
     if (formulation == 0)
       {
-        const NumberType tr = trace(src);
+        const Number tr = trace(src);
 
-        SymmetricTensor<2, dim, NumberType> dev_src(src);
+        SymmetricTensor<2, dim, Number> dev_src(src);
         for (unsigned int i = 0; i < dim; ++i)
           dev_src[i][i] -= divide_by_dim(tr, dim);
 
@@ -193,7 +193,7 @@ public:
         res *= -det_F * (2.0 * get_dPsi_vol_dJ(det_F));
 
         // term with IxI results in trace of the tensor times I
-        const NumberType tmp =
+        const Number tmp =
           det_F * (get_dPsi_vol_dJ(det_F) + det_F * get_d2Psi_vol_dJ2(det_F)) *
           tr;
         for (unsigned int i = 0; i < dim; ++i)
@@ -205,12 +205,12 @@ public:
         // trace of fictitious Kirchhoff stress
         // $\overline{\boldsymbol{\tau}}$:
         // 2.0 * c_1 * b_bar
-        const NumberType tr_tau_bar = trace(b_bar) * 2.0 * c_1;
+        const Number tr_tau_bar = trace(b_bar) * 2.0 * c_1;
 
         // The isochoric Kirchhoff stress
         // $\boldsymbol{\tau}_{\textrm{iso}} =
         // \mathcal{P}:\overline{\boldsymbol{\tau}}$:
-        SymmetricTensor<2, dim, NumberType> tau_iso(b_bar);
+        SymmetricTensor<2, dim, Number> tau_iso(b_bar);
         tau_iso = tau_iso * (2.0 * c_1);
         for (unsigned int i = 0; i < dim; ++i)
           tau_iso[i][i] -= divide_by_dim(tr_tau_bar, dim);
@@ -220,7 +220,7 @@ public:
 
         // term with tau_iso_x_I + I_x_tau_iso
         res -= ((2.0 / dim) * tr) * tau_iso;
-        const NumberType tau_iso_src = tau_iso * src;
+        const Number tau_iso_src = tau_iso * src;
         for (unsigned int i = 0; i < dim; ++i)
           res[i][i] -= (2.0 / dim) * tau_iso_src;
 
@@ -234,8 +234,8 @@ public:
         // Jc += 2.0*lambda*Physics::Elasticity::StandardTensors<dim>::IxI;
         // res = Jc*src;
 
-        res = 2.0 * (mu - 2.0 * lambda * std::log(det_F)) * src;
-        const NumberType tmp = 2.0 * lambda * trace(src);
+        res              = 2.0 * (mu - 2.0 * lambda * std::log(det_F)) * src;
+        const Number tmp = 2.0 * lambda * trace(src);
         for (unsigned int i = 0; i < dim; ++i)
           res[i][i] += tmp;
       }
@@ -255,15 +255,15 @@ public:
 
 private:
   // Value of the volumetric free energy
-  NumberType
-  get_Psi_vol(const NumberType &det_F) const
+  Number
+  get_Psi_vol(const Number &det_F) const
   {
     return (kappa / 4.0) * (det_F * det_F - 1.0 - 2.0 * std::log(det_F));
   }
 
   // Value of the isochoric free energy
-  NumberType
-  get_Psi_iso(const SymmetricTensor<2, dim, NumberType> &b_bar) const
+  Number
+  get_Psi_iso(const SymmetricTensor<2, dim, Number> &b_bar) const
   {
     return c_1 * (trace(b_bar) - dim);
   }
@@ -283,8 +283,8 @@ private:
   // public.  We calculate $\frac{\partial^2
   // \Psi_{\textrm{vol}}(J)}{\partial J \partial
   // J}$
-  NumberType
-  get_d2Psi_vol_dJ2(const NumberType &det_F) const
+  Number
+  get_d2Psi_vol_dJ2(const Number &det_F) const
   {
     return ((kappa / 2.0) * (1.0 + 1.0 / (det_F * det_F)));
   }
