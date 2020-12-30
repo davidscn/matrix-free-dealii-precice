@@ -1804,23 +1804,25 @@ namespace FSI
     // We solve for the incremental displacement $d\mathbf{u}$.
     const double tol_sol = parameters.tol_lin * system_rhs.l2_norm();
 
+    const bool estimate_condition = parameters.estimate_condition;
+
     // estimate condition number of matrix-free operator from dummy CG
-    {
-      IterationNumberControl control_condition(
-        parameters.cond_number_cg_iterations, tol_sol, false, false);
-      SolverCG<VectorType> solver_condition(control_condition);
+    if (estimate_condition)
+      {
+        IterationNumberControl control_condition(
+          parameters.cond_number_cg_iterations, tol_sol, false, false);
+        SolverCG<VectorType> solver_condition(control_condition);
 
-      solver_condition.connect_condition_number_slot(
-        [&](const double number) { cond_number = number; });
+        solver_condition.connect_condition_number_slot(
+          [&](const double number) { cond_number = number; });
 
-      solver_condition.solve(mf_nh_operator,
-                             newton_update,
-                             system_rhs,
-                             PreconditionIdentity());
-
-      // reset back to zero
-      newton_update = 0.;
-    }
+        solver_condition.solve(mf_nh_operator,
+                               newton_update,
+                               system_rhs,
+                               PreconditionIdentity());
+        // reset back to zero
+        newton_update = 0.;
+      }
 
     timer.enter_subsection("Linear solver");
     const int solver_its = dof_handler.n_dofs() * parameters.max_iterations_lin;
@@ -1832,7 +1834,6 @@ namespace FSI
 
     pcout << " SLV " << std::flush;
     SolverCG<VectorType> solver_CG(solver_control);
-    constraints.set_zero(newton_update);
 
     if (parameters.preconditioner_type == "jacobi")
       {
@@ -1866,7 +1867,6 @@ namespace FSI
     lin_it  = solver_control.last_step();
     lin_res = solver_control.last_value();
 
-
     timer.leave_subsection();
 
     constraints.set_zero(newton_update);
@@ -1876,6 +1876,8 @@ namespace FSI
 
     // Now that we have the displacement update, distribute the constraints
     // back to the Newton update:
+    // This function call does nothing special and is only for inhomogenous
+    // constraints, which are not present in the current setup
     constraints.distribute(newton_update);
 
     return std::make_tuple(lin_it, lin_res, cond_number);
