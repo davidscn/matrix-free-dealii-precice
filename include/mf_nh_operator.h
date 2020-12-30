@@ -18,12 +18,12 @@
 // $ \mathbf{B} $ such that their outer-product
 // $ \mathbf{A} \bar{\otimes} \mathbf{B} \Rightarrow C_{ijkl} = A_{il} B_{jk}
 // $
-template <int dim, typename NumberType>
-Tensor<4, dim, NumberType>
-outer_product_iljk(const Tensor<2, dim, NumberType> &A,
-                   const Tensor<2, dim, NumberType> &B)
+template <int dim, typename Number>
+Tensor<4, dim, Number>
+outer_product_iljk(const Tensor<2, dim, Number> &A,
+                   const Tensor<2, dim, Number> &B)
 {
-  Tensor<4, dim, NumberType> A_il_B_jk{};
+  Tensor<4, dim, Number> A_il_B_jk{};
 
   for (unsigned int i = 0; i < dim; ++i)
     {
@@ -46,12 +46,12 @@ outer_product_iljk(const Tensor<2, dim, NumberType> &A,
 // $ \mathbf{B} $ such that their outer-product
 // $ \mathbf{A} \bar{\otimes} \mathbf{B} \Rightarrow C_{ijkl} = A_{ik} B_{jl}
 // $
-template <int dim, typename NumberType>
-Tensor<4, dim, NumberType>
-outer_product_ikjl(const Tensor<2, dim, NumberType> &A,
-                   const Tensor<2, dim, NumberType> &B)
+template <int dim, typename Number>
+Tensor<4, dim, Number>
+outer_product_ikjl(const Tensor<2, dim, Number> &A,
+                   const Tensor<2, dim, Number> &B)
 {
-  Tensor<4, dim, NumberType> A_ik_B_jl{};
+  Tensor<4, dim, Number> A_ik_B_jl{};
   for (unsigned int i = 0; i < dim; ++i)
     {
       for (unsigned int j = 0; j < dim; ++j)
@@ -131,31 +131,33 @@ adjust_ghost_range_if_necessary(
  * Follow
  * https://github.com/dealii/dealii/blob/master/tests/matrix_free/step-37.cc
  */
-template <int dim, int fe_degree, int n_q_points_1d, typename number>
+template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 class NeoHookOperator : public Subscriptor
 {
 public:
   NeoHookOperator();
 
   using size_type =
-    typename LinearAlgebra::distributed::Vector<number>::size_type;
+    typename LinearAlgebra::distributed::Vector<Number>::size_type;
+  using VectorType          = LinearAlgebra::distributed::Vector<Number>;
+  using VectorizedArrayType = VectorizedArray<Number>;
 
   void
   clear();
 
   void
-  initialize(std::shared_ptr<const MatrixFree<dim, number>>    data_current,
-             std::shared_ptr<const MatrixFree<dim, number>>    data_reference,
-             const LinearAlgebra::distributed::Vector<number> &displacement,
-             const std::string                                 caching);
+  initialize(std::shared_ptr<const MatrixFree<dim, Number>> data_current,
+             std::shared_ptr<const MatrixFree<dim, Number>> data_reference,
+             const VectorType &                             displacement,
+             const std::string                              caching);
 
   void
   set_material(
     std::shared_ptr<
-      Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArray<number>>>
+      Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArrayType>>
       material,
     std::shared_ptr<
-      Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArray<number>>>
+      Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArrayType>>
       material_inclusion);
 
   void
@@ -168,30 +170,25 @@ public:
 
   template <MFMask mask = MFMask::Default>
   void
-  vmult(LinearAlgebra::distributed::Vector<number> &      dst,
-        const LinearAlgebra::distributed::Vector<number> &src) const;
+  vmult(VectorType &dst, const VectorType &src) const;
 
   void
-  Tvmult(LinearAlgebra::distributed::Vector<number> &      dst,
-         const LinearAlgebra::distributed::Vector<number> &src) const;
+  Tvmult(VectorType &dst, const VectorType &src) const;
   template <MFMask mask = MFMask::Default>
   void
-  vmult_add(LinearAlgebra::distributed::Vector<number> &      dst,
-            const LinearAlgebra::distributed::Vector<number> &src) const;
+  vmult_add(VectorType &dst, const VectorType &src) const;
   void
-  Tvmult_add(LinearAlgebra::distributed::Vector<number> &      dst,
-             const LinearAlgebra::distributed::Vector<number> &src) const;
+  Tvmult_add(VectorType &dst, const VectorType &src) const;
 
-  number
+  Number
   el(const unsigned int row, const unsigned int col) const;
 
   void
-  precondition_Jacobi(LinearAlgebra::distributed::Vector<number> &      dst,
-                      const LinearAlgebra::distributed::Vector<number> &src,
-                      const number omega) const;
+  precondition_Jacobi(VectorType &      dst,
+                      const VectorType &src,
+                      const Number      omega) const;
 
-  const std::shared_ptr<
-    DiagonalMatrix<LinearAlgebra::distributed::Vector<number>>>
+  const std::shared_ptr<DiagonalMatrix<VectorType>>
   get_matrix_diagonal_inverse() const
   {
     return inverse_diagonal_entries;
@@ -216,18 +213,18 @@ private:
   template <MFMask mask = MFMask::Default>
   void
   local_apply_cell(
-    const MatrixFree<dim, number> &                   data,
-    LinearAlgebra::distributed::Vector<number> &      dst,
-    const LinearAlgebra::distributed::Vector<number> &src,
-    const std::pair<unsigned int, unsigned int> &     cell_range) const;
+    const MatrixFree<dim, Number> &              data,
+    VectorType &                                 dst,
+    const VectorType &                           src,
+    const std::pair<unsigned int, unsigned int> &cell_range) const;
 
   /**
    * Apply diagonal part of the operator on a cell range.
    */
   void
   local_diagonal_cell(
-    const MatrixFree<dim, number> &             data,
-    LinearAlgebra::distributed::Vector<number> &dst,
+    const MatrixFree<dim, Number> &data,
+    VectorType &                   dst,
     const unsigned int &,
     const std::pair<unsigned int, unsigned int> &cell_range) const;
 
@@ -238,33 +235,31 @@ private:
   template <MFMask mask = MFMask::Default>
   void
   do_operation_on_cell(
-    FEEvaluation<dim, fe_degree, n_q_points_1d, dim, number> &phi_current,
-    FEEvaluation<dim, fe_degree, n_q_points_1d, dim, number> &phi_reference,
+    FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> &phi_current,
+    FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> &phi_reference,
     const unsigned int                                        cell) const;
 
-  std::shared_ptr<const MatrixFree<dim, number>> data_current;
-  std::shared_ptr<const MatrixFree<dim, number>> data_reference;
+  std::shared_ptr<const MatrixFree<dim, Number>> data_current;
+  std::shared_ptr<const MatrixFree<dim, Number>> data_reference;
 
-  const LinearAlgebra::distributed::Vector<number> *displacement;
+  const VectorType *displacement;
 
   std::shared_ptr<
-    Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArray<number>>>
+    Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArrayType>>
     material;
 
   std::shared_ptr<
-    Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArray<number>>>
+    Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArrayType>>
     material_inclusion;
 
-  std::shared_ptr<DiagonalMatrix<LinearAlgebra::distributed::Vector<number>>>
-    inverse_diagonal_entries;
-  std::shared_ptr<DiagonalMatrix<LinearAlgebra::distributed::Vector<number>>>
-    diagonal_entries;
+  std::shared_ptr<DiagonalMatrix<VectorType>> inverse_diagonal_entries;
+  std::shared_ptr<DiagonalMatrix<VectorType>> diagonal_entries;
 
-  Table<2, VectorizedArray<number>>                 cached_scalar;
-  Table<2, VectorizedArray<number>>                 cached_second_scalar;
-  Table<2, Tensor<2, dim, VectorizedArray<number>>> cached_tensor2;
-  Table<2, SymmetricTensor<4, dim, VectorizedArray<number>>> cached_tensor4;
-  Table<2, Tensor<4, dim, VectorizedArray<number>>>          cached_tensor4_ns;
+  Table<2, VectorizedArrayType>                          cached_scalar;
+  Table<2, VectorizedArrayType>                          cached_second_scalar;
+  Table<2, Tensor<2, dim, VectorizedArrayType>>          cached_tensor2;
+  Table<2, SymmetricTensor<4, dim, VectorizedArrayType>> cached_tensor4;
+  Table<2, Tensor<4, dim, VectorizedArrayType>>          cached_tensor4_ns;
 
   bool diagonal_is_available;
 
@@ -279,14 +274,14 @@ private:
   };
   MFCaching mf_caching;
 
-  Tensor<4, dim, VectorizedArray<number>> IxI_ikjl;
+  Tensor<4, dim, VectorizedArrayType> IxI_ikjl;
 };
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename number>
+template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 std::size_t
-NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::memory_consumption()
+NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::memory_consumption()
   const
 {
   auto res = cached_scalar.memory_consumption() +
@@ -316,28 +311,28 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::memory_consumption()
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename number>
-NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::NeoHookOperator()
+template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::NeoHookOperator()
   : Subscriptor()
   , diagonal_is_available(false)
   , mf_caching(MFCaching::none)
 {
-  Tensor<2, dim, VectorizedArray<number>> I;
+  Tensor<2, dim, VectorizedArrayType> I;
   for (unsigned int i = 0; i < dim; ++i)
     for (unsigned int j = 0; j < dim; ++j)
-      I[i][j] = make_vectorized_array<number>(i == j);
+      I[i][j] = make_vectorized_array<Number>(i == j);
 
   IxI_ikjl = outer_product_ikjl(I, I);
 }
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename number>
+template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::precondition_Jacobi(
-  LinearAlgebra::distributed::Vector<number> &      dst,
-  const LinearAlgebra::distributed::Vector<number> &src,
-  const number                                      omega) const
+NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::precondition_Jacobi(
+  VectorType &      dst,
+  const VectorType &src,
+  const Number      omega) const
 {
   Assert(inverse_diagonal_entries.get() && inverse_diagonal_entries->m() > 0,
          ExcNotInitialized());
@@ -347,27 +342,27 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::precondition_Jacobi(
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename number>
+template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 unsigned int
-NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::m() const
+NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::m() const
 {
   return data_current->get_vector_partitioner()->size();
 }
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename number>
+template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 unsigned int
-NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::n() const
+NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::n() const
 {
   return data_current->get_vector_partitioner()->size();
 }
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename number>
+template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::clear()
+NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::clear()
 {
   data_current.reset();
   data_reference.reset();
@@ -378,20 +373,20 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::clear()
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename number>
+template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::initialize(
-  std::shared_ptr<const MatrixFree<dim, number>>    data_current_,
-  std::shared_ptr<const MatrixFree<dim, number>>    data_reference_,
-  const LinearAlgebra::distributed::Vector<number> &displacement_,
-  const std::string                                 caching)
+NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::initialize(
+  std::shared_ptr<const MatrixFree<dim, Number>> data_current_,
+  std::shared_ptr<const MatrixFree<dim, Number>> data_reference_,
+  const VectorType &                             displacement_,
+  const std::string                              caching)
 {
   data_current   = data_current_;
   data_reference = data_reference_;
   displacement   = &displacement_;
 
   const unsigned int n_cells = data_reference_->n_cell_batches();
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, number> phi(
+  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi(
     *data_reference_);
   if (caching == "scalar")
     {
@@ -431,13 +426,13 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::initialize(
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename number>
+template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::cache()
+NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::cache()
 {
   const unsigned int n_cells = data_reference->n_cell_batches();
 
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, number> phi_reference(
+  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi_reference(
     *data_reference);
 
   for (unsigned int cell = 0; cell < n_cells; ++cell)
@@ -454,11 +449,11 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::cache()
         {
           for (unsigned int q = 0; q < phi_reference.n_q_points; ++q)
             {
-              const Tensor<2, dim, VectorizedArray<number>> &grad_u =
+              const Tensor<2, dim, VectorizedArrayType> &grad_u =
                 phi_reference.get_gradient(q);
-              const Tensor<2, dim, VectorizedArray<number>> F =
+              const Tensor<2, dim, VectorizedArrayType> F =
                 Physics::Elasticity::Kinematics::F(grad_u);
-              const VectorizedArray<number> det_F = determinant(F);
+              const VectorizedArrayType det_F = determinant(F);
 
               for (unsigned int i = 0;
                    i < data_current->n_active_entries_per_cell_batch(cell);
@@ -468,18 +463,18 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::cache()
                          "det_F[" + std::to_string(i) +
                          "] is not positive: " + std::to_string(det_F[i])));
 
-              cached_scalar(cell, q) = std::pow(det_F, number(-1.0 / dim));
+              cached_scalar(cell, q) = std::pow(det_F, Number(-1.0 / dim));
             }
         }
       else if (cell_mat->formulation == 1)
         {
           for (unsigned int q = 0; q < phi_reference.n_q_points; ++q)
             {
-              const Tensor<2, dim, VectorizedArray<number>> &grad_u =
+              const Tensor<2, dim, VectorizedArrayType> &grad_u =
                 phi_reference.get_gradient(q);
-              const Tensor<2, dim, VectorizedArray<number>> F =
+              const Tensor<2, dim, VectorizedArrayType> F =
                 Physics::Elasticity::Kinematics::F(grad_u);
-              const VectorizedArray<number> det_F = determinant(F);
+              const VectorizedArrayType det_F = determinant(F);
 
               for (unsigned int i = 0;
                    i < data_current->n_active_entries_per_cell_batch(cell);
@@ -489,7 +484,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::cache()
                          "det_F[" + std::to_string(i) +
                          "] is not positive: " + std::to_string(det_F[i])));
 
-              const VectorizedArray<number> scalar =
+              const VectorizedArrayType scalar =
                 cell_mat->mu - 2.0 * cell_mat->lambda * std::log(det_F);
               if (mf_caching == MFCaching::scalar)
                 {
@@ -523,7 +518,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::cache()
                   cached_scalar(cell, q)        = scalar * 2. / det_F;
                   cached_second_scalar(cell, q) = 2 * cell_mat->lambda / det_F;
 
-                  SymmetricTensor<2, dim, VectorizedArray<number>> tau;
+                  SymmetricTensor<2, dim, VectorizedArrayType> tau;
                   {
                     tau = cell_mat->mu * Physics::Elasticity::Kinematics::b(F);
                     for (unsigned int d = 0; d < dim; ++d)
@@ -533,7 +528,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::cache()
                 }
               else if (mf_caching == MFCaching::tensor4)
                 {
-                  SymmetricTensor<2, dim, VectorizedArray<number>> tau;
+                  SymmetricTensor<2, dim, VectorizedArrayType> tau;
                   {
                     tau = cell_mat->mu * Physics::Elasticity::Kinematics::b(F);
                     for (unsigned int d = 0; d < dim; ++d)
@@ -548,16 +543,15 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::cache()
                 }
               else if (mf_caching == MFCaching::tensor4_ns)
                 {
-                  const Tensor<2, dim, VectorizedArray<number>> F_inv =
-                    invert(F);
-                  const Tensor<2, dim, VectorizedArray<number>> F_inv_t(
+                  const Tensor<2, dim, VectorizedArrayType> F_inv = invert(F);
+                  const Tensor<2, dim, VectorizedArrayType> F_inv_t(
                     transpose(F_inv));
-                  const VectorizedArray<number> ln_J = std::log(det_F);
+                  const VectorizedArrayType ln_J = std::log(det_F);
 
-                  const Tensor<4, dim, VectorizedArray<number>>
+                  const Tensor<4, dim, VectorizedArrayType>
                     F_inv_t_otimes_F_inv_t = outer_product(F_inv_t, F_inv_t);
 
-                  const Tensor<4, dim, VectorizedArray<number>> F_inv_t_F_inv =
+                  const Tensor<4, dim, VectorizedArrayType> F_inv_t_F_inv =
                     outer_product_iljk(F_inv_t, F_inv);
 
                   cached_tensor4_ns(cell, q) =
@@ -579,14 +573,14 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::cache()
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename number>
+template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::set_material(
+NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::set_material(
   std::shared_ptr<
-    Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArray<number>>>
+    Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArrayType>>
     material_,
   std::shared_ptr<
-    Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArray<number>>>
+    Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArrayType>>
     material_inclusion_)
 {
   material           = material_;
@@ -595,12 +589,12 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::set_material(
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename number>
+template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 template <MFMask mask>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::vmult(
-  LinearAlgebra::distributed::Vector<number> &      dst,
-  const LinearAlgebra::distributed::Vector<number> &src) const
+NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::vmult(
+  VectorType &      dst,
+  const VectorType &src) const
 {
   if (mask & MFMask::Zero)
     dst = 0;
@@ -609,11 +603,11 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::vmult(
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename number>
+template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::Tvmult(
-  LinearAlgebra::distributed::Vector<number> &      dst,
-  const LinearAlgebra::distributed::Vector<number> &src) const
+NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::Tvmult(
+  VectorType &      dst,
+  const VectorType &src) const
 {
   dst = 0;
   vmult_add(dst, src);
@@ -621,23 +615,23 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::Tvmult(
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename number>
+template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::Tvmult_add(
-  LinearAlgebra::distributed::Vector<number> &      dst,
-  const LinearAlgebra::distributed::Vector<number> &src) const
+NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::Tvmult_add(
+  VectorType &      dst,
+  const VectorType &src) const
 {
   vmult_add(dst, src);
 }
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename number>
+template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 template <MFMask mask>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::vmult_add(
-  LinearAlgebra::distributed::Vector<number> &      dst,
-  const LinearAlgebra::distributed::Vector<number> &src) const
+NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::vmult_add(
+  VectorType &      dst,
+  const VectorType &src) const
 {
   const std::shared_ptr<const Utilities::MPI::Partitioner> &partitioner =
     data_current->get_vector_partitioner();
@@ -686,18 +680,18 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::vmult_add(
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename number>
+template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 template <MFMask mask>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::local_apply_cell(
-  const MatrixFree<dim, number> & /*data*/,
-  LinearAlgebra::distributed::Vector<number> &      dst,
-  const LinearAlgebra::distributed::Vector<number> &src,
-  const std::pair<unsigned int, unsigned int> &     cell_range) const
+NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_apply_cell(
+  const MatrixFree<dim, Number> & /*data*/,
+  VectorType &                                 dst,
+  const VectorType &                           src,
+  const std::pair<unsigned int, unsigned int> &cell_range) const
 {
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, number> phi_current(
+  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi_current(
     *data_current);
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, number> phi_reference(
+  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi_reference(
     *data_reference);
 
   Assert(phi_current.n_q_points == phi_reference.n_q_points,
@@ -754,20 +748,20 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::local_apply_cell(
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename number>
+template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::local_diagonal_cell(
-  const MatrixFree<dim, number> & /*data*/,
-  LinearAlgebra::distributed::Vector<number> &dst,
+NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_diagonal_cell(
+  const MatrixFree<dim, Number> & /*data*/,
+  VectorType &dst,
   const unsigned int &,
   const std::pair<unsigned int, unsigned int> &cell_range) const
 {
-  const VectorizedArray<number> one  = make_vectorized_array<number>(1.);
-  const VectorizedArray<number> zero = make_vectorized_array<number>(0.);
+  const VectorizedArrayType one  = make_vectorized_array<Number>(1.);
+  const VectorizedArrayType zero = make_vectorized_array<Number>(0.);
 
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, number> phi_current(
+  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi_current(
     *data_current);
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, number> phi_reference(
+  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi_reference(
     *data_reference);
 
   // keep fully referntial here and bail out if needed
@@ -778,7 +772,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::local_diagonal_cell(
            ++cell)
         {
           phi_reference.reinit(cell);
-          AlignedVector<VectorizedArray<number>> local_diagonal_vector(
+          AlignedVector<VectorizedArrayType> local_diagonal_vector(
             phi_reference.dofs_per_component * phi_reference.n_components);
 
           // Loop over all DoFs and set dof values to zero everywhere but i-th
@@ -840,7 +834,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::local_diagonal_cell(
       // we still need to read some dummy here
       phi_current.read_dof_values(*displacement);
 
-      AlignedVector<VectorizedArray<number>> local_diagonal_vector(
+      AlignedVector<VectorizedArrayType> local_diagonal_vector(
         phi_current.dofs_per_component * phi_current.n_components);
 
       // Loop over all DoFs and set dof values to zero everywhere but i-th DoF.
@@ -887,12 +881,12 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::local_diagonal_cell(
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename number>
+template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 template <MFMask mask>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, number> &phi_current,
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, number> &phi_reference,
+NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
+  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> &phi_current,
+  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> &phi_reference,
   const unsigned int                                        cell) const
 {
   const unsigned int material_id =
@@ -928,13 +922,12 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
                       std::to_string(i) +
                       " does not match between two MatrixFree objects."));
 
-  using NumberType                     = VectorizedArray<number>;
-  static constexpr number inv_dim_f    = 1.0 / dim;
-  static constexpr number two_over_dim = 2.0 / dim;
-  const number            kappa        = cell_mat->kappa;
-  const number            c_1          = cell_mat->c_1;
-  const number            mu           = cell_mat->mu;
-  const number            lambda       = cell_mat->lambda;
+  static constexpr Number inv_dim_f    = 1.0 / dim;
+  static constexpr Number two_over_dim = 2.0 / dim;
+  const Number            kappa        = cell_mat->kappa;
+  const Number            c_1          = cell_mat->c_1;
+  const Number            mu           = cell_mat->mu;
+  const Number            lambda       = cell_mat->lambda;
 
   // VMult sum factorization
 
@@ -964,18 +957,18 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
           for (unsigned int q = 0; q < phi_current.n_q_points; ++q)
             {
               // reference configuration:
-              const Tensor<2, dim, NumberType> &grad_u =
+              const Tensor<2, dim, VectorizedArrayType> &grad_u =
                 phi_reference.get_gradient(q);
-              const Tensor<2, dim, NumberType> F =
+              const Tensor<2, dim, VectorizedArrayType> F =
                 Physics::Elasticity::Kinematics::F(grad_u);
-              const NumberType                 det_F = determinant(F);
-              const Tensor<2, dim, NumberType> F_bar =
+              const VectorizedArrayType                 det_F = determinant(F);
+              const Tensor<2, dim, VectorizedArrayType> F_bar =
                 F * cached_scalar(cell, q);
-              const SymmetricTensor<2, dim, NumberType> b_bar =
+              const SymmetricTensor<2, dim, VectorizedArrayType> b_bar =
                 Physics::Elasticity::Kinematics::b(F_bar);
 
               Assert(cached_scalar(cell, q) ==
-                       std::pow(det_F, number(-1.0 / dim)),
+                       std::pow(det_F, Number(-1.0 / dim)),
                      ExcMessage("Cached scalar and det_F do not match"));
 
               for (unsigned int i = 0;
@@ -986,39 +979,39 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
                                   "] is not positive"));
 
               // current configuration
-              const Tensor<2, dim, NumberType> grad_Nx_v =
+              const Tensor<2, dim, VectorizedArrayType> grad_Nx_v =
                 phi_current.get_gradient(q);
-              const SymmetricTensor<2, dim, NumberType> symm_grad_Nx_v =
-                symmetrize(grad_Nx_v);
+              const SymmetricTensor<2, dim, VectorizedArrayType>
+                symm_grad_Nx_v = symmetrize(grad_Nx_v);
 
               // Next, determine the isochoric Kirchhoff stress
               // $\boldsymbol{\tau}_{\textrm{iso}} =
               // \mathcal{P}:\overline{\boldsymbol{\tau}}$
-              const SymmetricTensor<2, dim, NumberType> tau_bar =
+              const SymmetricTensor<2, dim, VectorizedArrayType> tau_bar =
                 b_bar * (2.0 * c_1);
 
               // trace of fictitious Kirchhoff stress
               // $\overline{\boldsymbol{\tau}}$:
               // 2.0 * c_1 * b_bar
-              const NumberType tr_tau_bar = trace(tau_bar);
+              const VectorizedArrayType tr_tau_bar = trace(tau_bar);
 
-              const NumberType tr_tau_bar_dim = tr_tau_bar * inv_dim_f;
+              const VectorizedArrayType tr_tau_bar_dim = tr_tau_bar * inv_dim_f;
 
               // Derivative of the volumetric free energy with respect to
               // $J$ return $\frac{\partial
               // \Psi_{\text{vol}}(J)}{\partial J}$
-              const NumberType dPsi_vol_dJ =
+              const VectorizedArrayType dPsi_vol_dJ =
                 (kappa / 2.0) * (det_F - 1.0 / det_F);
 
-              const NumberType dPsi_vol_dJ_J = dPsi_vol_dJ * det_F;
+              const VectorizedArrayType dPsi_vol_dJ_J = dPsi_vol_dJ * det_F;
 
-              const NumberType d2Psi_vol_dJ2 =
+              const VectorizedArrayType d2Psi_vol_dJ2 =
                 ((kappa / 2.0) * (1.0 + 1.0 / (det_F * det_F)));
 
               // Kirchoff stress:
-              SymmetricTensor<2, dim, NumberType> tau;
+              SymmetricTensor<2, dim, VectorizedArrayType> tau;
               {
-                tau = NumberType();
+                tau = VectorizedArrayType();
                 // See Holzapfel p231 eq6.98 onwards
 
                 // The following functions are used internally in determining
@@ -1039,11 +1032,12 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
               // \mathfrak{c}_{ijkl} = F_{iA} F_{jB} \mathfrak{C}_{ABCD} F_{kC}
               // F_{lD}$ where $ \mathfrak{C} = 4 \frac{\partial^2
               // \Psi(\mathbf{C})}{\partial \mathbf{C} \partial \mathbf{C}}$
-              SymmetricTensor<2, dim, VectorizedArray<number>> jc_part;
+              SymmetricTensor<2, dim, VectorizedArrayType> jc_part;
               {
-                const NumberType tr = trace(symm_grad_Nx_v);
+                const VectorizedArrayType tr = trace(symm_grad_Nx_v);
 
-                SymmetricTensor<2, dim, NumberType> dev_src(symm_grad_Nx_v);
+                SymmetricTensor<2, dim, VectorizedArrayType> dev_src(
+                  symm_grad_Nx_v);
                 for (unsigned int i = 0; i < dim; ++i)
                   dev_src[i][i] -= tr * inv_dim_f;
 
@@ -1061,7 +1055,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
                 jc_part *= -dPsi_vol_dJ_J * 2.0;
 
                 // term with IxI results in trace of the tensor times I
-                const NumberType tmp =
+                const VectorizedArrayType tmp =
                   det_F * (dPsi_vol_dJ + det_F * d2Psi_vol_dJ2) * tr;
                 for (unsigned int i = 0; i < dim; ++i)
                   jc_part[i][i] += tmp;
@@ -1072,7 +1066,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
                 // The isochoric Kirchhoff stress
                 // $\boldsymbol{\tau}_{\textrm{iso}} =
                 // \mathcal{P}:\overline{\boldsymbol{\tau}}$:
-                SymmetricTensor<2, dim, NumberType> tau_iso(tau_bar);
+                SymmetricTensor<2, dim, VectorizedArrayType> tau_iso(tau_bar);
                 for (unsigned int i = 0; i < dim; ++i)
                   tau_iso[i][i] -= tr_tau_bar_dim;
 
@@ -1081,17 +1075,17 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
 
                 // term with tau_iso_x_I + I_x_tau_iso
                 jc_part -= (two_over_dim * tr) * tau_iso;
-                const NumberType tau_iso_src = tau_iso * symm_grad_Nx_v;
+                const VectorizedArrayType tau_iso_src =
+                  tau_iso * symm_grad_Nx_v;
                 for (unsigned int i = 0; i < dim; ++i)
                   jc_part[i][i] -= two_over_dim * tau_iso_src;
 
                 // c_bar==0 so we don't have a term with it.
               }
 
-//#ifdef DEBUG
-#ifdef DEAL_II_WITH_P4EST
-              const VectorizedArray<number> &JxW_current = phi_current.JxW(q);
-              VectorizedArray<number>        JxW_scale   = phi_reference.JxW(q);
+#ifdef DEBUG
+              const VectorizedArrayType &JxW_current = phi_current.JxW(q);
+              VectorizedArrayType        JxW_scale   = phi_reference.JxW(q);
               for (unsigned int i = 0;
                    i < data_current->n_active_entries_per_cell_batch(cell);
                    ++i)
@@ -1103,10 +1097,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
                   // operator.
                   Assert(
                     std::abs(JxW_scale[i] * det_F[i] - 1.) <
-                      1000. * std::numeric_limits<number>::epsilon(),
+                      1000. * std::numeric_limits<Number>::epsilon(),
                     ExcMessage(
                       std::to_string(i) + " out of " +
-                      std::to_string(VectorizedArray<number>::size()) +
+                      std::to_string(VectorizedArrayType::size()) +
                       ", filled " +
                       std::to_string(
                         data_current->n_active_entries_per_cell_batch(cell)) +
@@ -1126,9 +1120,9 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
               // \delta_{ik} \sigma^{tot}_{jl} = \delta_{ik} \tau^{tot}_{jl} $.
               // the product is actually  GradN * tau^T but due to symmetry of
               // tau we can do GradN * tau
-              const VectorizedArray<number> inv_det_F = number(1.0) / det_F;
-              const Tensor<2, dim, VectorizedArray<number>> tau_ns(tau);
-              const Tensor<2, dim, VectorizedArray<number>> geo =
+              const VectorizedArrayType inv_det_F = Number(1.0) / det_F;
+              const Tensor<2, dim, VectorizedArrayType> tau_ns(tau);
+              const Tensor<2, dim, VectorizedArrayType> geo =
                 grad_Nx_v * tau_ns;
               phi_current.submit_gradient(
                 (jc_part + geo) * inv_det_F
@@ -1148,43 +1142,42 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
           for (unsigned int q = 0; q < phi_current.n_q_points; ++q)
             {
               // reference configuration:
-              const Tensor<2, dim, NumberType> grad_u =
+              const Tensor<2, dim, VectorizedArrayType> grad_u =
                 phi_reference.get_gradient(q);
-              const Tensor<2, dim, NumberType> F =
+              const Tensor<2, dim, VectorizedArrayType> F =
                 Physics::Elasticity::Kinematics::F(grad_u);
-              const SymmetricTensor<2, dim, NumberType> b =
+              const SymmetricTensor<2, dim, VectorizedArrayType> b =
                 Physics::Elasticity::Kinematics::b(F);
 
-              const Tensor<2, dim, NumberType> grad_Nx_v =
+              const Tensor<2, dim, VectorizedArrayType> grad_Nx_v =
                 phi_current.get_gradient(q);
-              const SymmetricTensor<2, dim, NumberType> symm_grad_Nx_v =
-                symmetrize(grad_Nx_v);
+              const SymmetricTensor<2, dim, VectorizedArrayType>
+                symm_grad_Nx_v = symmetrize(grad_Nx_v);
 
-              SymmetricTensor<2, dim, NumberType> tau;
+              SymmetricTensor<2, dim, VectorizedArrayType> tau;
               {
                 tau = mu * b;
                 for (unsigned int d = 0; d < dim; ++d)
                   tau[d][d] -= cached_scalar(cell, q);
               }
 
-              SymmetricTensor<2, dim, NumberType> jc_part =
-                (number(2.0) * cached_scalar(cell, q)) * symm_grad_Nx_v;
+              SymmetricTensor<2, dim, VectorizedArrayType> jc_part =
+                (Number(2.0) * cached_scalar(cell, q)) * symm_grad_Nx_v;
               {
-                const NumberType tmp =
-                  number(2.0) * lambda * trace(symm_grad_Nx_v);
+                const VectorizedArrayType tmp =
+                  Number(2.0) * lambda * trace(symm_grad_Nx_v);
                 for (unsigned int i = 0; i < dim; ++i)
                   jc_part[i][i] += tmp;
               }
 
-              const NumberType det_F = determinant(F);
+              const VectorizedArrayType det_F = determinant(F);
               Assert(cached_scalar(cell, q) ==
-                       (mu - number(2.0) * lambda * std::log(det_F)),
+                       (mu - Number(2.0) * lambda * std::log(det_F)),
                      ExcMessage("Cached scalar and det_F do not match"));
 
-//#ifdef DEBUG
-#ifdef DEAL_II_WITH_P4EST
-              const VectorizedArray<number> JxW_current = phi_current.JxW(q);
-              VectorizedArray<number>       JxW_scale   = phi_reference.JxW(q);
+#ifdef DEBUG
+              const VectorizedArrayType JxW_current = phi_current.JxW(q);
+              VectorizedArrayType       JxW_scale   = phi_reference.JxW(q);
               for (unsigned int i = 0;
                    i < data_current->n_active_entries_per_cell_batch(cell);
                    ++i)
@@ -1196,10 +1189,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
                   // operator.
                   Assert(
                     std::abs(JxW_scale[i] * det_F[i] - 1.) <
-                      100000. * std::numeric_limits<number>::epsilon(),
+                      100000. * std::numeric_limits<Number>::epsilon(),
                     ExcMessage(
                       std::to_string(i) + " out of " +
-                      std::to_string(VectorizedArray<number>::size()) +
+                      std::to_string(VectorizedArrayType::size()) +
                       ", filled " +
                       std::to_string(
                         data_current->n_active_entries_per_cell_batch(cell)) +
@@ -1209,10 +1202,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
                 }
 #endif
 
-              const Tensor<2, dim, VectorizedArray<number>> tau_ns(tau);
-              const Tensor<2, dim, VectorizedArray<number>> geo =
+              const Tensor<2, dim, VectorizedArrayType> tau_ns(tau);
+              const Tensor<2, dim, VectorizedArrayType> geo =
                 grad_Nx_v * tau_ns;
-              const NumberType inv_det_F = number(1.0) / det_F;
+              const VectorizedArrayType inv_det_F = Number(1.0) / det_F;
               phi_current.submit_gradient((jc_part + geo) * inv_det_F, q);
             }
         }
@@ -1231,37 +1224,38 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
         // pulled out the Eulerian motion of the grid into F; nothing else
         // changed.
         {
-          const NumberType  one             = make_vectorized_array<number>(1.);
-          const NumberType *cached_position = &cached_second_scalar(cell, 0);
+          const VectorizedArrayType  one = make_vectorized_array<Number>(1.);
+          const VectorizedArrayType *cached_position =
+            &cached_second_scalar(cell, 0);
           constexpr unsigned int n_q_points =
             Utilities::pow(n_q_points_1d, dim);
-          NumberType *ref_grads = phi_current.begin_gradients();
-          NumberType *x_grads   = phi_reference.begin_gradients();
+          VectorizedArrayType *ref_grads = phi_current.begin_gradients();
+          VectorizedArrayType *x_grads   = phi_reference.begin_gradients();
 
           dealii::internal::FEEvaluationImplCollocation<
             dim,
             n_q_points_1d - 1,
-            NumberType>::evaluate(dim,
-                                  EvaluationFlags::gradients,
-                                  data_reference->get_shape_info(),
-                                  cached_position,
-                                  nullptr,
-                                  ref_grads,
-                                  nullptr,
-                                  nullptr);
+            VectorizedArrayType>::evaluate(dim,
+                                           EvaluationFlags::gradients,
+                                           data_reference->get_shape_info(),
+                                           cached_position,
+                                           nullptr,
+                                           ref_grads,
+                                           nullptr,
+                                           nullptr);
 
           for (unsigned int q = 0; q < phi_current.n_q_points; ++q)
             {
               // Jacobian of element in referential space
-              const Tensor<2, dim, NumberType> inv_jac =
+              const Tensor<2, dim, VectorizedArrayType> inv_jac =
                 phi_reference.inverse_jacobian(q);
-              Tensor<2, dim, NumberType> F;
-              Tensor<2, dim, NumberType> grad_Nx_v;
+              Tensor<2, dim, VectorizedArrayType> F;
+              Tensor<2, dim, VectorizedArrayType> grad_Nx_v;
               for (unsigned int d = 0; d < dim; ++d)
                 {
                   for (unsigned int e = 0; e < dim; ++e)
                     {
-                      NumberType sum =
+                      VectorizedArrayType sum =
                         inv_jac[e][0] *
                         ref_grads[(d * dim + 0) * n_q_points + q];
                       for (unsigned int f = 1; f < dim; ++f)
@@ -1272,7 +1266,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
                       // since we already have the inverse Jacobian, simply
                       // apply the inverse Jacobian here rather than call
                       // get_gradient (the operations are the same otherwise)
-                      NumberType sum2 =
+                      VectorizedArrayType sum2 =
                         inv_jac[e][0] * x_grads[(d * dim + 0) * n_q_points + q];
                       for (unsigned int f = 1; f < dim; ++f)
                         sum2 += inv_jac[e][f] *
@@ -1281,38 +1275,40 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
                     }
                   F[d][d] += one;
                 }
-              const SymmetricTensor<2, dim, NumberType> b =
+              const SymmetricTensor<2, dim, VectorizedArrayType> b =
                 Physics::Elasticity::Kinematics::b(F);
 
-              SymmetricTensor<2, dim, NumberType> tau = mu * b;
+              SymmetricTensor<2, dim, VectorizedArrayType> tau = mu * b;
               for (unsigned int d = 0; d < dim; ++d)
                 tau[d][d] -= cached_scalar(cell, q);
 
-              const Tensor<2, dim, NumberType> F_inv = invert(F);
+              const Tensor<2, dim, VectorizedArrayType> F_inv = invert(F);
               for (unsigned int d = 0; d < dim; ++d)
                 {
-                  NumberType tmp[dim];
+                  VectorizedArrayType tmp[dim];
                   for (unsigned int e = 0; e < dim; ++e)
                     tmp[e] = grad_Nx_v[d][e];
                   for (unsigned int e = 0; e < dim; ++e)
                     {
-                      NumberType sum = F_inv[0][e] * tmp[0];
+                      VectorizedArrayType sum = F_inv[0][e] * tmp[0];
                       for (unsigned int f = 1; f < dim; ++f)
                         sum += F_inv[f][e] * tmp[f];
                       grad_Nx_v[d][e] = sum;
                     }
                 }
 
-              SymmetricTensor<2, dim, NumberType> jc_part =
-                (number(2.0) * cached_scalar(cell, q)) * symmetrize(grad_Nx_v);
+              SymmetricTensor<2, dim, VectorizedArrayType> jc_part =
+                (Number(2.0) * cached_scalar(cell, q)) * symmetrize(grad_Nx_v);
               {
-                const NumberType tmp = number(2.0) * lambda * trace(grad_Nx_v);
+                const VectorizedArrayType tmp =
+                  Number(2.0) * lambda * trace(grad_Nx_v);
                 for (unsigned int i = 0; i < dim; ++i)
                   jc_part[i][i] += tmp;
               }
 
-              Tensor<2, dim, NumberType> queued =
-                jc_part + (grad_Nx_v * Tensor<2, dim, NumberType>(tau));
+              Tensor<2, dim, VectorizedArrayType> queued =
+                jc_part +
+                (grad_Nx_v * Tensor<2, dim, VectorizedArrayType>(tau));
               phi_reference.submit_gradient(F_inv * queued, q);
               // MK: The 60 lines above this are the interesting part: I only
               // need to work with phi_reference. What happens in addition to
@@ -1328,15 +1324,15 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
         {
           for (unsigned int q = 0; q < phi_current.n_q_points; ++q)
             {
-              const Tensor<2, dim, NumberType> grad_Nx_v =
+              const Tensor<2, dim, VectorizedArrayType> grad_Nx_v =
                 phi_current.get_gradient(q);
-              const SymmetricTensor<2, dim, NumberType> symm_grad_Nx_v =
-                symmetrize(grad_Nx_v);
+              const SymmetricTensor<2, dim, VectorizedArrayType>
+                symm_grad_Nx_v = symmetrize(grad_Nx_v);
 
-              SymmetricTensor<2, dim, VectorizedArray<number>> jc_part =
+              SymmetricTensor<2, dim, VectorizedArrayType> jc_part =
                 cached_scalar(cell, q) * symm_grad_Nx_v;
               {
-                const NumberType tmp =
+                const VectorizedArrayType tmp =
                   cached_second_scalar(cell, q) * trace(symm_grad_Nx_v);
                 for (unsigned int i = 0; i < dim; ++i)
                   jc_part[i][i] += tmp;
@@ -1352,10 +1348,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
         {
           for (unsigned int q = 0; q < phi_current.n_q_points; ++q)
             {
-              const Tensor<2, dim, NumberType> &grad_Nx_v =
+              const Tensor<2, dim, VectorizedArrayType> &grad_Nx_v =
                 phi_current.get_gradient(q);
-              const SymmetricTensor<2, dim, NumberType> &symm_grad_Nx_v =
-                symmetrize(grad_Nx_v);
+              const SymmetricTensor<2, dim, VectorizedArrayType>
+                &symm_grad_Nx_v = symmetrize(grad_Nx_v);
 
               phi_current.submit_gradient(grad_Nx_v * cached_tensor2(cell, q) +
                                             cached_tensor4(cell, q) *
@@ -1369,7 +1365,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
         {
           for (unsigned int q = 0; q < phi_current.n_q_points; ++q)
             {
-              const Tensor<2, dim, NumberType> &grad_Nx_v =
+              const Tensor<2, dim, VectorizedArrayType> &grad_Nx_v =
                 phi_reference.get_gradient(q);
 
               phi_reference.submit_gradient(
@@ -1389,11 +1385,12 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
       if (mf_caching == MFCaching::tensor4_ns ||
           mf_caching == MFCaching::scalar_referential)
         {
-          phi_reference.submit_gradient(Tensor<2, dim, NumberType>(), q);
+          phi_reference.submit_gradient(Tensor<2, dim, VectorizedArrayType>(),
+                                        q);
         }
       else
         {
-          phi_current.submit_gradient(Tensor<2, dim, NumberType>(), q);
+          phi_current.submit_gradient(Tensor<2, dim, VectorizedArrayType>(), q);
         }
     }
 
@@ -1414,12 +1411,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::do_operation_on_cell(
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename number>
+template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::compute_diagonal()
+NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::compute_diagonal()
 {
-  typedef LinearAlgebra::distributed::Vector<number> VectorType;
-
   inverse_diagonal_entries.reset(new DiagonalMatrix<VectorType>());
   diagonal_entries.reset(new DiagonalMatrix<VectorType>());
   VectorType &inverse_diagonal_vector = inverse_diagonal_entries->get_vector();
@@ -1467,9 +1462,9 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::compute_diagonal()
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename number>
-number
-NeoHookOperator<dim, fe_degree, n_q_points_1d, number>::el(
+template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+Number
+NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::el(
   const unsigned int row,
   const unsigned int col) const
 {

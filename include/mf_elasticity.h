@@ -67,14 +67,10 @@ static const unsigned int debug_level = 1;
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/vector_tools.h>
 
-// These must be included below the AD headers so that
-// their math functions are available for use in the
-// definition of tensors and kinematic quantities
 #include <deal.II/physics/elasticity/kinematics.h>
 #include <deal.II/physics/elasticity/standard_tensors.h>
 
 #include <material.h>
-//#include <mf_ad_nh_operator.h>
 #include <mf_nh_operator.h>
 #include <parameter_handling.h>
 #include <sys/stat.h>
@@ -152,13 +148,15 @@ namespace FSI
   // hand. It follows the usual scheme in that all it really has is a
   // constructor, destructor and a <code>run()</code> function that dispatches
   // all the work to private functions of this class:
-  template <int dim, int degree, int n_q_points_1d, typename NumberType>
+  template <int dim, int degree, int n_q_points_1d, typename Number>
   class Solid
   {
   public:
-    using LevelNumberType = float;
-    using LevelVectorType = LinearAlgebra::distributed::Vector<LevelNumberType>;
-    using VectorType      = LinearAlgebra::distributed::Vector<double>;
+    using LevelNumber         = float;
+    using LevelVectorType     = LinearAlgebra::distributed::Vector<LevelNumber>;
+    using VectorType          = LinearAlgebra::distributed::Vector<Number>;
+    using VectorizedArrayType = VectorizedArray<Number>;
+    using LevelVectorizedArrayType = VectorizedArray<LevelNumber>;
 
     Solid(const Parameters::AllParameters<dim> &parameters);
 
@@ -203,9 +201,8 @@ namespace FSI
      * number of iterations, residual and condition number estiamte.
      */
     std::tuple<unsigned int, double, double>
-    solve_linear_system(
-      LinearAlgebra::distributed::Vector<double> &newton_update,
-      LinearAlgebra::distributed::Vector<double> &newton_update_trilinos) const;
+    solve_linear_system(VectorType &newton_update,
+                        VectorType &newton_update_trilinos) const;
 
     // Set total solution based on the current values of solution_n and
     // solution_delta:
@@ -258,28 +255,26 @@ namespace FSI
     IndexSet locally_owned_dofs, locally_relevant_dofs;
 
     // matrix material
-    std::shared_ptr<Material_Compressible_Neo_Hook_One_Field<dim, NumberType>>
+    std::shared_ptr<Material_Compressible_Neo_Hook_One_Field<dim, Number>>
       material;
 
     std::shared_ptr<
-      Material_Compressible_Neo_Hook_One_Field<dim,
-                                               VectorizedArray<NumberType>>>
+      Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArrayType>>
       material_vec;
     std::shared_ptr<
-      Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArray<float>>>
+      Material_Compressible_Neo_Hook_One_Field<dim, LevelVectorizedArrayType>>
       material_level;
 
     // inclusion material
-    std::shared_ptr<Material_Compressible_Neo_Hook_One_Field<dim, NumberType>>
+    std::shared_ptr<Material_Compressible_Neo_Hook_One_Field<dim, Number>>
       material_inclusion;
 
     std::shared_ptr<
-      Material_Compressible_Neo_Hook_One_Field<dim,
-                                               VectorizedArray<NumberType>>>
+      Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArrayType>>
       material_inclusion_vec;
 
     std::shared_ptr<
-      Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArray<float>>>
+      Material_Compressible_Neo_Hook_One_Field<dim, LevelVectorizedArrayType>>
       material_inclusion_level;
 
     static const unsigned int n_components      = dim;
@@ -305,18 +300,18 @@ namespace FSI
     //    TrilinosWrappers::MPI::Vector  system_rhs_trilinos;
     //    TrilinosWrappers::MPI::Vector  newton_update_trilinos;
 
-    LinearAlgebra::distributed::Vector<double> system_rhs;
+    VectorType system_rhs;
 
     // solution at the previous time-step
-    LinearAlgebra::distributed::Vector<double> solution_n;
+    VectorType solution_n;
 
     // current value of increment solution
-    LinearAlgebra::distributed::Vector<double> solution_delta;
+    VectorType solution_delta;
 
     // current total solution:  solution_total = solution_n + solution_delta
-    LinearAlgebra::distributed::Vector<double> solution_total;
+    VectorType solution_total;
 
-    LinearAlgebra::distributed::Vector<double> newton_update;
+    VectorType newton_update;
 
 
     MGLevelObject<LevelVectorType> mg_solution_total;
@@ -362,11 +357,9 @@ namespace FSI
     void
     print_solution();
 
-    std::shared_ptr<
-      MappingQEulerian<dim, LinearAlgebra::distributed::Vector<double>>>
-                                             eulerian_mapping;
-    std::shared_ptr<MatrixFree<dim, double>> mf_data_current;
-    std::shared_ptr<MatrixFree<dim, double>> mf_data_reference;
+    std::shared_ptr<MappingQEulerian<dim, VectorType>> eulerian_mapping;
+    std::shared_ptr<MatrixFree<dim, double>>           mf_data_current;
+    std::shared_ptr<MatrixFree<dim, double>>           mf_data_reference;
 
 
     std::vector<std::shared_ptr<MappingQEulerian<dim, LevelVectorType>>>
@@ -452,8 +445,8 @@ namespace FSI
   }
 
   // We initialise the Solid class using data extracted from the parameter file.
-  template <int dim, int degree, int n_q_points_1d, typename NumberType>
-  Solid<dim, degree, n_q_points_1d, NumberType>::Solid(
+  template <int dim, int degree, int n_q_points_1d, typename Number>
+  Solid<dim, degree, n_q_points_1d, Number>::Solid(
     const Parameters::AllParameters<dim> &parameters)
     : mpi_communicator(MPI_COMM_WORLD)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(mpi_communicator) == 0)
@@ -487,40 +480,39 @@ namespace FSI
     dof_handler(triangulation)
     , dofs_per_cell(fe.dofs_per_cell)
     , u_fe(first_u_component)
-    , material(std::make_shared<
-               Material_Compressible_Neo_Hook_One_Field<dim, NumberType>>(
-        parameters.mu,
-        parameters.nu,
-        parameters.material_formulation))
+    , material(
+        std::make_shared<Material_Compressible_Neo_Hook_One_Field<dim, Number>>(
+          parameters.mu,
+          parameters.nu,
+          parameters.material_formulation))
     , material_vec(
-        std::make_shared<Material_Compressible_Neo_Hook_One_Field<
-          dim,
-          VectorizedArray<NumberType>>>(parameters.mu,
-                                        parameters.nu,
-                                        parameters.material_formulation))
+        std::make_shared<
+          Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArrayType>>(
+          parameters.mu,
+          parameters.nu,
+          parameters.material_formulation))
     , material_level(
         std::make_shared<
           Material_Compressible_Neo_Hook_One_Field<dim,
-                                                   VectorizedArray<float>>>(
+                                                   LevelVectorizedArrayType>>(
           parameters.mu,
           parameters.nu,
           parameters.material_formulation))
     , material_inclusion(
-        std::make_shared<
-          Material_Compressible_Neo_Hook_One_Field<dim, NumberType>>(
+        std::make_shared<Material_Compressible_Neo_Hook_One_Field<dim, Number>>(
           parameters.mu * 100.,
           parameters.nu,
           parameters.material_formulation))
     , material_inclusion_vec(
-        std::make_shared<Material_Compressible_Neo_Hook_One_Field<
-          dim,
-          VectorizedArray<NumberType>>>(parameters.mu * 100.,
-                                        parameters.nu,
-                                        parameters.material_formulation))
+        std::make_shared<
+          Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArrayType>>(
+          parameters.mu * 100.,
+          parameters.nu,
+          parameters.material_formulation))
     , material_inclusion_level(
         std::make_shared<
           Material_Compressible_Neo_Hook_One_Field<dim,
-                                                   VectorizedArray<float>>>(
+                                                   LevelVectorizedArrayType>>(
           parameters.mu * 100.,
           parameters.nu,
           parameters.material_formulation))
@@ -601,8 +593,8 @@ namespace FSI
   }
 
   // The class destructor simply clears the data held by the DOFHandler
-  template <int dim, int degree, int n_q_points_1d, typename NumberType>
-  Solid<dim, degree, n_q_points_1d, NumberType>::~Solid()
+  template <int dim, int degree, int n_q_points_1d, typename Number>
+  Solid<dim, degree, n_q_points_1d, Number>::~Solid()
   {
     mf_nh_operator.clear();
 
@@ -631,9 +623,9 @@ namespace FSI
   // before starting the simulation proper with the first time (and loading)
   // increment.
   //
-  template <int dim, int degree, int n_q_points_1d, typename NumberType>
+  template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, NumberType>::run()
+  Solid<dim, degree, n_q_points_1d, Number>::run()
   {
     make_grid();
     system_setup();
@@ -714,9 +706,9 @@ namespace FSI
 
 
 
-  template <int dim, int degree, int n_q_points_1d, typename NumberType>
+  template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, NumberType>::make_grid()
+  Solid<dim, degree, n_q_points_1d, Number>::make_grid()
   {
     // material_id 2 is currently used for the inclusion material, which is 100
     // x stiffer (mu) than the usual material
@@ -867,9 +859,9 @@ namespace FSI
   // Next we describe how the FE system is setup.  We first determine the number
   // of components per block. Since the displacement is a vector component, the
   // first dim components belong to it.
-  template <int dim, int degree, int n_q_points_1d, typename NumberType>
+  template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, NumberType>::system_setup()
+  Solid<dim, degree, n_q_points_1d, Number>::system_setup()
   {
     timer.enter_subsection("Setup system");
 
@@ -939,10 +931,9 @@ namespace FSI
 
 
 
-  template <int dim, int degree, int n_q_points_1d, typename NumberType>
+  template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, NumberType>::setup_matrix_free(
-    const int &it_nr)
+  Solid<dim, degree, n_q_points_1d, Number>::setup_matrix_free(const int &it_nr)
   {
     timer.enter_subsection("Setup MF: AdditionalData");
 
@@ -1013,9 +1004,8 @@ namespace FSI
 
     if (it_nr <= 1)
       {
-        mg_transfer =
-          std::make_shared<MGTransferMatrixFree<dim, LevelNumberType>>(
-            mg_constrained_dofs);
+        mg_transfer = std::make_shared<MGTransferMatrixFree<dim, LevelNumber>>(
+          mg_constrained_dofs);
         mg_transfer->build(dof_handler);
 
         mg_mf_data_current.resize(triangulation.n_global_levels());
@@ -1026,7 +1016,7 @@ namespace FSI
     timer.enter_subsection("Setup MF: interpolate_to_mg");
 
     // transfer displacement to MG levels:
-    LinearAlgebra::distributed::Vector<LevelNumberType> solution_total_transfer;
+    LevelVectorType solution_total_transfer;
     solution_total_transfer.reinit(solution_total);
     solution_total_transfer = solution_total;
     mg_transfer->interpolate_to_mg(dof_handler,
@@ -1039,9 +1029,10 @@ namespace FSI
     if (it_nr <= 1)
       {
         // solution_total is the point around which we linearize
-        eulerian_mapping = std::make_shared<
-          MappingQEulerian<dim, LinearAlgebra::distributed::Vector<double>>>(
-          degree, dof_handler, solution_total);
+        eulerian_mapping =
+          std::make_shared<MappingQEulerian<dim, VectorType>>(degree,
+                                                              dof_handler,
+                                                              solution_total);
 
         mf_data_current   = std::make_shared<MatrixFree<dim, double>>();
         mf_data_reference = std::make_shared<MatrixFree<dim, double>>();
@@ -1362,9 +1353,9 @@ namespace FSI
 
   // @sect4{Solid::solve_nonlinear_timestep}
 
-  template <int dim, int degree, int n_q_points_1d, typename NumberType>
+  template <int dim, int degree, int n_q_points_1d, typename Number>
   bool
-  Solid<dim, degree, n_q_points_1d, NumberType>::check_convergence(
+  Solid<dim, degree, n_q_points_1d, Number>::check_convergence(
     const unsigned int newton_iteration)
   {
     if (newton_iteration == 0)
@@ -1406,9 +1397,9 @@ namespace FSI
   // The next function is the driver method for the Newton-Raphson scheme. At
   // its top we create a new vector to store the current Newton update step,
   // reset the error storage objects and print solver header.
-  template <int dim, int degree, int n_q_points_1d, typename NumberType>
+  template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, NumberType>::solve_nonlinear_timestep()
+  Solid<dim, degree, n_q_points_1d, Number>::solve_nonlinear_timestep()
   {
     pcout << std::endl
           << "Timestep " << time.get_timestep() << " @ " << time.current()
@@ -1512,9 +1503,9 @@ namespace FSI
   // This program prints out data in a nice table that is updated
   // on a per-iteration basis. The next two functions set up the table
   // header and footer:
-  template <int dim, int degree, int n_q_points_1d, typename NumberType>
+  template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, NumberType>::print_conv_header()
+  Solid<dim, degree, n_q_points_1d, Number>::print_conv_header()
   {
     static const unsigned int l_width = 98;
 
@@ -1534,9 +1525,9 @@ namespace FSI
 
 
 
-  template <int dim, int degree, int n_q_points_1d, typename NumberType>
+  template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, NumberType>::print_conv_footer()
+  Solid<dim, degree, n_q_points_1d, Number>::print_conv_footer()
   {
     static const unsigned int l_width = 98;
 
@@ -1557,9 +1548,9 @@ namespace FSI
   // At the end we also output the result that can be compared to that found in
   // the literature, namely the displacement at the upper right corner of the
   // beam.
-  template <int dim, int degree, int n_q_points_1d, typename NumberType>
+  template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, NumberType>::print_solution()
+  Solid<dim, degree, n_q_points_1d, Number>::print_solution()
   {
     static const unsigned int l_width = 87;
 
@@ -1618,9 +1609,9 @@ namespace FSI
   // This function sets the total solution, which is valid at any Newton step.
   // This is required as, to reduce computational error, the total solution is
   // only updated at the end of the timestep.
-  template <int dim, int degree, int n_q_points_1d, typename NumberType>
+  template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, NumberType>::set_total_solution()
+  Solid<dim, degree, n_q_points_1d, Number>::set_total_solution()
   {
     solution_total.equ(1, solution_n);
     solution_total += solution_delta;
@@ -1628,9 +1619,9 @@ namespace FSI
 
   // Note that we must ensure that
   // the matrix is reset before any assembly operations can occur.
-  template <int dim, int degree, int n_q_points_1d, typename NumberType>
+  template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, NumberType>::assemble_system()
+  Solid<dim, degree, n_q_points_1d, Number>::assemble_system()
   {
     TimerOutput::Scope t(timer, "Assemble linear system");
     pcout << " ASM " << std::flush;
@@ -1640,13 +1631,11 @@ namespace FSI
     Vector<double>                       cell_rhs(dofs_per_cell);
     std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
-    std::vector<Tensor<2, dim, NumberType>> solution_grads_u_total(
-      qf_cell.size());
+    std::vector<Tensor<2, dim, Number>> solution_grads_u_total(qf_cell.size());
 
     // values at quadrature points:
-    std::vector<Tensor<2, dim, NumberType>>          grad_Nx(dofs_per_cell);
-    std::vector<SymmetricTensor<2, dim, NumberType>> symm_grad_Nx(
-      dofs_per_cell);
+    std::vector<Tensor<2, dim, Number>>          grad_Nx(dofs_per_cell);
+    std::vector<SymmetricTensor<2, dim, Number>> symm_grad_Nx(dofs_per_cell);
 
     FEValues<dim> fe_values(fe, qf_cell, update_gradients | update_JxW_values);
     FEFaceValues<dim> fe_face_values(fe,
@@ -1680,23 +1669,23 @@ namespace FSI
           // the current quadrature point.
           for (unsigned int q_point = 0; q_point < n_q_points; ++q_point)
             {
-              const Tensor<2, dim, NumberType> &grad_u =
+              const Tensor<2, dim, Number> &grad_u =
                 solution_grads_u_total[q_point];
-              const Tensor<2, dim, NumberType> F =
+              const Tensor<2, dim, Number> F =
                 Physics::Elasticity::Kinematics::F(grad_u);
-              const SymmetricTensor<2, dim, NumberType> b =
+              const SymmetricTensor<2, dim, Number> b =
                 Physics::Elasticity::Kinematics::b(F);
 
-              const NumberType det_F = determinant(F);
-              Assert(det_F > NumberType(0.0), ExcInternalError());
-              const Tensor<2, dim, NumberType> F_inv = invert(F);
+              const Number det_F = determinant(F);
+              Assert(det_F > Number(0.0), ExcInternalError());
+              const Tensor<2, dim, Number> F_inv = invert(F);
 
               // don't calculate b_bar if we don't need to:
-              const SymmetricTensor<2, dim, NumberType> b_bar =
+              const SymmetricTensor<2, dim, Number> b_bar =
                 cell_mat->formulation == 0 ?
                   Physics::Elasticity::Kinematics::b(
                     Physics::Elasticity::Kinematics::F_iso(F)) :
-                  SymmetricTensor<2, dim, NumberType>();
+                  SymmetricTensor<2, dim, Number>();
 
               for (unsigned int k = 0; k < dofs_per_cell; ++k)
                 {
@@ -1704,10 +1693,10 @@ namespace FSI
                   symm_grad_Nx[k] = symmetrize(grad_Nx[k]);
                 }
 
-              SymmetricTensor<2, dim, NumberType> tau;
+              SymmetricTensor<2, dim, Number> tau;
               cell_mat->get_tau(tau, det_F, b_bar, b);
-              const Tensor<2, dim, NumberType> tau_ns(tau);
-              const double                     JxW = fe_values.JxW(q_point);
+              const Tensor<2, dim, Number> tau_ns(tau);
+              const double                 JxW = fe_values.JxW(q_point);
 
               // loop over j first to make caching a bit more
               // straight-forward without recourse to symmetry
@@ -1778,10 +1767,9 @@ namespace FSI
   // be specified at the zeroth iteration and subsequently no
   // additional contributions are to be made since the constraints
   // are already exactly satisfied.
-  template <int dim, int degree, int n_q_points_1d, typename NumberType>
+  template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, NumberType>::make_constraints(
-    const int &it_nr)
+  Solid<dim, degree, n_q_points_1d, Number>::make_constraints(const int &it_nr)
   {
     pcout << " CST " << std::flush;
 
@@ -1831,11 +1819,11 @@ namespace FSI
   // @sect4{Solid::solve_linear_system}
   // As the system is composed of a single block, defining a solution scheme
   // for the linear problem is straight-forward.
-  template <int dim, int degree, int n_q_points_1d, typename NumberType>
+  template <int dim, int degree, int n_q_points_1d, typename Number>
   std::tuple<unsigned int, double, double>
-  Solid<dim, degree, n_q_points_1d, NumberType>::solve_linear_system(
-    LinearAlgebra::distributed::Vector<double> &newton_update,
-    LinearAlgebra::distributed::Vector<double> &) const
+  Solid<dim, degree, n_q_points_1d, Number>::solve_linear_system(
+    VectorType &newton_update,
+    VectorType &) const
   {
     unsigned int lin_it      = 0;
     double       lin_res     = 0.0;
@@ -1851,8 +1839,7 @@ namespace FSI
     {
       IterationNumberControl control_condition(
         parameters.cond_number_cg_iterations, tol_sol, false, false);
-      SolverCG<LinearAlgebra::distributed::Vector<double>> solver_condition(
-        control_condition);
+      SolverCG<VectorType> solver_condition(control_condition);
 
       solver_condition.connect_condition_number_slot(
         [&](const double number) { cond_number = number; });
@@ -1875,8 +1862,7 @@ namespace FSI
                                  (debug_level > 0 ? true : false));
 
     pcout << " SLV " << std::flush;
-    SolverCG<LinearAlgebra::distributed::Vector<double>> solver_CG(
-      solver_control);
+    SolverCG<VectorType> solver_CG(solver_control);
     constraints.set_zero(newton_update);
 
     if (parameters.preconditioner_type == "jacobi")
@@ -1930,9 +1916,9 @@ namespace FSI
   // Here we present how the results are written to file to be viewed
   // using ParaView or Visit. The method is similar to that shown in the
   // tutorials so will not be discussed in detail.
-  template <int dim, int degree, int n_q_points_1d, typename NumberType>
+  template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, NumberType>::output_results() const
+  Solid<dim, degree, n_q_points_1d, Number>::output_results() const
   {
     if (!parameters.output_solution)
       return;
