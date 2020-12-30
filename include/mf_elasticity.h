@@ -158,7 +158,7 @@ namespace FSI
   public:
     using LevelNumber     = float;
     using LevelVectorType = LinearAlgebra::distributed::Vector<LevelNumber>;
-    using VectorType      = LinearAlgebra::distributed::Vector<double>;
+    using VectorType      = LinearAlgebra::distributed::Vector<Number>;
 
     Solid(const Parameters::AllParameters<dim> &parameters);
 
@@ -203,9 +203,8 @@ namespace FSI
      * number of iterations, residual and condition number estiamte.
      */
     std::tuple<unsigned int, double, double>
-    solve_linear_system(
-      LinearAlgebra::distributed::Vector<double> &newton_update,
-      LinearAlgebra::distributed::Vector<double> &newton_update_trilinos) const;
+    solve_linear_system(VectorType &newton_update,
+                        VectorType &newton_update_trilinos) const;
 
     // Set total solution based on the current values of solution_n and
     // solution_delta:
@@ -303,18 +302,18 @@ namespace FSI
     //    TrilinosWrappers::MPI::Vector  system_rhs_trilinos;
     //    TrilinosWrappers::MPI::Vector  newton_update_trilinos;
 
-    LinearAlgebra::distributed::Vector<double> system_rhs;
+    VectorType system_rhs;
 
     // solution at the previous time-step
-    LinearAlgebra::distributed::Vector<double> solution_n;
+    VectorType solution_n;
 
     // current value of increment solution
-    LinearAlgebra::distributed::Vector<double> solution_delta;
+    VectorType solution_delta;
 
     // current total solution:  solution_total = solution_n + solution_delta
-    LinearAlgebra::distributed::Vector<double> solution_total;
+    VectorType solution_total;
 
-    LinearAlgebra::distributed::Vector<double> newton_update;
+    VectorType newton_update;
 
 
     MGLevelObject<LevelVectorType> mg_solution_total;
@@ -360,11 +359,9 @@ namespace FSI
     void
     print_solution();
 
-    std::shared_ptr<
-      MappingQEulerian<dim, LinearAlgebra::distributed::Vector<double>>>
-                                             eulerian_mapping;
-    std::shared_ptr<MatrixFree<dim, double>> mf_data_current;
-    std::shared_ptr<MatrixFree<dim, double>> mf_data_reference;
+    std::shared_ptr<MappingQEulerian<dim, VectorType>> eulerian_mapping;
+    std::shared_ptr<MatrixFree<dim, double>>           mf_data_current;
+    std::shared_ptr<MatrixFree<dim, double>>           mf_data_reference;
 
 
     std::vector<std::shared_ptr<MappingQEulerian<dim, LevelVectorType>>>
@@ -1023,7 +1020,7 @@ namespace FSI
     timer.enter_subsection("Setup MF: interpolate_to_mg");
 
     // transfer displacement to MG levels:
-    LinearAlgebra::distributed::Vector<LevelNumber> solution_total_transfer;
+    LevelVectorType solution_total_transfer;
     solution_total_transfer.reinit(solution_total);
     solution_total_transfer = solution_total;
     mg_transfer->interpolate_to_mg(dof_handler,
@@ -1036,9 +1033,10 @@ namespace FSI
     if (it_nr <= 1)
       {
         // solution_total is the point around which we linearize
-        eulerian_mapping = std::make_shared<
-          MappingQEulerian<dim, LinearAlgebra::distributed::Vector<double>>>(
-          degree, dof_handler, solution_total);
+        eulerian_mapping =
+          std::make_shared<MappingQEulerian<dim, VectorType>>(degree,
+                                                              dof_handler,
+                                                              solution_total);
 
         mf_data_current   = std::make_shared<MatrixFree<dim, double>>();
         mf_data_reference = std::make_shared<MatrixFree<dim, double>>();
@@ -1828,8 +1826,8 @@ namespace FSI
   template <int dim, int degree, int n_q_points_1d, typename Number>
   std::tuple<unsigned int, double, double>
   Solid<dim, degree, n_q_points_1d, Number>::solve_linear_system(
-    LinearAlgebra::distributed::Vector<double> &newton_update,
-    LinearAlgebra::distributed::Vector<double> &) const
+    VectorType &newton_update,
+    VectorType &) const
   {
     unsigned int lin_it      = 0;
     double       lin_res     = 0.0;
@@ -1845,8 +1843,7 @@ namespace FSI
     {
       IterationNumberControl control_condition(
         parameters.cond_number_cg_iterations, tol_sol, false, false);
-      SolverCG<LinearAlgebra::distributed::Vector<double>> solver_condition(
-        control_condition);
+      SolverCG<VectorType> solver_condition(control_condition);
 
       solver_condition.connect_condition_number_slot(
         [&](const double number) { cond_number = number; });
@@ -1869,8 +1866,7 @@ namespace FSI
                                  (debug_level > 0 ? true : false));
 
     pcout << " SLV " << std::flush;
-    SolverCG<LinearAlgebra::distributed::Vector<double>> solver_CG(
-      solver_control);
+    SolverCG<VectorType> solver_CG(solver_control);
     constraints.set_zero(newton_update);
 
     if (parameters.preconditioner_type == "jacobi")

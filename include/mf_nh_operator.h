@@ -139,15 +139,16 @@ public:
 
   using size_type =
     typename LinearAlgebra::distributed::Vector<Number>::size_type;
+  using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
   void
   clear();
 
   void
-  initialize(std::shared_ptr<const MatrixFree<dim, Number>>    data_current,
-             std::shared_ptr<const MatrixFree<dim, Number>>    data_reference,
-             const LinearAlgebra::distributed::Vector<Number> &displacement,
-             const std::string                                 caching);
+  initialize(std::shared_ptr<const MatrixFree<dim, Number>> data_current,
+             std::shared_ptr<const MatrixFree<dim, Number>> data_reference,
+             const VectorType &                             displacement,
+             const std::string                              caching);
 
   void
   set_material(
@@ -168,30 +169,25 @@ public:
 
   template <MFMask mask = MFMask::Default>
   void
-  vmult(LinearAlgebra::distributed::Vector<Number> &      dst,
-        const LinearAlgebra::distributed::Vector<Number> &src) const;
+  vmult(VectorType &dst, const VectorType &src) const;
 
   void
-  Tvmult(LinearAlgebra::distributed::Vector<Number> &      dst,
-         const LinearAlgebra::distributed::Vector<Number> &src) const;
+  Tvmult(VectorType &dst, const VectorType &src) const;
   template <MFMask mask = MFMask::Default>
   void
-  vmult_add(LinearAlgebra::distributed::Vector<Number> &      dst,
-            const LinearAlgebra::distributed::Vector<Number> &src) const;
+  vmult_add(VectorType &dst, const VectorType &src) const;
   void
-  Tvmult_add(LinearAlgebra::distributed::Vector<Number> &      dst,
-             const LinearAlgebra::distributed::Vector<Number> &src) const;
+  Tvmult_add(VectorType &dst, const VectorType &src) const;
 
   Number
   el(const unsigned int row, const unsigned int col) const;
 
   void
-  precondition_Jacobi(LinearAlgebra::distributed::Vector<Number> &      dst,
-                      const LinearAlgebra::distributed::Vector<Number> &src,
-                      const Number omega) const;
+  precondition_Jacobi(VectorType &      dst,
+                      const VectorType &src,
+                      const Number      omega) const;
 
-  const std::shared_ptr<
-    DiagonalMatrix<LinearAlgebra::distributed::Vector<Number>>>
+  const std::shared_ptr<DiagonalMatrix<VectorType>>
   get_matrix_diagonal_inverse() const
   {
     return inverse_diagonal_entries;
@@ -216,18 +212,18 @@ private:
   template <MFMask mask = MFMask::Default>
   void
   local_apply_cell(
-    const MatrixFree<dim, Number> &                   data,
-    LinearAlgebra::distributed::Vector<Number> &      dst,
-    const LinearAlgebra::distributed::Vector<Number> &src,
-    const std::pair<unsigned int, unsigned int> &     cell_range) const;
+    const MatrixFree<dim, Number> &              data,
+    VectorType &                                 dst,
+    const VectorType &                           src,
+    const std::pair<unsigned int, unsigned int> &cell_range) const;
 
   /**
    * Apply diagonal part of the operator on a cell range.
    */
   void
   local_diagonal_cell(
-    const MatrixFree<dim, Number> &             data,
-    LinearAlgebra::distributed::Vector<Number> &dst,
+    const MatrixFree<dim, Number> &data,
+    VectorType &                   dst,
     const unsigned int &,
     const std::pair<unsigned int, unsigned int> &cell_range) const;
 
@@ -245,7 +241,7 @@ private:
   std::shared_ptr<const MatrixFree<dim, Number>> data_current;
   std::shared_ptr<const MatrixFree<dim, Number>> data_reference;
 
-  const LinearAlgebra::distributed::Vector<Number> *displacement;
+  const VectorType *displacement;
 
   std::shared_ptr<
     Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArray<Number>>>
@@ -255,10 +251,8 @@ private:
     Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArray<Number>>>
     material_inclusion;
 
-  std::shared_ptr<DiagonalMatrix<LinearAlgebra::distributed::Vector<Number>>>
-    inverse_diagonal_entries;
-  std::shared_ptr<DiagonalMatrix<LinearAlgebra::distributed::Vector<Number>>>
-    diagonal_entries;
+  std::shared_ptr<DiagonalMatrix<VectorType>> inverse_diagonal_entries;
+  std::shared_ptr<DiagonalMatrix<VectorType>> diagonal_entries;
 
   Table<2, VectorizedArray<Number>>                 cached_scalar;
   Table<2, VectorizedArray<Number>>                 cached_second_scalar;
@@ -335,9 +329,9 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::NeoHookOperator()
 template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 void
 NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::precondition_Jacobi(
-  LinearAlgebra::distributed::Vector<Number> &      dst,
-  const LinearAlgebra::distributed::Vector<Number> &src,
-  const Number                                      omega) const
+  VectorType &      dst,
+  const VectorType &src,
+  const Number      omega) const
 {
   Assert(inverse_diagonal_entries.get() && inverse_diagonal_entries->m() > 0,
          ExcNotInitialized());
@@ -381,10 +375,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::clear()
 template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 void
 NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::initialize(
-  std::shared_ptr<const MatrixFree<dim, Number>>    data_current_,
-  std::shared_ptr<const MatrixFree<dim, Number>>    data_reference_,
-  const LinearAlgebra::distributed::Vector<Number> &displacement_,
-  const std::string                                 caching)
+  std::shared_ptr<const MatrixFree<dim, Number>> data_current_,
+  std::shared_ptr<const MatrixFree<dim, Number>> data_reference_,
+  const VectorType &                             displacement_,
+  const std::string                              caching)
 {
   data_current   = data_current_;
   data_reference = data_reference_;
@@ -599,8 +593,8 @@ template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 template <MFMask mask>
 void
 NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::vmult(
-  LinearAlgebra::distributed::Vector<Number> &      dst,
-  const LinearAlgebra::distributed::Vector<Number> &src) const
+  VectorType &      dst,
+  const VectorType &src) const
 {
   if (mask & MFMask::Zero)
     dst = 0;
@@ -612,8 +606,8 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::vmult(
 template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 void
 NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::Tvmult(
-  LinearAlgebra::distributed::Vector<Number> &      dst,
-  const LinearAlgebra::distributed::Vector<Number> &src) const
+  VectorType &      dst,
+  const VectorType &src) const
 {
   dst = 0;
   vmult_add(dst, src);
@@ -624,8 +618,8 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::Tvmult(
 template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 void
 NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::Tvmult_add(
-  LinearAlgebra::distributed::Vector<Number> &      dst,
-  const LinearAlgebra::distributed::Vector<Number> &src) const
+  VectorType &      dst,
+  const VectorType &src) const
 {
   vmult_add(dst, src);
 }
@@ -636,8 +630,8 @@ template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 template <MFMask mask>
 void
 NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::vmult_add(
-  LinearAlgebra::distributed::Vector<Number> &      dst,
-  const LinearAlgebra::distributed::Vector<Number> &src) const
+  VectorType &      dst,
+  const VectorType &src) const
 {
   const std::shared_ptr<const Utilities::MPI::Partitioner> &partitioner =
     data_current->get_vector_partitioner();
@@ -691,9 +685,9 @@ template <MFMask mask>
 void
 NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_apply_cell(
   const MatrixFree<dim, Number> & /*data*/,
-  LinearAlgebra::distributed::Vector<Number> &      dst,
-  const LinearAlgebra::distributed::Vector<Number> &src,
-  const std::pair<unsigned int, unsigned int> &     cell_range) const
+  VectorType &                                 dst,
+  const VectorType &                           src,
+  const std::pair<unsigned int, unsigned int> &cell_range) const
 {
   FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi_current(
     *data_current);
@@ -758,7 +752,7 @@ template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 void
 NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_diagonal_cell(
   const MatrixFree<dim, Number> & /*data*/,
-  LinearAlgebra::distributed::Vector<Number> &dst,
+  VectorType &dst,
   const unsigned int &,
   const std::pair<unsigned int, unsigned int> &cell_range) const
 {
@@ -1422,8 +1416,6 @@ template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 void
 NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::compute_diagonal()
 {
-  typedef LinearAlgebra::distributed::Vector<Number> VectorType;
-
   inverse_diagonal_entries.reset(new DiagonalMatrix<VectorType>());
   diagonal_entries.reset(new DiagonalMatrix<VectorType>());
   VectorType &inverse_diagonal_vector = inverse_diagonal_entries->get_vector();
