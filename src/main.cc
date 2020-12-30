@@ -10,7 +10,8 @@
 #define GET_D(L) BOOST_PP_TUPLE_ELEM(3, 0, BOOST_PP_TUPLE_ELEM(1, 0, L))
 #define GET_Q(L) BOOST_PP_TUPLE_ELEM(3, 1, BOOST_PP_TUPLE_ELEM(1, 0, L))
 
-//#define MF_DQ BOOST_PP_TUPLE_TO_LIST(8, ((1, 2), (2, 3), (3, 4), (4, 5), (5,6), (6,7), (7,8), (8,9)))
+//#define MF_DQ BOOST_PP_TUPLE_TO_LIST(8, ((1, 2), (2, 3), (3, 4), (4, 5),
+//(5,6), (6,7), (7,8), (8,9)))
 #define MF_DQ BOOST_PP_TUPLE_TO_LIST(1, ((1, 2)))
 
 #define DOIF2(R, L)                                                      \
@@ -59,7 +60,7 @@ main(int argc, char *argv[])
       {
         // Disable multi-threading to have a better comparision with Trilinos
         Utilities::MPI::MPI_InitFinalize mpi_initialization(
-          argc, argv, 1/*dealii::numbers::invalid_unsigned_int*/);
+          argc, argv, 1 /*dealii::numbers::invalid_unsigned_int*/);
 
         typedef double     NumberType;
         const unsigned int degree     = fesystem.poly_degree;
