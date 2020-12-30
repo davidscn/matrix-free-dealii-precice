@@ -476,13 +476,12 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::cache()
                 Physics::Elasticity::Kinematics::F(grad_u);
               const VectorizedArrayType det_F = determinant(F);
 
-              for (unsigned int i = 0;
-                   i < data_current->n_active_entries_per_cell_batch(cell);
-                   ++i)
-                Assert(det_F[i] > 0,
-                       ExcMessage(
-                         "det_F[" + std::to_string(i) +
-                         "] is not positive: " + std::to_string(det_F[i])));
+              Assert(*std::min_element(
+                       det_F.begin(),
+                       det_F.begin() +
+                         data_current->n_active_entries_per_cell_batch(cell)) >
+                       0,
+                     ExcMessage("det_F is not positive. "));
 
               const VectorizedArrayType scalar =
                 cell_mat->mu - 2.0 * cell_mat->lambda * std::log(det_F);
@@ -971,12 +970,12 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
                        std::pow(det_F, Number(-1.0 / dim)),
                      ExcMessage("Cached scalar and det_F do not match"));
 
-              for (unsigned int i = 0;
-                   i < data_current->n_active_entries_per_cell_batch(cell);
-                   ++i)
-                Assert(det_F[i] > 0,
-                       ExcMessage("det_F[" + std::to_string(i) +
-                                  "] is not positive"));
+              Assert(*std::min_element(
+                       det_F.begin(),
+                       det_F.begin() +
+                         data_current->n_active_entries_per_cell_batch(cell)) >
+                       0,
+                     ExcMessage("det_F is not positive."));
 
               // current configuration
               const Tensor<2, dim, VectorizedArrayType> grad_Nx_v =
@@ -1232,6 +1231,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
           VectorizedArrayType *ref_grads = phi_current.begin_gradients();
           VectorizedArrayType *x_grads   = phi_reference.begin_gradients();
 
+#if DEAL_II_VERSION_GTE(9, 3, 0)
           dealii::internal::FEEvaluationImplCollocation<
             dim,
             n_q_points_1d - 1,
@@ -1243,6 +1243,21 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
                                            ref_grads,
                                            nullptr,
                                            nullptr);
+#else
+          dealii::internal::FEEvaluationImplCollocation<
+            dim,
+            n_q_points_1d - 1,
+            dim,
+            VectorizedArrayType>::evaluate(data_reference->get_shape_info(),
+                                           cached_position,
+                                           nullptr,
+                                           ref_grads,
+                                           nullptr,
+                                           nullptr,
+                                           false,
+                                           true,
+                                           false);
+#endif
 
           for (unsigned int q = 0; q < phi_current.n_q_points; ++q)
             {
