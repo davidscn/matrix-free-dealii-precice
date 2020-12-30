@@ -112,10 +112,11 @@ public:
   // The second function determines the Kirchhoff stress $\boldsymbol{\tau}
   // = \boldsymbol{\tau}_{\textrm{iso}} + \boldsymbol{\tau}_{\textrm{vol}}$
   template <typename OutputType>
-  void get_tau(SymmetricTensor<2, dim, OutputType> &      tau,
-               const OutputType &                         det_F,
-               const SymmetricTensor<2, dim, OutputType> &b_bar,
-               const SymmetricTensor<2, dim, OutputType> &b)
+  void
+  get_tau(SymmetricTensor<2, dim, OutputType> &      tau,
+          const OutputType &                         det_F,
+          const SymmetricTensor<2, dim, OutputType> &b_bar,
+          const SymmetricTensor<2, dim, OutputType> &b)
   {
     tau = OutputType();
 
