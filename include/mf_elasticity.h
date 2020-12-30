@@ -1748,11 +1748,12 @@ namespace FSI
                                                  system_rhs);
         }
 
-    // Determine the true residual error for the problem.  That is, determine
-    // the error in the residual for the unconstrained degrees of freedom. Note
-    // that to do so, we need to ignore constrained DOFs by setting the residual
-    // in these vector components to zero. That will not affect the solution of
-    // linear system, though.
+    system_rhs.compress(VectorOperation::add);
+
+    // Determine the error in the residual for the unconstrained degrees of
+    // freedom. Note that to do so, we need to ignore constrained DOFs by
+    // setting the residual in these vector components to zero. That will not
+    // affect the solution of linear system, though.
     constraints.set_zero(system_rhs);
 
     error_residual.norm = system_rhs.l2_norm();
@@ -1959,14 +1960,14 @@ namespace FSI
     data_out.add_data_vector(material_id, "material_id");
     data_out.add_data_vector(manifold_id, "manifold_id");
 
-    //    const MappingQGeneric<dim> mapping(degree);
-    // visualize the displacements on a displaced grid
-    Vector<double> soln(solution_n.size());
-    for (unsigned int i = 0; i < soln.size(); ++i)
-      soln(i) = solution_n(i);
-
-    MappingQEulerian<dim> q_mapping(degree, dof_handler, soln);
-    data_out.build_patches(q_mapping, degree, DataOut<dim>::curved_inner_cells);
+    // Visualize the displacements on a displaced grid
+    // Recompute Eulerian mapping according to the current configuration
+    MappingQEulerian<dim, VectorType> euler_mapping(degree,
+                                                    dof_handler,
+                                                    solution_total);
+    data_out.build_patches(euler_mapping,
+                           degree,
+                           DataOut<dim>::curved_inner_cells);
 
     const std::string filename = parameters.output_folder + "solution-" +
                                  std::to_string(time.get_timestep()) + ".vtu";
