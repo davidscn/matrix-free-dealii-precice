@@ -31,12 +31,13 @@ divide_by_dim(const Number &x, const int dim)
   return x / dim;
 }
 
-template <typename Number>
-VectorizedArray<Number>
-divide_by_dim(const VectorizedArray<Number> &x, const int dim)
+template <typename Number,
+          typename VectorizedArrayType = VectorizedArray<Number>>
+VectorizedArrayType
+divide_by_dim(const VectorizedArrayType &x, const int dim)
 {
-  VectorizedArray<Number> res(x);
-  for (unsigned int i = 0; i < VectorizedArray<Number>::n_array_elements; i++)
+  VectorizedArrayType res(x);
+  for (unsigned int i = 0; i < VectorizedArrayType::size(); i++)
     res[i] *= 1.0 / dim;
 
   return res;

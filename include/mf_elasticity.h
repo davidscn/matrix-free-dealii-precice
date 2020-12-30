@@ -67,14 +67,10 @@ static const unsigned int debug_level = 1;
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/vector_tools.h>
 
-// These must be included below the AD headers so that
-// their math functions are available for use in the
-// definition of tensors and kinematic quantities
 #include <deal.II/physics/elasticity/kinematics.h>
 #include <deal.II/physics/elasticity/standard_tensors.h>
 
 #include <material.h>
-//#include <mf_ad_nh_operator.h>
 #include <mf_nh_operator.h>
 #include <parameter_handling.h>
 #include <sys/stat.h>
@@ -156,9 +152,11 @@ namespace FSI
   class Solid
   {
   public:
-    using LevelNumber     = float;
-    using LevelVectorType = LinearAlgebra::distributed::Vector<LevelNumber>;
-    using VectorType      = LinearAlgebra::distributed::Vector<Number>;
+    using LevelNumber         = float;
+    using LevelVectorType     = LinearAlgebra::distributed::Vector<LevelNumber>;
+    using VectorType          = LinearAlgebra::distributed::Vector<Number>;
+    using VectorizedArrayType = VectorizedArray<Number>;
+    using LevelVectorizedArrayType = VectorizedArray<LevelNumber>;
 
     Solid(const Parameters::AllParameters<dim> &parameters);
 
@@ -261,10 +259,10 @@ namespace FSI
       material;
 
     std::shared_ptr<
-      Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArray<Number>>>
+      Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArrayType>>
       material_vec;
     std::shared_ptr<
-      Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArray<float>>>
+      Material_Compressible_Neo_Hook_One_Field<dim, LevelVectorizedArrayType>>
       material_level;
 
     // inclusion material
@@ -272,11 +270,11 @@ namespace FSI
       material_inclusion;
 
     std::shared_ptr<
-      Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArray<Number>>>
+      Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArrayType>>
       material_inclusion_vec;
 
     std::shared_ptr<
-      Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArray<float>>>
+      Material_Compressible_Neo_Hook_One_Field<dim, LevelVectorizedArrayType>>
       material_inclusion_level;
 
     static const unsigned int n_components      = dim;
@@ -489,15 +487,14 @@ namespace FSI
           parameters.material_formulation))
     , material_vec(
         std::make_shared<
-          Material_Compressible_Neo_Hook_One_Field<dim,
-                                                   VectorizedArray<Number>>>(
+          Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArrayType>>(
           parameters.mu,
           parameters.nu,
           parameters.material_formulation))
     , material_level(
         std::make_shared<
           Material_Compressible_Neo_Hook_One_Field<dim,
-                                                   VectorizedArray<float>>>(
+                                                   LevelVectorizedArrayType>>(
           parameters.mu,
           parameters.nu,
           parameters.material_formulation))
@@ -508,15 +505,14 @@ namespace FSI
           parameters.material_formulation))
     , material_inclusion_vec(
         std::make_shared<
-          Material_Compressible_Neo_Hook_One_Field<dim,
-                                                   VectorizedArray<Number>>>(
+          Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArrayType>>(
           parameters.mu * 100.,
           parameters.nu,
           parameters.material_formulation))
     , material_inclusion_level(
         std::make_shared<
           Material_Compressible_Neo_Hook_One_Field<dim,
-                                                   VectorizedArray<float>>>(
+                                                   LevelVectorizedArrayType>>(
           parameters.mu * 100.,
           parameters.nu,
           parameters.material_formulation))
