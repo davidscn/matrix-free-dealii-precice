@@ -24,21 +24,13 @@ egeo_grad(const Tensor<2, dim, Number> &grad_Nx,
 }
 
 
-template <typename Number>
-Number
-divide_by_dim(const Number &x, const int dim)
-{
-  return x / dim;
-}
 
-template <typename Number,
-          typename VectorizedArrayType = VectorizedArray<Number>>
-VectorizedArrayType
-divide_by_dim(const VectorizedArrayType &x, const int dim)
+template <int dim, typename Number>
+Number
+divide_by_dim(const Number &x)
 {
-  VectorizedArrayType res(x);
-  for (unsigned int i = 0; i < VectorizedArrayType::size(); i++)
-    res[i] *= 1.0 / dim;
+  Number res(x);
+  res *= Number(1.0 / dim);
 
   return res;
 }
@@ -140,7 +132,7 @@ public:
         SymmetricTensor<2, dim, OutputType> tau_bar = b_bar * (2.0 * c_1);
         OutputType                          tr      = trace(tau_bar);
         for (unsigned int d = 0; d < dim; ++d)
-          tau[d][d] = tmp - divide_by_dim(tr, dim);
+          tau[d][d] = tmp - divide_by_dim<dim>(tr);
 
         tau += tau_bar;
       }
@@ -179,7 +171,7 @@ public:
 
         SymmetricTensor<2, dim, Number> dev_src(src);
         for (unsigned int i = 0; i < dim; ++i)
-          dev_src[i][i] -= divide_by_dim(tr, dim);
+          dev_src[i][i] -= divide_by_dim<dim>(tr);
 
         // 1) The volumetric part of the tangent $J
         // \mathfrak{c}_\textrm{vol}$. Again, note the difference in its
@@ -214,7 +206,7 @@ public:
         SymmetricTensor<2, dim, Number> tau_iso(b_bar);
         tau_iso = tau_iso * (2.0 * c_1);
         for (unsigned int i = 0; i < dim; ++i)
-          tau_iso[i][i] -= divide_by_dim(tr_tau_bar, dim);
+          tau_iso[i][i] -= divide_by_dim<dim>(tr_tau_bar);
 
         // term with deviatoric part of the tensor
         res += ((2.0 / dim) * tr_tau_bar) * dev_src;

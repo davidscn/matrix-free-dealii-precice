@@ -181,6 +181,10 @@ namespace FSI
     void
     assemble_system();
 
+    // Function to assemble the system matrix and right hand side vecotr.
+    void
+    assemble_residual();
+
     // Apply Dirichlet boundary conditions on the displacement field
     void
     make_constraints(const int &it_nr);
@@ -617,6 +621,37 @@ namespace FSI
     system_setup();
     output_results();
     time.increment();
+
+    if (true)
+      {
+        const QGauss<1>                                  quad(n_q_points_1d);
+        typename MatrixFree<dim, double>::AdditionalData data;
+        data.tasks_parallel_scheme =
+          MatrixFree<dim, double>::AdditionalData::none;
+        data.mapping_update_flags = update_gradients | update_JxW_values;
+
+        // make sure materials with different ID end up in different SIMD
+        // blocks:
+        data.cell_vectorization_categories_strict = true;
+        data.cell_vectorization_category.resize(triangulation.n_active_cells());
+        for (const auto &cell : triangulation.active_cell_iterators())
+          if (cell->is_locally_owned())
+            data.cell_vectorization_category[cell->active_cell_index()] =
+              cell->material_id();
+
+        // solution_total is the point around which we linearize
+        eulerian_mapping = std::make_shared<MappingQEulerian<dim, VectorType>>(
+          degree, dof_handler, total_displacement);
+
+        mf_data_current   = std::make_shared<MatrixFree<dim, double>>();
+        mf_data_reference = std::make_shared<MatrixFree<dim, double>>();
+
+        // TODO: Parametrize mapping
+        mf_data_reference->reinit(
+          MappingQ1<dim>(), dof_handler, constraints, quad, data);
+        mf_data_current->reinit(
+          *eulerian_mapping, dof_handler, constraints, quad, data);
+      }
 
     // We then declare the incremental solution update $\varDelta
     // \mathbf{\Xi}:= \{\varDelta \mathbf{u}\}$ and start the loop over the
@@ -1427,7 +1462,7 @@ namespace FSI
 
         // now ready to go-on and assmble linearized problem around solution_n +
         // solution_delta for this iteration.
-        assemble_system();
+        assemble_residual();
 
         if (check_convergence(newton_iteration))
           break;
@@ -1594,8 +1629,8 @@ namespace FSI
     total_displacement += delta_displacement;
   }
 
-  // Note that we must ensure that
-  // the matrix is reset before any assembly operations can occur.
+
+  // Keep it as reference for the moment
   template <int dim, int degree, int n_q_points_1d, typename Number>
   void
   Solid<dim, degree, n_q_points_1d, Number>::assemble_system()
@@ -1723,6 +1758,164 @@ namespace FSI
     // freedom. Note that to do so, we need to ignore constrained DOFs by
     // setting the residual in these vector components to zero. That will not
     // affect the solution of linear system, though.
+    constraints.set_zero(system_rhs);
+
+    error_residual.norm = system_rhs.l2_norm();
+    error_residual.u    = system_rhs.l2_norm();
+  }
+
+
+
+  template <int dim, int degree, int n_q_points_1d, typename Number>
+  void
+  Solid<dim, degree, n_q_points_1d, Number>::assemble_residual()
+  {
+    TimerOutput::Scope t(timer, "Assemble residual");
+    pcout << " ASR " << std::flush;
+
+    system_rhs = 0.0;
+    FEEvaluation<dim, degree, n_q_points_1d, dim, Number> phi_reference(
+      *mf_data_reference);
+    const unsigned int n_cells = mf_data_reference->n_cell_batches();
+
+    for (unsigned int cell = 0; cell < n_cells; ++cell)
+      {
+        const unsigned int material_id =
+          mf_data_reference->get_cell_iterator(cell, 0)->material_id();
+        const auto &cell_mat =
+          (material_id == 0 ? material_vec : material_inclusion_vec);
+
+        phi_reference.reinit(cell);
+        phi_reference.read_dof_values(total_displacement);
+        phi_reference.evaluate(false, true, false);
+
+
+        // Now we build the residual. In doing so, we first extract some
+        // configuration dependent variables from our QPH history objects for
+        // the current quadrature point.
+        for (unsigned int q_point = 0; q_point < phi_reference.n_q_points;
+             ++q_point)
+          {
+            const Tensor<2, dim, VectorizedArray<Number>> grad_u =
+              phi_reference.get_gradient(q_point);
+
+            const Tensor<2, dim, VectorizedArray<Number>> F =
+              Physics::Elasticity::Kinematics::F(grad_u);
+
+            const SymmetricTensor<2, dim, VectorizedArray<Number>> b =
+              Physics::Elasticity::Kinematics::b(F);
+
+            const VectorizedArray<Number> det_F = determinant(F);
+
+            Assert(*std::min_element(
+                     det_F.begin(),
+                     det_F.begin() +
+                       mf_data_reference->n_active_entries_per_cell_batch(
+                         cell)) > Number(0.0),
+                   ExcInternalError());
+
+            const Tensor<2, dim, VectorizedArray<Number>> F_inv = invert(F);
+
+            // don't calculate b_bar if we don't need to:
+            const SymmetricTensor<2, dim, VectorizedArray<Number>> b_bar =
+              cell_mat->formulation == 0 ?
+                Physics::Elasticity::Kinematics::b(
+                  Physics::Elasticity::Kinematics::F_iso(F)) :
+                SymmetricTensor<2, dim, VectorizedArray<Number>>();
+
+            SymmetricTensor<2, dim, VectorizedArray<Number>> tau;
+            cell_mat->get_tau(tau, det_F, b_bar, b);
+
+            const Tensor<2, dim, VectorizedArray<Number>> res =
+              Tensor<2, dim, VectorizedArray<Number>>(tau);
+
+            phi_reference.submit_gradient(-res * transpose(F_inv), q_point);
+          } // end loop over quadrature points
+
+        phi_reference.integrate(false, true);
+        phi_reference.distribute_local_to_global(system_rhs);
+      }
+
+    Vector<double>                       cell_rhs(dofs_per_cell);
+    std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
+
+    std::vector<Tensor<2, dim, Number>> solution_grads_u_total(qf_cell.size());
+
+    // values at quadrature points:
+    std::vector<Tensor<2, dim, Number>>          grad_Nx(dofs_per_cell);
+    std::vector<SymmetricTensor<2, dim, Number>> symm_grad_Nx(dofs_per_cell);
+
+    FEFaceValues<dim> fe_face_values(fe,
+                                     qf_face,
+                                     update_values | update_quadrature_points |
+                                       update_JxW_values);
+
+    // Next we assemble the Neumann contribution. We first check to see it
+    // the cell face exists on a boundary on which a traction is applied
+    // and add the contribution if this is the case.
+    for (const auto &cell : dof_handler.active_cell_iterators())
+      if (cell->is_locally_owned())
+        {
+          for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
+               ++face)
+            {
+              if (cell->face(face)->at_boundary() == true)
+                {
+                  const auto &el =
+                    parameters.neumann.find(cell->face(face)->boundary_id());
+                  if (el == parameters.neumann.end())
+                    continue;
+                  cell->get_dof_indices(local_dof_indices);
+                  cell_rhs = 0.;
+
+                  fe_face_values.reinit(cell, face);
+                  for (unsigned int f_q_point = 0; f_q_point < n_q_points_f;
+                       ++f_q_point)
+                    {
+                      // We specify the traction in reference configuration
+                      // according to the parameter file.
+
+                      // Note that the contributions to the right hand side
+                      // vector we compute here only exist in the displacement
+                      // components of the vector.
+                      Vector<double> traction(dim);
+                      (*el).second->vector_value(
+                        fe_face_values.quadrature_point(f_q_point), traction);
+
+                      for (unsigned int i = 0; i < dofs_per_cell; ++i)
+                        {
+                          const unsigned int component_i =
+                            fe.system_to_component_index(i).first;
+                          const double Ni =
+                            fe_face_values.shape_value(i, f_q_point);
+                          const double JxW = fe_face_values.JxW(f_q_point);
+                          cell_rhs(i) += (Ni * traction[component_i]) * JxW;
+                        }
+                    }
+                  constraints.distribute_local_to_global(cell_rhs,
+                                                         local_dof_indices,
+                                                         system_rhs);
+                }
+            }
+        }
+
+
+    FEFaceEvaluation<dim, degree, n_q_points_1d, dim, Number> phi_face(
+      *mf_data_reference);
+
+    for (unsigned int f = mf_data_reference->n_inner_face_batches();
+         f < mf_data_reference->n_inner_face_batches() +
+               mf_data_reference->n_boundary_face_batches();
+         ++f)
+      {
+        phi_face.reinit(f);
+      }
+
+    // Determine the true residual error for the problem.  That is, determine
+    // the error in the residual for the unconstrained degrees of freedom. Note
+    // that to do so, we need to ignore constrained DOFs by setting the residual
+    // in these vector components to zero. That will not affect the solution of
+    // linear system, though.
     constraints.set_zero(system_rhs);
 
     error_residual.norm = system_rhs.l2_norm();
