@@ -1219,7 +1219,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
         // that gets computed in the scalar case as well, I just hardcoded it as
         // this was the way I thought about it in the implementation, but one
         // could of course use the phi_reference.get_gradient() function. And
-        // similarly by F^{-1} for submit_gradient(). In other words, I simply
+        // similarly by F^{-T} for submit_gradient(). In other words, I simply
         // pulled out the Eulerian motion of the grid into F; nothing else
         // changed.
         {
@@ -1324,7 +1324,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
               Tensor<2, dim, VectorizedArrayType> queued =
                 jc_part +
                 (grad_Nx_v * Tensor<2, dim, VectorizedArrayType>(tau));
-              phi_reference.submit_gradient(F_inv * queued, q);
+              phi_reference.submit_gradient(queued * transpose(F_inv), q);
               // MK: The 60 lines above this are the interesting part: I only
               // need to work with phi_reference. What happens in addition to
               // the scalar caching variant is that I have to multiply grad_Nx_v
