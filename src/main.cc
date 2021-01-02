@@ -58,7 +58,7 @@ main(int argc, char *argv[])
       prm.parse_input(parameter_filename, "", true);
 
       {
-        // Disable multi-threading to have a better comparision with Trilinos
+        // Disable multi-threading
         Utilities::MPI::MPI_InitFinalize mpi_initialization(
           argc, argv, 1 /*dealii::numbers::invalid_unsigned_int*/);
 

@@ -237,6 +237,7 @@ namespace FSI
       unsigned int max_iterations_lin                    = 1;
       std::string  preconditioner_type                   = "jacobi";
       double       preconditioner_relaxation             = 0.65;
+      bool         estimate_condition                    = true;
       unsigned int cond_number_cg_iterations             = 20;
       std::string  mf_caching                            = "scalar";
       bool         mf_coarse_chebyshev                   = true;
@@ -272,6 +273,11 @@ namespace FSI
                           preconditioner_relaxation,
                           "Preconditioner relaxation value",
                           Patterns::Double(0.0));
+
+        prm.add_parameter("Estimate condition number",
+                          estimate_condition,
+                          "Enable or disable condition estimate",
+                          Patterns::Bool());
 
         prm.add_parameter("Condition number CG iterations",
                           cond_number_cg_iterations,

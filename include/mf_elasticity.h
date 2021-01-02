@@ -9,8 +9,6 @@
  */
 static const unsigned int debug_level = 1;
 
-//#define COMPONENT_LESS_GEOM_TANGENT
-
 // We start by including all the necessary deal.II header files and some C++
 // related ones. They have been discussed in detail in previous tutorial
 // programs, so you need only refer to past tutorials for details.
@@ -196,13 +194,10 @@ namespace FSI
     void
     solve_nonlinear_timestep();
 
-    /**
-     * solve linear system and return a tuple consisting of
-     * number of iterations, residual and condition number estiamte.
-     */
+    // solve linear system and return a tuple consisting of number of
+    // iterations, residual and condition number estiamte.
     std::tuple<unsigned int, double, double>
-    solve_linear_system(VectorType &newton_update,
-                        VectorType &newton_update_trilinos) const;
+    solve_linear_system(VectorType &newton_update) const;
 
     // Set total solution based on the current values of solution_n and
     // solution_delta:
@@ -212,14 +207,10 @@ namespace FSI
     void
     output_results() const;
 
-    /**
-     * MPI communicator
-     */
+    // MPI communicator
     MPI_Comm mpi_communicator;
 
-    /**
-     * Terminal output on root MPI process
-     */
+    // Terminal output on root MPI process
     ConditionalOStream pcout;
 
     // Finally, some member variables that describe the current state: A
@@ -296,25 +287,22 @@ namespace FSI
     // as well as the tangent matrix. There is a AffineConstraints object used
     // to keep track of constraints.
     AffineConstraints<double> constraints;
-    //    TrilinosWrappers::SparseMatrix tangent_matrix;
-    //    TrilinosWrappers::MPI::Vector  system_rhs_trilinos;
-    //    TrilinosWrappers::MPI::Vector  newton_update_trilinos;
 
+    // the residual
     VectorType system_rhs;
 
     // solution at the previous time-step
-    VectorType solution_n;
+    VectorType old_displacement;
 
     // current value of increment solution
-    VectorType solution_delta;
+    VectorType delta_displacement;
 
     // current total solution:  solution_total = solution_n + solution_delta
-    VectorType solution_total;
+    VectorType total_displacement;
 
     VectorType newton_update;
 
-
-    MGLevelObject<LevelVectorType> mg_solution_total;
+    MGLevelObject<LevelVectorType> mg_total_displacement;
 
 
     // Then define a number of variables to store norms and update norms and
@@ -578,9 +566,7 @@ namespace FSI
     else
       AssertThrow(false, ExcNotImplemented());
 
-    timer_out << "), VECTORIZATION_LEVEL="
-              << DEAL_II_COMPILER_VECTORIZATION_LEVEL << std::endl;
-
+    timer_out << ")" << std::endl;
     timer_out << "--     . version " << GIT_TAG << " (revision " << GIT_SHORTREV
               << " on branch " << GIT_BRANCH << ")" << std::endl;
     timer_out << "--     . deal.II " << DEAL_II_PACKAGE_VERSION << " (revision "
@@ -640,13 +626,13 @@ namespace FSI
     while (time.current() <= time.end())
       {
         parameters.set_time(time.current());
-        solution_delta = 0.0;
+        delta_displacement = 0.0;
 
         // ...solve the current time step and update total solution vector
         // $\mathbf{\Xi}_{\textrm{n}} = \mathbf{\Xi}_{\textrm{n-1}} +
         // \varDelta \mathbf{\Xi}$...
         solve_nonlinear_timestep();
-        solution_n += solution_delta;
+        old_displacement += delta_displacement;
 
         // ...and plot the results before moving on happily to the next time
         // step:
@@ -898,24 +884,24 @@ namespace FSI
     system_rhs.reinit(locally_owned_dofs,
                       locally_relevant_dofs,
                       mpi_communicator);
-    solution_n.reinit(locally_owned_dofs,
-                      locally_relevant_dofs,
-                      mpi_communicator);
-    solution_delta.reinit(locally_owned_dofs,
-                          locally_relevant_dofs,
-                          mpi_communicator);
-    solution_total.reinit(locally_owned_dofs,
-                          locally_relevant_dofs,
-                          mpi_communicator);
+    old_displacement.reinit(locally_owned_dofs,
+                            locally_relevant_dofs,
+                            mpi_communicator);
+    delta_displacement.reinit(locally_owned_dofs,
+                              locally_relevant_dofs,
+                              mpi_communicator);
+    total_displacement.reinit(locally_owned_dofs,
+                              locally_relevant_dofs,
+                              mpi_communicator);
     newton_update.reinit(locally_owned_dofs,
                          locally_relevant_dofs,
                          mpi_communicator);
 
 
     // switch to ghost mode:
-    solution_n.update_ghost_values();
-    solution_delta.update_ghost_values();
-    solution_total.update_ghost_values();
+    old_displacement.update_ghost_values();
+    delta_displacement.update_ghost_values();
+    total_displacement.update_ghost_values();
 
     timer.leave_subsection();
 
@@ -958,7 +944,7 @@ namespace FSI
         mg_mf_nh_operator.resize(0, max_level);
         mg_eulerian_mapping.clear();
 
-        mg_solution_total.resize(0, max_level);
+        mg_total_displacement.resize(0, max_level);
       }
 
     // The constraints in Newton-Raphson are different for it_nr=0 and 1,
@@ -1017,10 +1003,10 @@ namespace FSI
 
     // transfer displacement to MG levels:
     LevelVectorType solution_total_transfer;
-    solution_total_transfer.reinit(solution_total);
-    solution_total_transfer = solution_total;
+    solution_total_transfer.reinit(total_displacement);
+    solution_total_transfer = total_displacement;
     mg_transfer->interpolate_to_mg(dof_handler,
-                                   mg_solution_total,
+                                   mg_total_displacement,
                                    solution_total_transfer);
 
     timer.leave_subsection();
@@ -1029,10 +1015,8 @@ namespace FSI
     if (it_nr <= 1)
       {
         // solution_total is the point around which we linearize
-        eulerian_mapping =
-          std::make_shared<MappingQEulerian<dim, VectorType>>(degree,
-                                                              dof_handler,
-                                                              solution_total);
+        eulerian_mapping = std::make_shared<MappingQEulerian<dim, VectorType>>(
+          degree, dof_handler, total_displacement);
 
         mf_data_current   = std::make_shared<MatrixFree<dim, double>>();
         mf_data_reference = std::make_shared<MatrixFree<dim, double>>();
@@ -1045,7 +1029,7 @@ namespace FSI
 
         mf_nh_operator.initialize(mf_data_current,
                                   mf_data_reference,
-                                  solution_total,
+                                  total_displacement,
                                   parameters.mf_caching);
 
         // print memory consumption by MF
@@ -1086,7 +1070,7 @@ namespace FSI
             std::shared_ptr<MappingQEulerian<dim, LevelVectorType>>
               euler_level =
                 std::make_shared<MappingQEulerian<dim, LevelVectorType>>(
-                  degree, dof_handler, mg_solution_total[level], level);
+                  degree, dof_handler, mg_total_displacement[level], level);
 
             // TODO: Parametrize mapping
             mg_mf_data_reference[level]->reinit(MappingQ1<dim>(),
@@ -1105,7 +1089,7 @@ namespace FSI
             mg_mf_nh_operator[level].initialize(
               mg_mf_data_current[level],
               mg_mf_data_reference[level],
-              mg_solution_total[level],
+              mg_total_displacement[level],
               parameters.mf_caching); // (mg_level_data, mg_constrained_dofs,
                                       // level);
           }
@@ -1136,7 +1120,7 @@ namespace FSI
             std::shared_ptr<MappingQEulerian<dim, LevelVectorType>>
               euler_level =
                 std::make_shared<MappingQEulerian<dim, LevelVectorType>>(
-                  degree, dof_handler, mg_solution_total[level], level);
+                  degree, dof_handler, mg_total_displacement[level], level);
             mg_mf_data_current[level]->reinit(*euler_level,
                                               dof_handler,
                                               level_constraints,
@@ -1160,8 +1144,8 @@ namespace FSI
       adjust_ghost_range_if_necessary(partitioner, newton_update);
       adjust_ghost_range_if_necessary(partitioner, system_rhs);
 
-      adjust_ghost_range_if_necessary(partitioner, solution_total);
-      solution_total.update_ghost_values();
+      adjust_ghost_range_if_necessary(partitioner, total_displacement);
+      total_displacement.update_ghost_values();
     }
 
     // FIXME: interpolate_to_mg will resize MG vector, make sure it has the
@@ -1175,8 +1159,9 @@ namespace FSI
                  *mg_mf_data_reference[level]->get_vector_partitioner().get()),
                ExcInternalError());
 
-        adjust_ghost_range_if_necessary(partitioner, mg_solution_total[level]);
-        mg_solution_total[level].update_ghost_values();
+        adjust_ghost_range_if_necessary(partitioner,
+                                        mg_total_displacement[level]);
+        mg_total_displacement[level].update_ghost_values();
       }
 
     timer.leave_subsection();
@@ -1198,7 +1183,8 @@ namespace FSI
                      ->get_vector()
                      .l2_norm()
                 << std::endl;
-        deallog << "Solution total: " << solution_total.l2_norm() << std::endl;
+        deallog << "Solution total: " << total_displacement.l2_norm()
+                << std::endl;
       }
 
     for (unsigned int level = 0; level <= max_level; ++level)
@@ -1217,7 +1203,7 @@ namespace FSI
                          .l2_norm()
                     << std::endl;
             deallog << "Solution total on level " << level << ": "
-                    << mg_solution_total[level].l2_norm() << std::endl;
+                    << mg_total_displacement[level].l2_norm() << std::endl;
           }
       }
 
@@ -1425,10 +1411,7 @@ namespace FSI
     // Newton step.  We then initially build the right-hand side vector to
     // check for convergence (and store this value in the first iteration).
     // The unconstrained DOFs of the rhs vector hold the out-of-balance
-    // forces. The building is done before assembling the system matrix as the
-    // latter is an expensive operation and we can potentially avoid an extra
-    // assembly process by not assembling the tangent matrix when convergence
-    // is attained.
+    // forces.
     unsigned int newton_iteration = 0;
     for (; newton_iteration < parameters.max_iterations_NR; ++newton_iteration)
       {
@@ -1453,7 +1436,7 @@ namespace FSI
         setup_matrix_free(newton_iteration);
 
         const std::tuple<unsigned int, double, double> lin_solver_output =
-          solve_linear_system(newton_update, newton_update);
+          solve_linear_system(newton_update);
 
         total_n_cg_iterations += std::get<0>(lin_solver_output);
         total_n_cg_solve++;
@@ -1468,7 +1451,7 @@ namespace FSI
         error_update_norm = error_update;
         error_update_norm.normalise(error_update_0);
 
-        solution_delta += newton_update;
+        delta_displacement += newton_update;
 
         pcout << " | " << std::fixed << std::setprecision(3) << std::setw(7)
               << std::scientific << std::get<0>(lin_solver_output) << "  "
@@ -1485,13 +1468,7 @@ namespace FSI
       }
 
     // At the end, if it turns out that we have in fact done more iterations
-    // than the parameter file allowed, we raise an exception that can be
-    // caught in the main() function. The call <code>AssertThrow(condition,
-    // exc_object)</code> is in essence equivalent to <code>if (!cond) throw
-    // exc_object;</code> but the former form fills certain fields in the
-    // exception object that identify the location (filename and line number)
-    // where the exception was raised to make it simpler to identify where the
-    // problem happened.
+    // than the parameter file allowed, we raise an exception.
     AssertThrow(newton_iteration < parameters.max_iterations_NR,
                 ExcMessage("No convergence in nonlinear solver!"));
   }
@@ -1545,9 +1522,9 @@ namespace FSI
           << std::endl;
   }
 
-  // At the end we also output the result that can be compared to that found in
-  // the literature, namely the displacement at the upper right corner of the
-  // beam.
+
+
+  // Print solution at a given point
   template <int dim, int degree, int n_q_points_1d, typename Number>
   void
   Solid<dim, degree, n_q_points_1d, Number>::print_solution()
@@ -1576,13 +1553,13 @@ namespace FSI
                 found = 1;
 
                 const Quadrature<dim> soln_qrule(cell_point.second);
-                AssertThrow(soln_qrule.size() == 1, ExcInternalError());
+                Assert(soln_qrule.size() == 1, ExcInternalError());
                 FEValues<dim> fe_values_soln(fe, soln_qrule, update_values);
                 fe_values_soln.reinit(cell_point.first);
 
                 // Extract y-component of solution at given point
                 std::vector<Tensor<1, dim>> soln_values(soln_qrule.size());
-                fe_values_soln[u_fe].get_function_values(solution_n,
+                fe_values_soln[u_fe].get_function_values(old_displacement,
                                                          soln_values);
                 displacement = soln_values[0];
               }
@@ -1613,8 +1590,8 @@ namespace FSI
   void
   Solid<dim, degree, n_q_points_1d, Number>::set_total_solution()
   {
-    solution_total.equ(1, solution_n);
-    solution_total += solution_delta;
+    total_displacement.equ(1, old_displacement);
+    total_displacement += delta_displacement;
   }
 
   // Note that we must ensure that
@@ -1649,19 +1626,14 @@ namespace FSI
           const auto &cell_mat =
             (cell->material_id() == 2 ? material_inclusion : material);
 
-          // be conservative and do not skip assembly of boundary cells
-          // regardless of BC
-          // Changed, I removed the code parts and assembly is always skipped
-
-          fe_values.reinit(cell);
           cell_rhs = 0.;
-
+          fe_values.reinit(cell);
           cell->get_dof_indices(local_dof_indices);
 
           // We first need to find the solution gradients at quadrature points
           // inside the current cell and then we update each local QP using the
           // displacement gradient:
-          fe_values[u_fe].get_function_gradients(solution_total,
+          fe_values[u_fe].get_function_gradients(total_displacement,
                                                  solution_grads_u_total);
 
           // Now we build the residual. In doing so, we first extract some
@@ -1695,8 +1667,7 @@ namespace FSI
 
               SymmetricTensor<2, dim, Number> tau;
               cell_mat->get_tau(tau, det_F, b_bar, b);
-              const Tensor<2, dim, Number> tau_ns(tau);
-              const double                 JxW = fe_values.JxW(q_point);
+              const double JxW = fe_values.JxW(q_point);
 
               // loop over j first to make caching a bit more
               // straight-forward without recourse to symmetry
@@ -1748,11 +1719,10 @@ namespace FSI
                                                  system_rhs);
         }
 
-    // Determine the true residual error for the problem.  That is, determine
-    // the error in the residual for the unconstrained degrees of freedom. Note
-    // that to do so, we need to ignore constrained DOFs by setting the residual
-    // in these vector components to zero. That will not affect the solution of
-    // linear system, though.
+    // Determine the error in the residual for the unconstrained degrees of
+    // freedom. Note that to do so, we need to ignore constrained DOFs by
+    // setting the residual in these vector components to zero. That will not
+    // affect the solution of linear system, though.
     constraints.set_zero(system_rhs);
 
     error_residual.norm = system_rhs.l2_norm();
@@ -1822,8 +1792,7 @@ namespace FSI
   template <int dim, int degree, int n_q_points_1d, typename Number>
   std::tuple<unsigned int, double, double>
   Solid<dim, degree, n_q_points_1d, Number>::solve_linear_system(
-    VectorType &newton_update,
-    VectorType &) const
+    VectorType &newton_update) const
   {
     unsigned int lin_it      = 0;
     double       lin_res     = 0.0;
@@ -1835,23 +1804,25 @@ namespace FSI
     // We solve for the incremental displacement $d\mathbf{u}$.
     const double tol_sol = parameters.tol_lin * system_rhs.l2_norm();
 
+    const bool estimate_condition = parameters.estimate_condition;
+
     // estimate condition number of matrix-free operator from dummy CG
-    {
-      IterationNumberControl control_condition(
-        parameters.cond_number_cg_iterations, tol_sol, false, false);
-      SolverCG<VectorType> solver_condition(control_condition);
+    if (estimate_condition)
+      {
+        IterationNumberControl control_condition(
+          parameters.cond_number_cg_iterations, tol_sol, false, false);
+        SolverCG<VectorType> solver_condition(control_condition);
 
-      solver_condition.connect_condition_number_slot(
-        [&](const double number) { cond_number = number; });
+        solver_condition.connect_condition_number_slot(
+          [&](const double number) { cond_number = number; });
 
-      solver_condition.solve(mf_nh_operator,
-                             newton_update,
-                             system_rhs,
-                             PreconditionIdentity());
-
-      // reset back to zero
-      newton_update = 0.;
-    }
+        solver_condition.solve(mf_nh_operator,
+                               newton_update,
+                               system_rhs,
+                               PreconditionIdentity());
+        // reset back to zero
+        newton_update = 0.;
+      }
 
     timer.enter_subsection("Linear solver");
     const int solver_its = dof_handler.n_dofs() * parameters.max_iterations_lin;
@@ -1863,7 +1834,6 @@ namespace FSI
 
     pcout << " SLV " << std::flush;
     SolverCG<VectorType> solver_CG(solver_control);
-    constraints.set_zero(newton_update);
 
     if (parameters.preconditioner_type == "jacobi")
       {
@@ -1897,7 +1867,6 @@ namespace FSI
     lin_it  = solver_control.last_step();
     lin_res = solver_control.last_value();
 
-
     timer.leave_subsection();
 
     constraints.set_zero(newton_update);
@@ -1907,15 +1876,15 @@ namespace FSI
 
     // Now that we have the displacement update, distribute the constraints
     // back to the Newton update:
+    // This function call does nothing special and is only for inhomogenous
+    // constraints, which are not present in the current setup
     constraints.distribute(newton_update);
 
     return std::make_tuple(lin_it, lin_res, cond_number);
   }
 
-  // @sect4{Solid::output_results}
-  // Here we present how the results are written to file to be viewed
-  // using ParaView or Visit. The method is similar to that shown in the
-  // tutorials so will not be discussed in detail.
+
+
   template <int dim, int degree, int n_q_points_1d, typename Number>
   void
   Solid<dim, degree, n_q_points_1d, Number>::output_results() const
@@ -1936,7 +1905,7 @@ namespace FSI
     std::vector<std::string> solution_name(dim, "displacement");
 
     data_out.attach_dof_handler(dof_handler);
-    data_out.add_data_vector(solution_n,
+    data_out.add_data_vector(old_displacement,
                              solution_name,
                              DataOut<dim>::type_dof_data,
                              data_component_interpretation);
@@ -1959,11 +1928,10 @@ namespace FSI
     data_out.add_data_vector(material_id, "material_id");
     data_out.add_data_vector(manifold_id, "manifold_id");
 
-    //    const MappingQGeneric<dim> mapping(degree);
     // visualize the displacements on a displaced grid
-    Vector<double> soln(solution_n.size());
+    Vector<double> soln(old_displacement.size());
     for (unsigned int i = 0; i < soln.size(); ++i)
-      soln(i) = solution_n(i);
+      soln(i) = old_displacement(i);
 
     MappingQEulerian<dim> q_mapping(degree, dof_handler, soln);
     data_out.build_patches(q_mapping, degree, DataOut<dim>::curved_inner_cells);
@@ -1982,5 +1950,4 @@ namespace FSI
     //                                             true,
     //                                             /*artificial*/ false);
   }
-
 } // namespace FSI

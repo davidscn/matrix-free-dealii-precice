@@ -95,13 +95,13 @@ subsection Nonlinear solver
   set Tolerance displacement        = 1.0e-6
 
   # Displacement update absolute tolerance
-  set Absolute tolerance displacement = 0.0
+  set Absolute tolerance displacement = 5e-15
 
   # Force residual tolerance
   set Tolerance force               = 1.0e-9
 
   # Force residual absolute tolerance
-  set Absolute tolerance force = 0.0
+  set Absolute tolerance force = 2e-9
 end
 
 
