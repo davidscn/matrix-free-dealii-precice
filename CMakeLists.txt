@@ -27,7 +27,7 @@ MESSAGE(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8.8)
 
-FIND_PACKAGE(deal.II 9.3 QUIET
+FIND_PACKAGE(deal.II 9.2 QUIET
   HINTS ${deal.II_DIR} ${DEAL_II_DIR} ../ ../../ $ENV{DEAL_II_DIR}
   )
 IF(NOT ${deal.II_FOUND})
@@ -37,6 +37,20 @@ IF(NOT ${deal.II_FOUND})
     "or set an environment variable \"DEAL_II_DIR\" that contains this path."
     )
 ENDIF()
+
+#
+# Are all dependencies fulfilled?
+#
+IF(NOT DEAL_II_WITH_P4EST) # keep in one line
+  MESSAGE(FATAL_ERROR "
+Error! This tutorial requires a deal.II library that was configured with the following options:
+    DEAL_II_WITH_P4EST = ON
+However, the deal.II library found at ${DEAL_II_PATH} was configured with these options
+    DEAL_II_WITH_P4EST = ${DEAL_II_WITH_P4EST}
+which conflict with the requirements."
+    )
+ENDIF()
+
 
 DEAL_II_INITIALIZE_CACHED_VARIABLES()
 
