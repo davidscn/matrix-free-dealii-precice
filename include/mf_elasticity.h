@@ -1538,7 +1538,9 @@ namespace FSI
     for (const auto &soln_pt : parameters.output_points)
       {
         Tensor<1, dim> displacement;
-        unsigned int   found = 0;
+        for (int d = 0; d < dim; ++d)
+          displacement[d] = std::numeric_limits<double>::max();
+        unsigned int found = 0;
 
         try
           {
@@ -1551,13 +1553,11 @@ namespace FSI
             if (cell_point.first->is_locally_owned())
               {
                 found = 1;
-
                 const Quadrature<dim> soln_qrule(cell_point.second);
-                Assert(soln_qrule.size() == 1, ExcInternalError());
+                AssertThrow(soln_qrule.size() == 1, ExcInternalError());
                 FEValues<dim> fe_values_soln(fe, soln_qrule, update_values);
                 fe_values_soln.reinit(cell_point.first);
 
-                // Extract y-component of solution at given point
                 std::vector<Tensor<1, dim>> soln_values(soln_qrule.size());
                 fe_values_soln[u_fe].get_function_values(old_displacement,
                                                          soln_values);
@@ -1569,7 +1569,7 @@ namespace FSI
 
         for (unsigned int d = 0; d < dim; ++d)
           displacement[d] =
-            Utilities::MPI::max(displacement[d], mpi_communicator);
+            Utilities::MPI::min(displacement[d], mpi_communicator);
 
         AssertThrow(Utilities::MPI::max(found, mpi_communicator) == 1,
                     ExcMessage("Found no cell with point inside!"));
@@ -1718,6 +1718,8 @@ namespace FSI
                                                  local_dof_indices,
                                                  system_rhs);
         }
+
+    system_rhs.compress(VectorOperation::add);
 
     // Determine the error in the residual for the unconstrained degrees of
     // freedom. Note that to do so, we need to ignore constrained DOFs by
@@ -1928,13 +1930,14 @@ namespace FSI
     data_out.add_data_vector(material_id, "material_id");
     data_out.add_data_vector(manifold_id, "manifold_id");
 
-    // visualize the displacements on a displaced grid
-    Vector<double> soln(old_displacement.size());
-    for (unsigned int i = 0; i < soln.size(); ++i)
-      soln(i) = old_displacement(i);
-
-    MappingQEulerian<dim> q_mapping(degree, dof_handler, soln);
-    data_out.build_patches(q_mapping, degree, DataOut<dim>::curved_inner_cells);
+    // Visualize the displacements on a displaced grid
+    // Recompute Eulerian mapping according to the current configuration
+    MappingQEulerian<dim, VectorType> euler_mapping(degree,
+                                                    dof_handler,
+                                                    total_displacement);
+    data_out.build_patches(euler_mapping,
+                           degree,
+                           DataOut<dim>::curved_inner_cells);
 
     const std::string filename = parameters.output_folder + "solution-" +
                                  std::to_string(time.get_timestep()) + ".vtu";
