@@ -1538,7 +1538,9 @@ namespace FSI
     for (const auto &soln_pt : parameters.output_points)
       {
         Tensor<1, dim> displacement;
-        unsigned int   found = 0;
+        for (int d = 0; d < dim; ++d)
+          displacement[d] = std::numeric_limits<double>::max();
+        unsigned int found = 0;
 
         try
           {
@@ -1551,13 +1553,11 @@ namespace FSI
             if (cell_point.first->is_locally_owned())
               {
                 found = 1;
-
                 const Quadrature<dim> soln_qrule(cell_point.second);
-                Assert(soln_qrule.size() == 1, ExcInternalError());
+                AssertThrow(soln_qrule.size() == 1, ExcInternalError());
                 FEValues<dim> fe_values_soln(fe, soln_qrule, update_values);
                 fe_values_soln.reinit(cell_point.first);
 
-                // Extract y-component of solution at given point
                 std::vector<Tensor<1, dim>> soln_values(soln_qrule.size());
                 fe_values_soln[u_fe].get_function_values(old_displacement,
                                                          soln_values);
@@ -1569,7 +1569,7 @@ namespace FSI
 
         for (unsigned int d = 0; d < dim; ++d)
           displacement[d] =
-            Utilities::MPI::max(displacement[d], mpi_communicator);
+            Utilities::MPI::min(displacement[d], mpi_communicator);
 
         AssertThrow(Utilities::MPI::max(found, mpi_communicator) == 1,
                     ExcMessage("Found no cell with point inside!"));
@@ -1934,7 +1934,7 @@ namespace FSI
     // Recompute Eulerian mapping according to the current configuration
     MappingQEulerian<dim, VectorType> euler_mapping(degree,
                                                     dof_handler,
-                                                    solution_total);
+                                                    total_displacement);
     data_out.build_patches(euler_mapping,
                            degree,
                            DataOut<dim>::curved_inner_cells);
