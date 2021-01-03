@@ -169,11 +169,15 @@ namespace FSI
     void
     system_setup();
 
-    // Set up matrix-free
+    // Set up the matrix-free objects
     void
-    setup_matrix_free(const int &it_nr);
+    setup_matrix_free();
 
-    // Function to assemble the system matrix and right hand side vecotr.
+    // Update matrix-free within a nonlinear iteration
+    void
+    update_matrix_free(const int &it_nr);
+
+    // Function to assemble the right hand side vector.
     void
     assemble_system();
 
@@ -202,6 +206,43 @@ namespace FSI
 
     void
     output_results() const;
+
+    // Set up an Additional data object
+    template <typename AdditionalData>
+    void
+    setup_mf_additional_data(AdditionalData &   data,
+                             const unsigned int level,
+                             const bool         initialize_indices) const;
+
+    void
+    reinit_mg_transfer();
+
+    void
+    setup_mg_interpolation(const unsigned int max_level,
+                           const bool         reset_mg_transfer);
+
+    template <typename AdditionalData>
+    void
+    reinit_matrix_free(const AdditionalData &data,
+                       const bool            reinit_mf_current,
+                       const bool            reinit_mf_reference);
+
+    template <typename AdditionalData>
+    void
+    reinit_multi_grid_matrix_free(const AdditionalData &data,
+                                  const bool            reinit_mf_current,
+                                  const bool            reinit_mf_reference,
+                                  const unsigned int    level);
+
+    void
+    adjust_ghost_range(const unsigned int level);
+
+    template <typename Operator>
+    void
+    setup_operator_cache(Operator &nh_operator, const unsigned int level);
+
+    void
+    setup_gmg(const bool initialize_all);
 
     // MPI communicator
     MPI_Comm mpi_communicator;
@@ -618,6 +659,8 @@ namespace FSI
     // \mathbf{\Xi}:= \{\varDelta \mathbf{u}\}$ and start the loop over the
     // time domain.
     //
+    setup_matrix_free();
+
     // At the beginning, we reset the solution update for this time step...
     while (time.current() <= time.end())
       {
@@ -915,87 +958,154 @@ namespace FSI
 
   template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::setup_matrix_free(const int &it_nr)
+  Solid<dim, degree, n_q_points_1d, Number>::setup_matrix_free()
   {
-    timer.enter_subsection("Setup MF: AdditionalData");
+    make_constraints(0);
+    // Setup MF dditional data
+    typename MatrixFree<dim, double>::AdditionalData data;
+    setup_mf_additional_data(data,
+                             numbers::invalid_unsigned_int,
+                             true /*indices*/);
+
+    mf_data_current   = std::make_shared<MatrixFree<dim, double>>();
+    mf_data_reference = std::make_shared<MatrixFree<dim, double>>();
+
+    eulerian_mapping =
+      std::make_shared<MappingQEulerian<dim, VectorType>>(degree,
+                                                          dof_handler,
+                                                          total_displacement);
+    reinit_matrix_free(data, true /*current*/, true /*reference*/);
+
+    adjust_ghost_range(numbers::invalid_unsigned_int);
+    setup_operator_cache(mf_nh_operator, numbers::invalid_unsigned_int);
+
+    // The gmg part
+    if (parameters.preconditioner_type != "gmg")
+      return;
 
     const unsigned int max_level = triangulation.n_global_levels() - 1;
+    // Setup the MG transfer matrices
+    reinit_mg_transfer();
 
-    mg_coarse_iterative.clear();
-    coarse_solver.reset();
+    // Setup mg interpolation
+    setup_mg_interpolation(max_level, true);
 
-    if (it_nr <= 1)
+    // Setup MG additional data
+    std::vector<typename MatrixFree<dim, float>::AdditionalData>
+      mg_additional_data(max_level + 1);
+
+    mg_eulerian_mapping.clear();
+    mg_eulerian_mapping.resize(0);
+
+    mg_mf_data_current.resize(triangulation.n_global_levels());
+    mg_mf_data_reference.resize(triangulation.n_global_levels());
+    mg_mf_nh_operator.resize(0, max_level);
+
+    for (unsigned int level = 0; level <= max_level; ++level)
       {
-        // GMG main classes
-        multigrid_preconditioner.reset();
-        multigrid.reset();
-        // clear all pointers to level matrices in smoothers:
-        mg_coarse_chebyshev.clear();
-        mg_smoother_chebyshev.clear();
-        // reset wrappers before resizing matrices
-        mg_operator_wrapper.reset();
-        // and clean up transfer which is also initialized with mg_matrices:
-        mg_transfer.reset();
-        // Now we can reset mg_matrices
-        mg_mf_nh_operator.resize(0, max_level);
-        mg_eulerian_mapping.clear();
+        mg_mf_nh_operator[level].set_material(material_level,
+                                              material_inclusion_level);
+        // The MF objects
+        mg_mf_data_current[level] = std::make_shared<MatrixFree<dim, float>>();
+        mg_mf_data_reference[level] =
+          std::make_shared<MatrixFree<dim, float>>();
 
-        mg_total_displacement.resize(0, max_level);
+        // Additional data
+        setup_mf_additional_data(mg_additional_data[level], level, true);
+
+        // Eulerian mapping
+        std::shared_ptr<MappingQEulerian<dim, LevelVectorType>> euler_level =
+          std::make_shared<MappingQEulerian<dim, LevelVectorType>>(
+            degree, dof_handler, mg_total_displacement[level], level);
+        mg_eulerian_mapping.push_back(euler_level);
+
+        // Reinit
+        reinit_multi_grid_matrix_free(mg_additional_data[level],
+                                      true /*current*/,
+                                      true /*reference*/,
+                                      level);
+
+        adjust_ghost_range(level);
+        setup_operator_cache(mg_mf_nh_operator[level], level);
       }
+    setup_gmg(true);
+  }
+
+
+
+  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <typename AdditionalData>
+  void
+  Solid<dim, degree, n_q_points_1d, Number>::setup_mf_additional_data(
+    AdditionalData &   data,
+    const unsigned int level,
+    const bool         initialize_indices) const
+  {
+    timer.enter_subsection("Setup: AdditionalData");
 
     // The constraints in Newton-Raphson are different for it_nr=0 and 1,
     // and then they are the same so we only need to re-init the data
     // according to the updated displacement/mapping
-    const QGauss<1> quad(n_q_points_1d);
 
-    typename MatrixFree<dim, double>::AdditionalData data;
-    data.tasks_parallel_scheme = MatrixFree<dim, double>::AdditionalData::none;
+    data.tasks_parallel_scheme = AdditionalData::none;
     data.mapping_update_flags  = update_gradients | update_JxW_values;
-
+    data.initialize_indices    = initialize_indices;
     // make sure materials with different ID end up in different SIMD blocks:
     data.cell_vectorization_categories_strict = true;
-    data.cell_vectorization_category.resize(triangulation.n_active_cells());
-    for (const auto &cell : triangulation.active_cell_iterators())
-      if (cell->is_locally_owned())
-        data.cell_vectorization_category[cell->active_cell_index()] =
-          cell->material_id();
 
-    std::vector<typename MatrixFree<dim, float>::AdditionalData>
-      mg_additional_data(max_level + 1);
-    for (unsigned int level = 0; level <= max_level; ++level)
+    // Setup MF additional data
+    if (level == numbers::invalid_unsigned_int)
       {
-        mg_additional_data[level].tasks_parallel_scheme =
-          MatrixFree<dim, float>::AdditionalData::none; // partition_color;
-
-        mg_additional_data[level].mapping_update_flags =
-          update_gradients | update_JxW_values;
-
-        mg_additional_data[level].cell_vectorization_categories_strict = true;
-        mg_additional_data[level].cell_vectorization_category.resize(
-          triangulation.n_cells(level));
+        data.cell_vectorization_category.resize(triangulation.n_active_cells());
+        for (const auto &cell : triangulation.active_cell_iterators())
+          if (cell->is_locally_owned())
+            data.cell_vectorization_category[cell->active_cell_index()] =
+              cell->material_id();
+      }
+    // Setup MG additinal data
+    else
+      {
+        data.cell_vectorization_category.resize(triangulation.n_cells(level));
         for (const auto &cell : triangulation.cell_iterators_on_level(level))
           if (cell->is_locally_owned_on_level())
-            mg_additional_data[level]
-              .cell_vectorization_category[cell->index()] = cell->material_id();
+            data.cell_vectorization_category[cell->index()] =
+              cell->material_id();
 
-        mg_additional_data[level].mg_level = level;
+        data.mg_level = level;
       }
-
     timer.leave_subsection();
+  }
+
+
+
+  template <int dim, int degree, int n_q_points_1d, typename Number>
+  void
+  Solid<dim, degree, n_q_points_1d, Number>::reinit_mg_transfer()
+  {
     timer.enter_subsection("Setup MF: MGTransferMatrixFree");
 
-    if (it_nr <= 1)
-      {
-        mg_transfer = std::make_shared<MGTransferMatrixFree<dim, LevelNumber>>(
-          mg_constrained_dofs);
-        mg_transfer->build(dof_handler);
+    // and clean up transfer which is also initialized with mg_matrices:
+    mg_transfer.reset();
 
-        mg_mf_data_current.resize(triangulation.n_global_levels());
-        mg_mf_data_reference.resize(triangulation.n_global_levels());
-      }
+    mg_transfer = std::make_shared<MGTransferMatrixFree<dim, LevelNumber>>(
+      mg_constrained_dofs);
+    mg_transfer->build(dof_handler);
 
     timer.leave_subsection();
+  }
+
+
+
+  template <int dim, int degree, int n_q_points_1d, typename Number>
+  void
+  Solid<dim, degree, n_q_points_1d, Number>::setup_mg_interpolation(
+    const unsigned int max_level,
+    const bool         reset_mg_transfer)
+  {
     timer.enter_subsection("Setup MF: interpolate_to_mg");
+
+    if (reset_mg_transfer)
+      mg_total_displacement.resize(0, max_level);
 
     // transfer displacement to MG levels:
     LevelVectorType solution_total_transfer;
@@ -1006,147 +1116,146 @@ namespace FSI
                                    solution_total_transfer);
 
     timer.leave_subsection();
-    timer.enter_subsection("Setup MF: MappingQEulerian");
+  }
 
-    if (it_nr <= 1)
+
+
+  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <typename AdditionalData>
+  void
+  Solid<dim, degree, n_q_points_1d, Number>::reinit_matrix_free(
+    const AdditionalData &data,
+    const bool            reinit_mf_current,
+    const bool            reinit_mf_reference)
+  {
+    if (!reinit_mf_current && !reinit_mf_reference)
+      return;
+
+    timer.enter_subsection("Setup MF: Reinit matrix-free");
+
+    // TODO: Parametrize with function below
+    const QGauss<1> quad(n_q_points_1d);
+
+    // solution_total is the point around which we linearize
+    if (reinit_mf_current)
+      mf_data_current->reinit(
+        *eulerian_mapping, dof_handler, constraints, quad, data);
+
+    // TODO: Parametrize mapping
+    if (reinit_mf_reference)
       {
-        // solution_total is the point around which we linearize
-        eulerian_mapping = std::make_shared<MappingQEulerian<dim, VectorType>>(
-          degree, dof_handler, total_displacement);
-
-        mf_data_current   = std::make_shared<MatrixFree<dim, double>>();
-        mf_data_reference = std::make_shared<MatrixFree<dim, double>>();
-
-        // TODO: Parametrize mapping
         mf_data_reference->reinit(
-          MappingQ1<dim>(), dof_handler, constraints, quad, data);
-        mf_data_current->reinit(
-          *eulerian_mapping, dof_handler, constraints, quad, data);
+          StaticMappingQ1<dim>::mapping, dof_handler, constraints, quad, data);
 
+        // Only reinitialized in case the reference MF has changed, since all
+        // data structures are reinitialized according to the reference object
         mf_nh_operator.initialize(mf_data_current,
                                   mf_data_reference,
                                   total_displacement,
                                   parameters.mf_caching);
-
-        // print memory consumption by MF
-        if (print_mf_memory)
-          {
-            timer_out << "MF cache memory = "
-                      << dealii::Utilities::MPI::sum(
-                           mf_nh_operator.memory_consumption() / 1000000,
-                           mpi_communicator)
-                      << " Mb" << std::endl;
-            print_mf_memory = false;
-          }
-
-        mg_eulerian_mapping.resize(0);
-        for (unsigned int level = 0; level <= max_level; ++level)
-          {
-            AffineConstraints<double> level_constraints;
-            IndexSet                  relevant_dofs;
-            DoFTools::extract_locally_relevant_level_dofs(dof_handler,
-                                                          level,
-                                                          relevant_dofs);
-            // GMG MF operators do not support edge indices yet
-            AssertThrow(
-              mg_constrained_dofs.get_refinement_edge_indices(level).is_empty(),
-              ExcNotImplemented());
-
-            level_constraints.reinit(relevant_dofs);
-            level_constraints.add_lines(
-              mg_constrained_dofs.get_boundary_indices(level));
-            level_constraints.close();
-
-
-            mg_mf_data_current[level] =
-              std::make_shared<MatrixFree<dim, float>>();
-            mg_mf_data_reference[level] =
-              std::make_shared<MatrixFree<dim, float>>();
-
-            std::shared_ptr<MappingQEulerian<dim, LevelVectorType>>
-              euler_level =
-                std::make_shared<MappingQEulerian<dim, LevelVectorType>>(
-                  degree, dof_handler, mg_total_displacement[level], level);
-
-            // TODO: Parametrize mapping
-            mg_mf_data_reference[level]->reinit(MappingQ1<dim>(),
-                                                dof_handler,
-                                                level_constraints,
-                                                quad,
-                                                mg_additional_data[level]);
-            mg_mf_data_current[level]->reinit(*euler_level,
-                                              dof_handler,
-                                              level_constraints,
-                                              quad,
-                                              mg_additional_data[level]);
-
-            mg_eulerian_mapping.push_back(euler_level);
-
-            mg_mf_nh_operator[level].initialize(
-              mg_mf_data_current[level],
-              mg_mf_data_reference[level],
-              mg_total_displacement[level],
-              parameters.mf_caching); // (mg_level_data, mg_constrained_dofs,
-                                      // level);
-          }
       }
-    else
+
+    // print memory consumption by MF
+    if (print_mf_memory)
       {
-        // here reinitialize MatrixFree with initialize_indices=false
-        // as the mapping has to be recomputed but the topology of cells is the
-        // same
-        data.initialize_indices = false;
-        mf_data_current->reinit(
-          *eulerian_mapping, dof_handler, constraints, quad, data);
+        timer_out << "MF cache memory = "
+                  << dealii::Utilities::MPI::sum(
+                       mf_nh_operator.memory_consumption() / 1000000,
+                       mpi_communicator)
+                  << " Mb" << std::endl;
+        print_mf_memory = false;
+      }
+    timer.leave_subsection();
+  }
 
-        for (unsigned int level = 0; level <= max_level; ++level)
-          {
-            mg_additional_data[level].initialize_indices = false;
 
-            AffineConstraints<double> level_constraints;
-            IndexSet                  relevant_dofs;
-            DoFTools::extract_locally_relevant_level_dofs(dof_handler,
-                                                          level,
-                                                          relevant_dofs);
-            level_constraints.reinit(relevant_dofs);
-            level_constraints.add_lines(
-              mg_constrained_dofs.get_boundary_indices(level));
-            level_constraints.close();
 
-            std::shared_ptr<MappingQEulerian<dim, LevelVectorType>>
-              euler_level =
-                std::make_shared<MappingQEulerian<dim, LevelVectorType>>(
-                  degree, dof_handler, mg_total_displacement[level], level);
-            mg_mf_data_current[level]->reinit(*euler_level,
-                                              dof_handler,
-                                              level_constraints,
-                                              quad,
-                                              mg_additional_data[level]);
-          }
+  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <typename AdditionalData>
+  void
+  Solid<dim, degree, n_q_points_1d, Number>::reinit_multi_grid_matrix_free(
+    const AdditionalData &data,
+    const bool            reinit_mf_current,
+    const bool            reinit_mf_reference,
+    const unsigned int    level)
+  {
+    // Assumption: only zero boundary conditions are used. Otheriwse, we
+    // (probably) have to rebuild the level constraints
+    if (!reinit_mf_current && !reinit_mf_reference)
+      return;
+
+    timer.enter_subsection("Setup MF: Reinit multi-grid MF");
+
+    const QGauss<1> quad(n_q_points_1d);
+
+    AffineConstraints<double> level_constraints;
+    IndexSet                  relevant_dofs;
+    DoFTools::extract_locally_relevant_level_dofs(dof_handler,
+                                                  level,
+                                                  relevant_dofs);
+
+    // GMG MF operators do not support edge indices yet
+    AssertThrow(
+      mg_constrained_dofs.get_refinement_edge_indices(level).is_empty(),
+      ExcNotImplemented());
+
+    level_constraints.reinit(relevant_dofs);
+    level_constraints.add_lines(
+      mg_constrained_dofs.get_boundary_indices(level));
+    level_constraints.close();
+
+    if (reinit_mf_current)
+      mg_mf_data_current[level]->reinit(*mg_eulerian_mapping[level],
+                                        dof_handler,
+                                        level_constraints,
+                                        quad,
+                                        data);
+
+    if (reinit_mf_reference)
+      {
+        // TODO: Parametrize mapping
+        mg_mf_data_reference[level]->reinit(StaticMappingQ1<dim>::mapping,
+                                            dof_handler,
+                                            level_constraints,
+                                            quad,
+                                            data);
+        mg_mf_nh_operator[level].initialize(mg_mf_data_current[level],
+                                            mg_mf_data_reference[level],
+                                            mg_total_displacement[level],
+                                            parameters.mf_caching);
       }
 
     timer.leave_subsection();
+  }
+
+
+
+  template <int dim, int degree, int n_q_points_1d, typename Number>
+  void
+  Solid<dim, degree, n_q_points_1d, Number>::adjust_ghost_range(
+    const unsigned int level)
+  {
     timer.enter_subsection("Setup MF: ghost range");
 
     // adjust ghost range if needed
-    {
-      const std::shared_ptr<const Utilities::MPI::Partitioner> &partitioner =
-        mf_data_current->get_vector_partitioner();
+    if (level == numbers::invalid_unsigned_int)
+      {
+        const std::shared_ptr<const Utilities::MPI::Partitioner> &partitioner =
+          mf_data_current->get_vector_partitioner();
 
-      Assert(partitioner->is_globally_compatible(
-               *mf_data_reference->get_vector_partitioner().get()),
-             ExcInternalError());
+        Assert(partitioner->is_globally_compatible(
+                 *mf_data_reference->get_vector_partitioner().get()),
+               ExcInternalError());
 
-      adjust_ghost_range_if_necessary(partitioner, newton_update);
-      adjust_ghost_range_if_necessary(partitioner, system_rhs);
+        adjust_ghost_range_if_necessary(partitioner, newton_update);
+        adjust_ghost_range_if_necessary(partitioner, system_rhs);
 
-      adjust_ghost_range_if_necessary(partitioner, total_displacement);
-      total_displacement.update_ghost_values();
-    }
-
-    // FIXME: interpolate_to_mg will resize MG vector, make sure it has the
-    // right partition for MF
-    for (unsigned int level = 0; level <= max_level; ++level)
+        adjust_ghost_range_if_necessary(partitioner, total_displacement);
+        total_displacement.update_ghost_values();
+      }
+    else
+      // FIXME: interpolate_to_mg will resize MG vector, make sure it has the
+      // right partition for MF
       {
         const std::shared_ptr<const Utilities::MPI::Partitioner> &partitioner =
           mg_mf_data_current[level]->get_vector_partitioner();
@@ -1161,49 +1270,53 @@ namespace FSI
       }
 
     timer.leave_subsection();
+  }
+
+
+
+  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <typename Operator>
+  void
+  Solid<dim, degree, n_q_points_1d, Number>::setup_operator_cache(
+    Operator &         nh_operator,
+    const unsigned int level)
+  {
     timer.enter_subsection("Setup MF: cache() and diagonal()");
 
     // need to cache prior to diagonal computations:
-    mf_nh_operator.cache();
-    mf_nh_operator.compute_diagonal();
+    nh_operator.cache();
+    nh_operator.compute_diagonal();
+
     if (debug_level > 0)
       {
-        deallog << "GMG setup Newton iteration " << it_nr << std::endl;
         deallog
           << "Number of constrained DoFs "
           << Utilities::MPI::sum(mf_data_current->get_constrained_dofs().size(),
                                  mpi_communicator)
           << std::endl;
-        deallog << "Diagonal:       "
-                << mf_nh_operator.get_matrix_diagonal_inverse()
-                     ->get_vector()
-                     .l2_norm()
-                << std::endl;
-        deallog << "Solution total: " << total_displacement.l2_norm()
+        const std::string info = "on level " + std::to_string(level) + " :   ";
+        deallog
+          << "Diagonal "
+          << (level == numbers::invalid_unsigned_int ? " :              " :
+                                                       info)
+          << nh_operator.get_matrix_diagonal_inverse()->get_vector().l2_norm()
+          << std::endl;
+        deallog << "Solution total (on level): "
+                << (level == numbers::invalid_unsigned_int ?
+                      total_displacement.l2_norm() :
+                      mg_total_displacement[level].l2_norm())
                 << std::endl;
       }
-
-    for (unsigned int level = 0; level <= max_level; ++level)
-      {
-        mg_mf_nh_operator[level].set_material(material_level,
-                                              material_inclusion_level);
-        mg_mf_nh_operator[level].cache();
-        mg_mf_nh_operator[level].compute_diagonal();
-
-        if (debug_level > 0)
-          {
-            deallog << "Diagonal on level       " << level << ": "
-                    << mg_mf_nh_operator[level]
-                         .get_matrix_diagonal_inverse()
-                         ->get_vector()
-                         .l2_norm()
-                    << std::endl;
-            deallog << "Solution total on level " << level << ": "
-                    << mg_total_displacement[level].l2_norm() << std::endl;
-          }
-      }
-
     timer.leave_subsection();
+  }
+
+
+
+  template <int dim, int degree, int n_q_points_1d, typename Number>
+  void
+  Solid<dim, degree, n_q_points_1d, Number>::setup_gmg(
+    const bool initialize_all)
+  {
     timer.enter_subsection("Setup MF: GMG setup");
 
     // setup GMG preconditioner
@@ -1250,90 +1363,166 @@ namespace FSI
                                          1e-3,
                                          false,
                                          false);
+
+    coarse_solver.reset();
     coarse_solver =
       std::make_shared<SolverCG<LevelVectorType>>(*coarse_solver_control);
+
+    // Set all matrices to zero
+    mg_coarse_iterative.clear();
     mg_coarse_iterative.initialize(*coarse_solver,
                                    mg_mf_nh_operator[0],
                                    mg_smoother_chebyshev[0]);
 
-    // wrap our level and interface matrices in an object having the required
-    // multiplication functions.
-    mg_operator_wrapper.initialize(mg_mf_nh_operator);
+    if (initialize_all)
+      { // wrap our level and interface matrices in an object having the
+        // required
+        // multiplication functions.
+        mg_operator_wrapper.reset();
+        mg_operator_wrapper.initialize(mg_mf_nh_operator);
 
-    multigrid_preconditioner.reset();
-    if (cheb_coarse)
-      multigrid =
-        std::make_shared<Multigrid<LevelVectorType>>(mg_operator_wrapper,
-                                                     mg_coarse_chebyshev,
-                                                     *mg_transfer,
-                                                     mg_smoother_chebyshev,
-                                                     mg_smoother_chebyshev,
-                                                     /*min_level*/ 0);
-    else
-      multigrid =
-        std::make_shared<Multigrid<LevelVectorType>>(mg_operator_wrapper,
-                                                     mg_coarse_iterative,
-                                                     *mg_transfer,
-                                                     mg_smoother_chebyshev,
-                                                     mg_smoother_chebyshev,
-                                                     /*min_level*/ 0);
+        multigrid.reset();
 
-    // set_debug() is deprecated, keep this commented for now
-    // if (debug_level > 2)
-    //   multigrid->set_debug(5);
-
-    multigrid->connect_coarse_solve(
-      [&](const bool start, const unsigned int level) {
-        if (start)
-          timer.enter_subsection("Coarse solve level " +
-                                 Utilities::int_to_string(level));
+        if (cheb_coarse)
+          multigrid =
+            std::make_shared<Multigrid<LevelVectorType>>(mg_operator_wrapper,
+                                                         mg_coarse_chebyshev,
+                                                         *mg_transfer,
+                                                         mg_smoother_chebyshev,
+                                                         mg_smoother_chebyshev,
+                                                         /*min_level*/ 0);
         else
-          timer.leave_subsection();
-      });
+          multigrid =
+            std::make_shared<Multigrid<LevelVectorType>>(mg_operator_wrapper,
+                                                         mg_coarse_iterative,
+                                                         *mg_transfer,
+                                                         mg_smoother_chebyshev,
+                                                         mg_smoother_chebyshev,
+                                                         /*min_level*/ 0);
 
-    multigrid->connect_restriction(
-      [&](const bool start, const unsigned int level) {
-        if (start)
-          timer.enter_subsection("Coarse solve level " +
-                                 Utilities::int_to_string(level));
-        else
-          timer.leave_subsection();
-      });
-    multigrid->connect_prolongation(
-      [&](const bool start, const unsigned int level) {
-        if (start)
-          timer.enter_subsection("Prolongation level " +
-                                 Utilities::int_to_string(level));
-        else
-          timer.leave_subsection();
-      });
-    multigrid->connect_pre_smoother_step(
-      [&](const bool start, const unsigned int level) {
-        if (start)
-          timer.enter_subsection("Pre-smoothing level " +
-                                 Utilities::int_to_string(level));
-        else
-          timer.leave_subsection();
-      });
 
-    multigrid->connect_post_smoother_step(
-      [&](const bool start, const unsigned int level) {
-        if (start)
-          timer.enter_subsection("Post-smoothing level " +
-                                 Utilities::int_to_string(level));
-        else
-          timer.leave_subsection();
-      });
+        multigrid->connect_coarse_solve(
+          [&](const bool start, const unsigned int level) {
+            if (start)
+              timer.enter_subsection("Coarse solve level " +
+                                     Utilities::int_to_string(level));
+            else
+              timer.leave_subsection();
+          });
 
-    // and a preconditioner object which uses GMG
-    multigrid_preconditioner = std::make_shared<
-      PreconditionMG<dim, LevelVectorType, MGTransferMatrixFree<dim, float>>>(
-      dof_handler, *multigrid, *mg_transfer);
+        multigrid->connect_restriction(
+          [&](const bool start, const unsigned int level) {
+            if (start)
+              timer.enter_subsection("Coarse solve level " +
+                                     Utilities::int_to_string(level));
+            else
+              timer.leave_subsection();
+          });
+        multigrid->connect_prolongation(
+          [&](const bool start, const unsigned int level) {
+            if (start)
+              timer.enter_subsection("Prolongation level " +
+                                     Utilities::int_to_string(level));
+            else
+              timer.leave_subsection();
+          });
+        multigrid->connect_pre_smoother_step(
+          [&](const bool start, const unsigned int level) {
+            if (start)
+              timer.enter_subsection("Pre-smoothing level " +
+                                     Utilities::int_to_string(level));
+            else
+              timer.leave_subsection();
+          });
 
+        multigrid->connect_post_smoother_step(
+          [&](const bool start, const unsigned int level) {
+            if (start)
+              timer.enter_subsection("Post-smoothing level " +
+                                     Utilities::int_to_string(level));
+            else
+              timer.leave_subsection();
+          });
+
+        // Reset mg preconditioner
+        multigrid_preconditioner.reset();
+        multigrid_preconditioner =
+          std::make_shared<PreconditionMG<dim,
+                                          LevelVectorType,
+                                          MGTransferMatrixFree<dim, float>>>(
+            dof_handler, *multigrid, *mg_transfer);
+      }
     timer.leave_subsection();
   }
 
-  // @sect4{Solid::solve_nonlinear_timestep}
+
+
+  // Note: Dirichlet boundary conditions are in structural mechanics usually
+  // zero. Therefore, the constraints are not differently between Newton
+  // iterations. We keep updating the constraints object anyway, i.e., the
+  // assumption is not exploited in make_constraints. However, the MF and GMG
+  // constraints are not updated accordingly and in case one wants to utilize
+  // other contraints, the MF GMG needs to be reinitialized here.
+  template <int dim, int degree, int n_q_points_1d, typename Number>
+  void
+  Solid<dim, degree, n_q_points_1d, Number>::update_matrix_free(const int &)
+  {
+    // Depends on selected caching strategy
+    const bool update_current_mf =
+      !(parameters.mf_caching == "scalar_referential" ||
+        parameters.mf_caching == "tensor4_ns");
+    // For MF additional data
+    const bool initialize_indices = false;
+
+    // The non-gmg MF part
+    // Setup MF dditional data
+    // Use invalid unsigned int for the 'usual' non gmg MF level
+    typename MatrixFree<dim, double>::AdditionalData data;
+    if (update_current_mf)
+      setup_mf_additional_data(data,
+                               numbers::invalid_unsigned_int,
+                               initialize_indices);
+    // Recompute Eulerian mapping if necessary
+    reinit_matrix_free(data,
+                       update_current_mf /*current*/,
+                       false /*reference*/);
+
+    adjust_ghost_range(numbers::invalid_unsigned_int);
+    setup_operator_cache(mf_nh_operator, numbers::invalid_unsigned_int);
+
+    // The gmg part
+    if (parameters.preconditioner_type != "gmg")
+      return;
+
+    const unsigned int max_level = triangulation.n_global_levels() - 1;
+
+    // Setup mg interpolation
+    setup_mg_interpolation(max_level, false);
+
+    // Setup MG additional data
+    std::vector<typename MatrixFree<dim, float>::AdditionalData>
+      mg_additional_data(max_level + 1);
+
+    for (unsigned int level = 0; level <= max_level; ++level)
+      {
+        // Additional data
+        if (update_current_mf)
+          setup_mf_additional_data(mg_additional_data[level],
+                                   level,
+                                   initialize_indices);
+
+        // Reinit
+        reinit_multi_grid_matrix_free(mg_additional_data[level],
+                                      update_current_mf,
+                                      false /*reference*/,
+                                      level);
+        adjust_ghost_range(level);
+        setup_operator_cache(mg_mf_nh_operator[level], level);
+      }
+    setup_gmg(false);
+  }
+
+
 
   template <int dim, int degree, int n_q_points_1d, typename Number>
   bool
@@ -1421,15 +1610,15 @@ namespace FSI
         // update total solution prior to assembly
         set_total_solution();
 
-        // now ready to go-on and assmble linearized problem around solution_n +
-        // solution_delta for this iteration.
+        // now ready to go-on and assmble linearized problem around solution_n
+        // + solution_delta for this iteration.
         assemble_system();
 
         if (check_convergence(newton_iteration))
           break;
 
         // setup matrix-free part:
-        setup_matrix_free(newton_iteration);
+        update_matrix_free(newton_iteration);
 
         const std::tuple<unsigned int, double, double> lin_solver_output =
           solve_linear_system(newton_update);
@@ -1627,14 +1816,14 @@ namespace FSI
           cell->get_dof_indices(local_dof_indices);
 
           // We first need to find the solution gradients at quadrature points
-          // inside the current cell and then we update each local QP using the
-          // displacement gradient:
+          // inside the current cell and then we update each local QP using
+          // the displacement gradient:
           fe_values[u_fe].get_function_gradients(total_displacement,
                                                  solution_grads_u_total);
 
           // Now we build the residual. In doing so, we first extract some
-          // configuration dependent variables from our QPH history objects for
-          // the current quadrature point.
+          // configuration dependent variables from our QPH history objects
+          // for the current quadrature point.
           for (unsigned int q_point = 0; q_point < n_q_points; ++q_point)
             {
               const Tensor<2, dim, Number> &grad_u =
@@ -1743,6 +1932,13 @@ namespace FSI
     // need to clear the constraints matrix and completely rebuild
     // it. However, after the first iteration, the constraints remain the same
     // and we can simply skip the rebuilding step if we do not clear it.
+
+    // Note: Dirichlet boundary conditions are in structural mechanics usually
+    // zero. Therefore, the constraints are not differently between Newton
+    // iterations. We keep updating the constraints object anyway, i.e., the
+    // assumption is not exploited here. However, the GMG constraints are not
+    // adjusted accordingly and in case one wants to utilize other contraints,
+    // the GMG needs to be reinitialized between different Newton iterations.
     if (it_nr > 1)
       return;
 
