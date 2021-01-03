@@ -443,7 +443,9 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::cache()
 
       phi_reference.reinit(cell);
       phi_reference.read_dof_values_plain(*displacement);
-      phi_reference.evaluate(true, true, false);
+      phi_reference.evaluate(mf_caching == MFCaching::scalar_referential,
+                             true,
+                             false);
 
       if (cell_mat->formulation == 0)
         {
