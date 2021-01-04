@@ -347,26 +347,22 @@ namespace FSI
     struct Errors
     {
       Errors()
-        : norm(1.0)
-        , u(1.0)
+        : e(1.0)
       {}
 
       void
       reset()
       {
-        norm = 1.0;
-        u    = 1.0;
+        e = 1.0;
       }
       void
       normalise(const Errors &rhs)
       {
-        if (rhs.norm != 0.0)
-          norm /= rhs.norm;
-        if (rhs.u != 0.0)
-          u /= rhs.u;
+        if (rhs.e != 0.0)
+          e /= rhs.e;
       }
 
-      double norm, u;
+      double e;
     };
 
     mutable Errors error_residual, error_residual_0, error_residual_norm,
@@ -1543,13 +1539,13 @@ namespace FSI
     if (newton_iteration > 2)
       {
         // first check abosolute tolerance
-        if (error_residual.u <= parameters.tol_f_abs ||
-            error_update.u <= parameters.tol_u_abs)
+        if (error_residual.e <= parameters.tol_f_abs ||
+            error_update.e <= parameters.tol_u_abs)
           converged = true;
 
 
-        if (error_residual_norm.u <= parameters.tol_f &&
-            error_update_norm.u <= parameters.tol_u)
+        if (error_residual_norm.e <= parameters.tol_f &&
+            error_update_norm.e <= parameters.tol_u)
           converged = true;
 
         if (converged)
@@ -1641,15 +1637,10 @@ namespace FSI
         pcout << " | " << std::fixed << std::setprecision(3) << std::setw(7)
               << std::scientific << std::get<0>(lin_solver_output) << "  "
               << std::get<1>(lin_solver_output) << "  "
-              << std::get<2>(lin_solver_output) << "  "
-              << error_residual_norm.norm << "  "
-              << (parameters.output_abs_norms ? error_residual.u :
-                                                error_residual_norm.u)
-              << "  "
-              << "  " << error_update_norm.norm << "  "
-              << (parameters.output_abs_norms ? error_update.u :
-                                                error_update_norm.u)
-              << "  " << std::endl;
+              << std::get<2>(lin_solver_output) << "  " << error_residual_norm.e
+              << "  " << error_residual.e << "  "
+              << "  " << error_update_norm.e << "  " << error_update.e << "  "
+              << std::endl;
       }
 
     // At the end, if it turns out that we have in fact done more iterations
@@ -1698,11 +1689,11 @@ namespace FSI
     pcout << std::endl;
 
     pcout << "Relative errors:" << std::endl
-          << "  Displacement: " << error_update_norm.u << std::endl
-          << "  Force:        " << error_residual_norm.u << std::endl
+          << "  Displacement: " << error_update_norm.e << std::endl
+          << "  Force:        " << error_residual_norm.e << std::endl
           << "Absolute errors:" << std::endl
-          << "  Displacement: " << error_update.u << std::endl
-          << "  Force:        " << error_residual.u << std::endl
+          << "  Displacement: " << error_update.e << std::endl
+          << "  Force:        " << error_residual.e << std::endl
           << "Volume:         " << vol_current << " / " << vol_reference
           << std::endl;
   }
@@ -1912,8 +1903,7 @@ namespace FSI
     // affect the solution of linear system, though.
     constraints.set_zero(system_rhs);
 
-    error_residual.norm = system_rhs.l2_norm();
-    error_residual.u    = system_rhs.l2_norm();
+    error_residual.e = system_rhs.l2_norm();
   }
 
 
@@ -2065,8 +2055,7 @@ namespace FSI
 
     constraints.set_zero(newton_update);
 
-    error_update.norm = newton_update.l2_norm();
-    error_update.u    = newton_update.l2_norm();
+    error_update.e = newton_update.l2_norm();
 
     // Now that we have the displacement update, distribute the constraints
     // back to the Newton update:

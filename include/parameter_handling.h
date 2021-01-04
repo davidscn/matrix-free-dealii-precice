@@ -18,7 +18,6 @@ namespace FSI
     public:
       std::string output_folder    = std::string("");
       bool        output_solution  = true;
-      bool        output_abs_norms = false;
 
       std::vector<Point<dim>> output_points;
 
@@ -46,11 +45,6 @@ namespace FSI
         prm.add_parameter("Output solution",
                           output_solution,
                           "Output solution and mesh",
-                          Patterns::Bool());
-
-        prm.add_parameter("Output absolute norms",
-                          output_abs_norms,
-                          "Output absolute norms during convergence",
                           Patterns::Bool());
 
         prm.add_parameter("Output points",
