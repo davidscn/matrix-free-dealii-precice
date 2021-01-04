@@ -2,6 +2,7 @@
 
 #include <deal.II/base/parameter_handler.h>
 
+#include <precice_parameter.h>
 using namespace dealii;
 
 namespace FSI
@@ -398,7 +399,8 @@ namespace FSI
                           public NonlinearSolver,
                           public Time,
                           public Misc<dim>,
-                          public BoundaryConditions<dim>
+                          public BoundaryConditions<dim>,
+                          public PreciceAdapterConfiguration
 
     {
     public:
@@ -430,6 +432,7 @@ namespace FSI
       LinearSolver::add_parameters(prm);
       NonlinearSolver::add_parameters(prm);
       Time::add_parameters(prm);
+      PreciceAdapterConfiguration::add_parameters(prm);
 
       this->add_misc_parameters(prm);
       this->add_bc_parameters(prm);
