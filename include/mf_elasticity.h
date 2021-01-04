@@ -244,6 +244,12 @@ namespace FSI
     void
     setup_gmg(const bool initialize_all);
 
+    void
+    update_acceleration(VectorType &displacement_delta);
+
+    void
+    update_velocity(VectorType &displacement_delta);
+
     // MPI communicator
     MPI_Comm mpi_communicator;
 
@@ -281,6 +287,16 @@ namespace FSI
     const FEValuesExtractors::Vector u_fe;
 
     IndexSet locally_owned_dofs, locally_relevant_dofs;
+
+    static constexpr double beta  = 0.25;
+    static constexpr double gamma = 0.5;
+
+    const double alpha_1 = 1. / (beta * std::pow(parameters.delta_t, 2));
+    const double alpha_2 = 1. / (beta * parameters.delta_t);
+    const double alpha_3 = (1 - (2 * beta)) / (2 * beta);
+    const double alpha_4 = gamma / (beta * parameters.delta_t);
+    const double alpha_5 = 1 - (gamma / beta);
+    const double alpha_6 = (1 - (gamma / (2 * beta))) * parameters.delta_t;
 
     // matrix material
     std::shared_ptr<Material_Compressible_Neo_Hook_One_Field<dim, Number>>
@@ -338,6 +354,11 @@ namespace FSI
     VectorType total_displacement;
 
     VectorType newton_update;
+
+    VectorType acceleration;
+    VectorType velocity;
+    VectorType acceleration_old;
+    VectorType velocity_old;
 
     MGLevelObject<LevelVectorType> mg_total_displacement;
 
@@ -505,12 +526,16 @@ namespace FSI
         std::make_shared<Material_Compressible_Neo_Hook_One_Field<dim, Number>>(
           parameters.mu,
           parameters.nu,
+          parameters.rho,
+          alpha_1,
           parameters.material_formulation))
     , material_vec(
         std::make_shared<
           Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArrayType>>(
           parameters.mu,
           parameters.nu,
+          parameters.rho,
+          alpha_1,
           parameters.material_formulation))
     , material_level(
         std::make_shared<
@@ -518,17 +543,23 @@ namespace FSI
                                                    LevelVectorizedArrayType>>(
           parameters.mu,
           parameters.nu,
+          parameters.rho,
+          alpha_1,
           parameters.material_formulation))
     , material_inclusion(
         std::make_shared<Material_Compressible_Neo_Hook_One_Field<dim, Number>>(
           parameters.mu * 100.,
           parameters.nu,
+          parameters.rho,
+          alpha_1,
           parameters.material_formulation))
     , material_inclusion_vec(
         std::make_shared<
           Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArrayType>>(
           parameters.mu * 100.,
           parameters.nu,
+          parameters.rho,
+          alpha_1,
           parameters.material_formulation))
     , material_inclusion_level(
         std::make_shared<
@@ -536,6 +567,8 @@ namespace FSI
                                                    LevelVectorizedArrayType>>(
           parameters.mu * 100.,
           parameters.nu,
+          parameters.rho,
+          alpha_1,
           parameters.material_formulation))
     , qf_cell(n_q_points_1d)
     , qf_face(n_q_points_1d)
@@ -668,6 +701,9 @@ namespace FSI
         // \varDelta \mathbf{\Xi}$...
         solve_nonlinear_timestep();
         old_displacement += delta_displacement;
+
+        // Acceleration update is performed within a loop
+        update_velocity(delta_displacement);
 
         // ...and plot the results before moving on happily to the next time
         // step:
@@ -919,24 +955,20 @@ namespace FSI
     system_rhs.reinit(locally_owned_dofs,
                       locally_relevant_dofs,
                       mpi_communicator);
-    old_displacement.reinit(locally_owned_dofs,
-                            locally_relevant_dofs,
-                            mpi_communicator);
-    delta_displacement.reinit(locally_owned_dofs,
-                              locally_relevant_dofs,
-                              mpi_communicator);
-    total_displacement.reinit(locally_owned_dofs,
-                              locally_relevant_dofs,
-                              mpi_communicator);
-    newton_update.reinit(locally_owned_dofs,
-                         locally_relevant_dofs,
-                         mpi_communicator);
-
+    old_displacement.reinit(system_rhs);
+    delta_displacement.reinit(system_rhs);
+    total_displacement.reinit(system_rhs);
+    newton_update.reinit(system_rhs);
+    acceleration.reinit(system_rhs);
+    velocity.reinit(system_rhs);
+    acceleration_old.reinit(system_rhs);
+    velocity_old.reinit(system_rhs);
 
     // switch to ghost mode:
     old_displacement.update_ghost_values();
     delta_displacement.update_ghost_values();
     total_displacement.update_ghost_values();
+    acceleration.update_ghost_values();
 
     timer.leave_subsection();
 
@@ -1043,6 +1075,7 @@ namespace FSI
     // and then they are the same so we only need to re-init the data
     // according to the updated displacement/mapping
 
+    // TODO: Check if we really need update_values here.
     data.tasks_parallel_scheme = AdditionalData::none;
     data.mapping_update_flags  = update_gradients | update_JxW_values;
     data.initialize_indices    = initialize_indices;
@@ -1603,6 +1636,7 @@ namespace FSI
         // and do the solve of the linearized system:
         make_constraints(newton_iteration);
 
+        update_acceleration(delta_displacement);
         // update total solution prior to assembly
         set_total_solution();
 
@@ -1769,6 +1803,36 @@ namespace FSI
     total_displacement.equ(1, old_displacement);
     total_displacement += delta_displacement;
   }
+
+
+
+  // Update the acceleration according to Newmarks method
+  template <int dim, int degree, int n_q_points_1d, typename Number>
+  void
+  Solid<dim, degree, n_q_points_1d, Number>::update_velocity(
+    VectorType &displacement_delta)
+  {
+    velocity.equ(alpha_4, displacement_delta);
+    velocity.add(alpha_5, velocity_old, alpha_6, acceleration_old);
+
+    //      total_displacement_old = total_displacement;
+    // TODO: maybe copy_locally_owned_data_from is sufficient here
+    velocity_old     = velocity;
+    acceleration_old = acceleration;
+  }
+
+
+
+  // Update the acceleration according to Newmarks method
+  template <int dim, int degree, int n_q_points_1d, typename Number>
+  void
+  Solid<dim, degree, n_q_points_1d, Number>::update_acceleration(
+    VectorType &displacement_delta)
+  {
+    acceleration.equ(alpha_1, displacement_delta);
+    acceleration.add(-alpha_2, velocity_old, -alpha_3, acceleration_old);
+  }
+
 
   // Note that we must ensure that
   // the matrix is reset before any assembly operations can occur.
