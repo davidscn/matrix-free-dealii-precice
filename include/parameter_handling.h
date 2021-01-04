@@ -213,10 +213,7 @@ namespace FSI
                           "Shear modulus",
                           Patterns::Double(0.));
 
-        prm.add_parameter("Density",
-                          rho,
-                          "Density",
-                          Patterns::Double(0.));
+        prm.add_parameter("Density", rho, "Density", Patterns::Double(0.));
 
         prm.add_parameter("Formulation",
                           material_formulation,
