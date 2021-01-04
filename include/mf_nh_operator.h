@@ -411,6 +411,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::initialize(
       mf_caching = MFCaching::tensor4;
       cached_tensor2.reinit(n_cells, phi.n_q_points);
       cached_tensor4.reinit(n_cells, phi.n_q_points);
+      cached_second_scalar.reinit(n_cells, phi.n_q_points);
     }
   else if (caching == "tensor4_ns")
     {
@@ -536,6 +537,8 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::cache()
                     for (unsigned int d = 0; d < dim; ++d)
                       tau[d][d] -= scalar;
                   }
+                  cached_second_scalar(cell, q) =
+                    make_vectorized_array<Number>(1.) / det_F;
                   cached_tensor2(cell, q) = tau / det_F;
                   cached_tensor4(cell, q) =
                     (scalar * 2. / det_F) *
@@ -1367,6 +1370,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
               phi_current.submit_gradient(jc_part +
                                             grad_Nx_v * cached_tensor2(cell, q),
                                           q);
+              phi_current.submit_value(phi_current.get_value(q) *
+                                         cell_mat->rho_alpha *
+                                         cached_second_scalar(cell, q),
+                                       q);
             }
         }
       else if (cell_mat->formulation == 1 && mf_caching == MFCaching::tensor4)
@@ -1383,6 +1390,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
                                             cached_tensor4(cell, q) *
                                               symm_grad_Nx_v,
                                           q);
+              phi_current.submit_value(phi_current.get_value(q) *
+                                         cell_mat->rho_alpha *
+                                         cached_second_scalar(cell, q),
+                                       q);
             }
         }
       else if (cell_mat->formulation == 1 &&
