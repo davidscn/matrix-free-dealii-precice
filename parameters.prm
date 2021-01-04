@@ -14,9 +14,6 @@ subsection Misc
 
    # Output solution and mesh
    set Output solution = true
-
-   # Output absolute norms during convergence
-   set Output absolute norms = false
 end
 
 subsection Boundary conditions
