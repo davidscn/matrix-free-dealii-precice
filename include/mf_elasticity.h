@@ -65,6 +65,8 @@ static const unsigned int debug_level = 1;
 #include <material.h>
 #include <mf_nh_operator.h>
 #include <parameter_handling.h>
+#include <precice_adapter.h>
+#include <q_equidistant.h>
 #include <sys/stat.h>
 #include <version.h>
 
