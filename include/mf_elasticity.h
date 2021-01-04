@@ -1849,12 +1849,14 @@ namespace FSI
     std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
     std::vector<Tensor<2, dim, Number>> solution_grads_u_total(qf_cell.size());
+    std::vector<Tensor<1, dim, Number>> local_acceleration(qf_cell.size());
 
     // values at quadrature points:
     std::vector<Tensor<2, dim, Number>>          grad_Nx(dofs_per_cell);
     std::vector<SymmetricTensor<2, dim, Number>> symm_grad_Nx(dofs_per_cell);
 
-    FEValues<dim> fe_values(fe, qf_cell, update_gradients | update_JxW_values);
+    FEValues<dim> fe_values(
+      fe, qf_cell, update_values | update_gradients | update_JxW_values);
     FEFaceValues<dim> fe_face_values(fe,
                                      qf_face,
                                      update_values | update_quadrature_points |
@@ -1875,6 +1877,8 @@ namespace FSI
           // the displacement gradient:
           fe_values[u_fe].get_function_gradients(total_displacement,
                                                  solution_grads_u_total);
+
+          fe_values[u_fe].get_function_values(acceleration, local_acceleration);
 
           // Now we build the residual. In doing so, we first extract some
           // configuration dependent variables from our QPH history objects
@@ -1912,7 +1916,17 @@ namespace FSI
               // loop over j first to make caching a bit more
               // straight-forward without recourse to symmetry
               for (unsigned int j = 0; j < dofs_per_cell; ++j)
-                cell_rhs(j) -= (symm_grad_Nx[j] * tau) * JxW;
+                {
+                  cell_rhs(j) -= (symm_grad_Nx[j] * tau) * JxW;
+                  const unsigned int component_j =
+                    fe.system_to_component_index(j).first;
+
+                  for (unsigned int i = 0; i < dofs_per_cell; ++i)
+                    cell_rhs(j) -=
+                      fe_values[u_fe].value(j, q_point) * cell_mat->rho *
+                      fe_values[u_fe].value(i, q_point) *
+                      local_acceleration[q_point][component_j] * JxW;
+                }
 
             } // end loop over quadrature points
 
