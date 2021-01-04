@@ -16,8 +16,8 @@ namespace FSI
     class Misc
     {
     public:
-      std::string output_folder    = std::string("");
-      bool        output_solution  = true;
+      std::string output_folder   = std::string("");
+      bool        output_solution = true;
 
       std::vector<Point<dim>> output_points;
 
