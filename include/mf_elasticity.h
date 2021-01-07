@@ -61,6 +61,7 @@ static const unsigned int debug_level = 1;
 
 #include <deal.II/physics/elasticity/kinematics.h>
 #include <deal.II/physics/elasticity/standard_tensors.h>
+#include <deal.II/physics/transformations.h>
 
 #include <material.h>
 #include <mf_nh_operator.h>
@@ -183,7 +184,7 @@ namespace FSI
 
     // Apply Dirichlet boundary conditions on the displacement field
     void
-    make_constraints(const int &it_nr);
+    make_constraints(const int &it_nr, const bool print = true);
 
     bool
     check_convergence(const unsigned int newton_iteration);
@@ -320,6 +321,10 @@ namespace FSI
     std::shared_ptr<
       Material_Compressible_Neo_Hook_One_Field<dim, LevelVectorizedArrayType>>
       material_inclusion_level;
+
+    std::unique_ptr<
+      Adapter::Adapter<dim, degree, VectorType, VectorizedArrayType>>
+      precice_adapter;
 
     static const unsigned int n_components      = dim;
     static const unsigned int first_u_component = 0;
@@ -689,29 +694,34 @@ namespace FSI
     // time domain.
     //
     setup_matrix_free();
-
+    precice_adapter = std::make_unique<
+      Adapter::Adapter<dim, degree, VectorType, VectorizedArrayType>>(
+      parameters, 11, false, mf_data_reference);
+    precice_adapter->initialize(total_displacement);
     // At the beginning, we reset the solution update for this time step...
-    while (time.current() <= time.end())
+    while (time.current() <= time.end() ||
+           precice_adapter->is_coupling_ongoing())
       {
         parameters.set_time(time.current());
+
+        // TODO: Reset might not be required
         delta_displacement = 0.0;
 
-        // ...solve the current time step and update total solution vector
-        // $\mathbf{\Xi}_{\textrm{n}} = \mathbf{\Xi}_{\textrm{n-1}} +
-        // \varDelta \mathbf{\Xi}$...
         solve_nonlinear_timestep();
         old_displacement += delta_displacement;
 
-        // Acceleration update is performed within a loop
+        precice_adapter->advance(total_displacement, time.get_delta_t());
+        // Acceleration update is performed within the Newton loop
         update_velocity(delta_displacement);
 
         // ...and plot the results before moving on happily to the next time
         // step:
-        output_results();
-
-        print_solution();
-
-        time.increment();
+        if (precice_adapter->is_time_window_complete())
+          {
+            output_results();
+            print_solution();
+            time.increment();
+          }
       }
 
     // for post-processing, print average CG iterations over the whole run:
@@ -988,7 +998,7 @@ namespace FSI
   void
   Solid<dim, degree, n_q_points_1d, Number>::setup_matrix_free()
   {
-    make_constraints(0);
+    make_constraints(0, false);
     // Setup MF dditional data
     typename MatrixFree<dim, double>::AdditionalData data;
     setup_mf_additional_data(data,
@@ -1085,6 +1095,13 @@ namespace FSI
     // Setup MF additional data
     if (level == numbers::invalid_unsigned_int)
       {
+        // TODO: Sets up the structure for inner face batches as well, maybe
+        // another option way is possible. Also, this option is only required
+        // for the referential MatrixFree, but consistency between referential
+        // and Eulerian MatrixFree is required
+        data.mapping_update_flags_boundary_faces =
+          update_values | update_gradients | update_quadrature_points |
+          update_JxW_values;
         data.cell_vectorization_category.resize(triangulation.n_active_cells());
         for (const auto &cell : triangulation.active_cell_iterators())
           if (cell->is_locally_owned())
@@ -1929,49 +1946,50 @@ namespace FSI
                 }
 
             } // end loop over quadrature points
-
-          // Next we assemble the Neumann contribution. We first check to see it
-          // the cell face exists on a boundary on which a traction is applied
-          // and add the contribution if this is the case.
-          for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
-               ++face)
-            if (cell->face(face)->at_boundary() == true)
-              {
-                const auto &el =
-                  parameters.neumann.find(cell->face(face)->boundary_id());
-                if (el == parameters.neumann.end())
-                  continue;
-
-                fe_face_values.reinit(cell, face);
-                for (unsigned int f_q_point = 0; f_q_point < n_q_points_f;
-                     ++f_q_point)
-                  {
-                    // We specify the traction in reference configuration
-                    // according to the parameter file.
-
-                    // Note that the contributions to the right hand side
-                    // vector we compute here only exist in the displacement
-                    // components of the vector.
-                    Vector<double> traction(dim);
-                    (*el).second->vector_value(
-                      fe_face_values.quadrature_point(f_q_point), traction);
-
-                    for (unsigned int i = 0; i < dofs_per_cell; ++i)
-                      {
-                        const unsigned int component_i =
-                          fe.system_to_component_index(i).first;
-                        const double Ni =
-                          fe_face_values.shape_value(i, f_q_point);
-                        const double JxW = fe_face_values.JxW(f_q_point);
-                        cell_rhs(i) += (Ni * traction[component_i]) * JxW;
-                      }
-                  }
-              }
-
           constraints.distribute_local_to_global(cell_rhs,
                                                  local_dof_indices,
                                                  system_rhs);
         }
+
+    FEFaceEvaluation<dim, degree, n_q_points_1d, dim, Number> phi(
+      *mf_data_reference);
+    const unsigned int neumann_id = 11;
+    auto               q_index    = precice_adapter->begin_interface_IDs();
+
+    for (unsigned int face = mf_data_reference->n_inner_face_batches();
+         face < mf_data_reference->n_boundary_face_batches() +
+                  mf_data_reference->n_inner_face_batches();
+         ++face)
+      {
+        const auto boundary_id = mf_data_reference->get_boundary_id(face);
+
+        // Only interfaces
+        if (boundary_id != neumann_id)
+          continue;
+
+        // Read out the total displacment
+        phi.reinit(face);
+        phi.gather_evaluate(total_displacement, false, true);
+        // Number of active faces
+        const auto active_faces =
+          mf_data_reference->n_active_entries_per_face_batch(face);
+
+        for (unsigned int q = 0; q < phi.n_q_points; ++q)
+          {
+            // Evaluate deformation gradient
+            const auto F =
+              Physics::Elasticity::Kinematics::F(phi.get_gradient(q));
+            // Get the value from preCICE
+            const auto traction =
+              precice_adapter->read_on_quadrature_point(*q_index, active_faces);
+            // Perform pull-back operation and submit value
+            phi.submit_value(
+              Physics::Transformations::Covariant::pull_back(traction, F), q);
+            ++q_index;
+          }
+        // Integrate the result and write into the rhs vector
+        phi.integrate_scatter(true, false, system_rhs);
+      }
 
     system_rhs.compress(VectorOperation::add);
 
@@ -1994,9 +2012,11 @@ namespace FSI
   // are already exactly satisfied.
   template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::make_constraints(const int &it_nr)
+  Solid<dim, degree, n_q_points_1d, Number>::make_constraints(const int &it_nr,
+                                                              const bool print)
   {
-    pcout << " CST " << std::flush;
+    if (print)
+      pcout << " CST " << std::flush;
 
     // Since the constraints are different at different Newton iterations, we
     // need to clear the constraints matrix and completely rebuild
