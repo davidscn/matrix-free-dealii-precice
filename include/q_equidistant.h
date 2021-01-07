@@ -43,12 +43,4 @@ QEquidistant<1>::QEquidistant(const unsigned int n)
 template <int dim>
 QEquidistant<dim>::QEquidistant(const unsigned int n)
   : Quadrature<dim>(QEquidistant<dim - 1>(n), QEquidistant<1>(n))
-{
-  AssertThrow(
-    dim < 3,
-    ExcMessage(
-      "This quadrature formula is primarily designed for the 1D and 2D case. "
-      "If you are sure what you are doing here, you can delete this Assertion. "
-      "For surface coupling, however, only the 1D and 2D version of this quadrature "
-      "formula matter."))
-}
+{}

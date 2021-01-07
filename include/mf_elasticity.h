@@ -200,11 +200,6 @@ namespace FSI
     std::tuple<unsigned int, double, double>
     solve_linear_system(VectorType &newton_update) const;
 
-    // Set total solution based on the current values of solution_n and
-    // solution_delta:
-    void
-    set_total_solution();
-
     void
     output_results() const;
 
@@ -298,6 +293,8 @@ namespace FSI
     const double alpha_4 = gamma / (beta * parameters.delta_t);
     const double alpha_5 = 1 - (gamma / beta);
     const double alpha_6 = (1 - (gamma / (2 * beta))) * parameters.delta_t;
+
+    const types::boundary_id interface_id = 11;
 
     // matrix material
     std::shared_ptr<Material_Compressible_Neo_Hook_One_Field<dim, Number>>
@@ -700,28 +697,34 @@ namespace FSI
     setup_matrix_free();
     precice_adapter = std::make_unique<
       Adapter::Adapter<dim, degree, VectorType, VectorizedArrayType>>(
-      parameters, 11, false, mf_data_reference);
+      parameters, interface_id, false, mf_data_reference);
     precice_adapter->initialize(total_displacement);
+
     // At the beginning, we reset the solution update for this time step...
     while (time.current() <= time.end() ||
            precice_adapter->is_coupling_ongoing())
       {
         parameters.set_time(time.current());
-
-        // TODO: Reset might not be required
-        delta_displacement = 0.0;
+        // preCICE complains otherwise
+        precice_adapter->save_current_state_if_required([&]() {});
 
         solve_nonlinear_timestep();
-        old_displacement += delta_displacement;
 
         precice_adapter->advance(total_displacement, time.get_delta_t());
-        // Acceleration update is performed within the Newton loop
-        update_velocity(delta_displacement);
+
+        precice_adapter->reload_old_state_if_required([&]() {
+          acceleration       = acceleration_old;
+          total_displacement = old_displacement;
+        });
 
         // ...and plot the results before moving on happily to the next time
         // step:
         if (precice_adapter->is_time_window_complete())
           {
+            // TODO: Work with vectors without ghost entris
+            old_displacement = total_displacement;
+            // Acceleration update is performed within the Newton loop
+            update_velocity(delta_displacement);
             output_results();
             print_solution();
             time.increment();
@@ -841,7 +844,7 @@ namespace FSI
                   if (face->boundary_id() == id_flap_short_top ||
                       face->boundary_id() == id_flap_long_bottom ||
                       face->boundary_id() == id_flap_long_top)
-                    face->set_boundary_id(interface_boundary_id);
+                    face->set_boundary_id(interface_id);
                   // Boundaries clamped in all directions
                   else if (face->boundary_id() == id_flap_short_bottom)
                     face->set_boundary_id(clamped_mesh_id);
@@ -898,7 +901,7 @@ namespace FSI
                     cell->face(face)->set_boundary_id(1); // -X faces
                   else if (std::abs(cell->face(face)->center()[0] - 48.0) <
                            tol_boundary)
-                    cell->face(face)->set_boundary_id(11); // +X faces
+                    cell->face(face)->set_boundary_id(interface_id); // +X faces
                   else if (std::abs(std::abs(cell->face(face)->center()[0]) -
                                     0.5) < tol_boundary)
                     cell->face(face)->set_boundary_id(2); // +Z and -Z faces
@@ -967,6 +970,7 @@ namespace FSI
     system_rhs.reinit(locally_owned_dofs,
                       locally_relevant_dofs,
                       mpi_communicator);
+    // TODO: Switch to vectors without ghosts
     old_displacement.reinit(system_rhs);
     delta_displacement.reinit(system_rhs);
     total_displacement.reinit(system_rhs);
@@ -977,7 +981,6 @@ namespace FSI
     velocity_old.reinit(system_rhs);
 
     // switch to ghost mode:
-    old_displacement.update_ghost_values();
     delta_displacement.update_ghost_values();
     total_displacement.update_ghost_values();
     acceleration.update_ghost_values();
@@ -1655,12 +1658,10 @@ namespace FSI
         // and do the solve of the linearized system:
         make_constraints(newton_iteration);
 
-        update_acceleration(delta_displacement);
         // update total solution prior to assembly
-        set_total_solution();
 
-        // now ready to go-on and assmble linearized problem around solution_n
-        // + solution_delta for this iteration.
+        // now ready to go-on and assmble linearized problem around the total
+        // displacement
         assemble_system();
 
         if (check_convergence(newton_iteration))
@@ -1685,7 +1686,14 @@ namespace FSI
         error_update_norm = error_update;
         error_update_norm.normalise(error_update_0);
 
-        delta_displacement += newton_update;
+        if (newton_iteration != 0)
+          delta_displacement += newton_update;
+        else
+          delta_displacement = newton_update;
+
+        update_acceleration(delta_displacement);
+        total_displacement += newton_update;
+
 
         pcout << " | " << std::fixed << std::setprecision(3) << std::setw(7)
               << std::scientific << std::get<0>(lin_solver_output) << "  "
@@ -1788,7 +1796,7 @@ namespace FSI
                 fe_values_soln.reinit(cell_point.first);
 
                 std::vector<Tensor<1, dim>> soln_values(soln_qrule.size());
-                fe_values_soln[u_fe].get_function_values(old_displacement,
+                fe_values_soln[u_fe].get_function_values(total_displacement,
                                                          soln_values);
                 displacement = soln_values[0];
               }
@@ -1807,20 +1815,6 @@ namespace FSI
               << "  displacement: " << displacement << std::endl;
 
       } // end loop over output points
-  }
-
-
-  // @sect4{Solid::set_total_solution}
-
-  // This function sets the total solution, which is valid at any Newton step.
-  // This is required as, to reduce computational error, the total solution is
-  // only updated at the end of the timestep.
-  template <int dim, int degree, int n_q_points_1d, typename Number>
-  void
-  Solid<dim, degree, n_q_points_1d, Number>::set_total_solution()
-  {
-    total_displacement.equ(1, old_displacement);
-    total_displacement += delta_displacement;
   }
 
 
@@ -1876,10 +1870,6 @@ namespace FSI
 
     FEValues<dim> fe_values(
       fe, qf_cell, update_values | update_gradients | update_JxW_values);
-    FEFaceValues<dim> fe_face_values(fe,
-                                     qf_face,
-                                     update_values | update_quadrature_points |
-                                       update_JxW_values);
 
     for (const auto &cell : dof_handler.active_cell_iterators())
       if (cell->is_locally_owned())
@@ -1955,8 +1945,7 @@ namespace FSI
 
     FEFaceEvaluation<dim, degree, n_q_points_1d, dim, Number> phi(
       *mf_data_reference);
-    const unsigned int neumann_id = 11;
-    auto               q_index    = precice_adapter->begin_interface_IDs();
+    auto q_index = precice_adapter->begin_interface_IDs();
 
     for (unsigned int face = mf_data_reference->n_inner_face_batches();
          face < mf_data_reference->n_boundary_face_batches() +
@@ -1966,7 +1955,7 @@ namespace FSI
         const auto boundary_id = mf_data_reference->get_boundary_id(face);
 
         // Only interfaces
-        if (boundary_id != neumann_id)
+        if (boundary_id != interface_id)
           continue;
 
         // Read out the total displacment
@@ -2083,6 +2072,7 @@ namespace FSI
     double       cond_number = 1.0;
 
     // reset solution vector each iteration
+    // TODO: We use zero dst anyway, so this can be removed
     newton_update = 0.;
 
     // We solve for the incremental displacement $d\mathbf{u}$.
@@ -2188,7 +2178,7 @@ namespace FSI
     std::vector<std::string> solution_name(dim, "displacement");
 
     data_out.attach_dof_handler(dof_handler);
-    data_out.add_data_vector(old_displacement,
+    data_out.add_data_vector(total_displacement,
                              solution_name,
                              DataOut<dim>::type_dof_data,
                              data_component_interpretation);

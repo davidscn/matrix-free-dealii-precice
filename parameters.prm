@@ -22,9 +22,6 @@ subsection Boundary conditions
 
   # Dirichlet component mask for each boundary ID
   set Dirichlet IDs and component mask = 1:true,true
-
-  # Neumann functions for each boundary ID
-  set Neumann IDs and expressions = 11:0,(-19.44599873)
 end
 
 

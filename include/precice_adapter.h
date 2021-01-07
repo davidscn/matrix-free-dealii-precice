@@ -91,8 +91,7 @@ namespace Adapter
      *             both functions.
      */
     void
-    save_current_state_if_required(
-      const std::vector<VectorType *> &state_variables);
+    save_current_state_if_required(const std::function<void()> &save_state);
 
     /**
      * @brief      Reloads the previously stored variables in case of an implicit
@@ -109,18 +108,18 @@ namespace Adapter
      *             vector must be the same for both functions.
      */
     void
-    reload_old_state_if_required(std::vector<VectorType *> &state_variables);
+    reload_old_state_if_required(const std::function<void()> &reload_old_state);
 
     /**
      * @brief read_on_quadrature_point Returns the dim dimensional read data
-     *        given the ID of the interface node we want to access. The ID needs
-     *        to be associated to the 'read' mesh. The function is in practice
+     *        given the ID of the interface node we want to access. The ID
+     * needs to be associated to the 'read' mesh. The function is in practice
      *        used together with @p begin_interface_IDs() (see below), so that
      *        we can iterate over all IDs consecutively. The function is not
      *        thread safe since the used preCICE function is not thread safe.
      *        Also, the functionality assumes that we iterate during the
-     *        initialization in the same way over the interface than during the
-     *        assembly step.
+     *        initialization in the same way over the interface than during
+     * the assembly step.
      *
      * @param[out] data dim dimensional data associated to the interface node
      * @param[in]  vertex_id preCICE related index of the read_data vertex
@@ -361,21 +360,16 @@ namespace Adapter
             int fe_degree,
             typename VectorType,
             typename VectorizedArrayType>
-  void
+  inline void
   Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::
-    save_current_state_if_required(
-      const std::vector<VectorType *> &state_variables)
+    save_current_state_if_required(const std::function<void()> &save_state)
   {
     // First, we let preCICE check, whether we need to store the variables.
     // Then, the data is stored in the class
     if (precice->isActionRequired(
           precice::constants::actionWriteIterationCheckpoint()))
       {
-        old_state_data.resize(state_variables.size());
-
-        for (uint i = 0; i < state_variables.size(); ++i)
-          old_state_data[i] = *(state_variables[i]);
-
+        save_state();
         precice->markActionFulfilled(
           precice::constants::actionWriteIterationCheckpoint());
       }
@@ -387,22 +381,16 @@ namespace Adapter
             int fe_degree,
             typename VectorType,
             typename VectorizedArrayType>
-  void
+  inline void
   Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::
-    reload_old_state_if_required(std::vector<VectorType *> &state_variables)
+    reload_old_state_if_required(const std::function<void()> &reload_old_state)
   {
     // In case we need to reload a state, we just take the internally stored
     // data vectors and write then in to the input data
     if (precice->isActionRequired(
           precice::constants::actionReadIterationCheckpoint()))
       {
-        Assert(state_variables.size() == old_state_data.size(),
-               ExcMessage(
-                 "state_variables are not the same as previously saved."));
-        // TODO:: Copy locally owned data from
-        for (uint i = 0; i < state_variables.size(); ++i)
-          *(state_variables[i]) = old_state_data[i];
-
+        reload_old_state();
         precice->markActionFulfilled(
           precice::constants::actionReadIterationCheckpoint());
       }
