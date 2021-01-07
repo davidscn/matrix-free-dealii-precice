@@ -411,6 +411,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::initialize(
       mf_caching = MFCaching::tensor4;
       cached_tensor2.reinit(n_cells, phi.n_q_points);
       cached_tensor4.reinit(n_cells, phi.n_q_points);
+      cached_second_scalar.reinit(n_cells, phi.n_q_points);
     }
   else if (caching == "tensor4_ns")
     {
@@ -516,8 +517,9 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::cache()
                 }
               else if (mf_caching == MFCaching::tensor2)
                 {
-                  cached_scalar(cell, q)        = scalar * 2. / det_F;
-                  cached_second_scalar(cell, q) = 2 * cell_mat->lambda / det_F;
+                  cached_scalar(cell, q) = scalar * 2. / det_F;
+                  cached_second_scalar(cell, q) =
+                    make_vectorized_array<Number>(1.) / det_F;
 
                   SymmetricTensor<2, dim, VectorizedArrayType> tau;
                   {
@@ -535,6 +537,8 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::cache()
                     for (unsigned int d = 0; d < dim; ++d)
                       tau[d][d] -= scalar;
                   }
+                  cached_second_scalar(cell, q) =
+                    make_vectorized_array<Number>(1.) / det_F;
                   cached_tensor2(cell, q) = tau / det_F;
                   cached_tensor4(cell, q) =
                     (scalar * 2. / det_F) *
@@ -937,14 +941,14 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
       if (mf_caching == MFCaching::tensor4_ns ||
           mf_caching == MFCaching::scalar_referential)
         {
-          phi_reference.evaluate(false, true, false);
+          phi_reference.evaluate(true, true, false);
         }
       else
         {
           if (mf_caching == MFCaching::scalar)
             phi_reference.evaluate(false, true, false);
 
-          phi_current.evaluate(false, true, false);
+          phi_current.evaluate(true, true, false);
         }
     }
 
@@ -1127,14 +1131,14 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
                 grad_Nx_v * tau_ns;
               phi_current.submit_gradient(
                 (jc_part + geo) * inv_det_F
-                // phi_current.submit_value(
-                //   phi_current.get_value(q) * rho * inv_det_F
                 // Note: We need to integrate over the reference element,
                 // thus we divide by det_F so that FEEvaluation with
                 // mapping does the right thing.
                 ,
                 q);
-
+              phi_current.submit_value(phi_current.get_value(q) *
+                                         cell_mat->rho_alpha * inv_det_F,
+                                       q);
             } // end of the loop over quadrature points
         }
       else if (cell_mat->formulation == 1 && mf_caching == MFCaching::scalar)
@@ -1202,12 +1206,15 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
                       std::to_string(std::abs(JxW_scale[i] * det_F[i] - 1.))));
                 }
 #endif
-
               const Tensor<2, dim, VectorizedArrayType> tau_ns(tau);
               const Tensor<2, dim, VectorizedArrayType> geo =
                 grad_Nx_v * tau_ns;
               const VectorizedArrayType inv_det_F = Number(1.0) / det_F;
               phi_current.submit_gradient((jc_part + geo) * inv_det_F, q);
+
+              phi_current.submit_value(phi_current.get_value(q) *
+                                         cell_mat->rho_alpha * inv_det_F,
+                                       q);
             }
         }
       else if (cell_mat->formulation == 1 &&
@@ -1327,6 +1334,9 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
                 jc_part +
                 (grad_Nx_v * Tensor<2, dim, VectorizedArrayType>(tau));
               phi_reference.submit_gradient(queued * transpose(F_inv), q);
+              phi_reference.submit_value(phi_reference.get_value(q) *
+                                           cell_mat->rho_alpha,
+                                         q);
               // MK: The 60 lines above this are the interesting part: I only
               // need to work with phi_reference. What happens in addition to
               // the scalar caching variant is that I have to multiply grad_Nx_v
@@ -1349,8 +1359,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
               SymmetricTensor<2, dim, VectorizedArrayType> jc_part =
                 cached_scalar(cell, q) * symm_grad_Nx_v;
               {
-                const VectorizedArrayType tmp =
-                  cached_second_scalar(cell, q) * trace(symm_grad_Nx_v);
+                const VectorizedArrayType tmp = 2 * cell_mat->lambda *
+                                                cached_second_scalar(cell, q) *
+                                                trace(symm_grad_Nx_v);
+
                 for (unsigned int i = 0; i < dim; ++i)
                   jc_part[i][i] += tmp;
               }
@@ -1358,6 +1370,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
               phi_current.submit_gradient(jc_part +
                                             grad_Nx_v * cached_tensor2(cell, q),
                                           q);
+              phi_current.submit_value(phi_current.get_value(q) *
+                                         cell_mat->rho_alpha *
+                                         cached_second_scalar(cell, q),
+                                       q);
             }
         }
       else if (cell_mat->formulation == 1 && mf_caching == MFCaching::tensor4)
@@ -1374,6 +1390,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
                                             cached_tensor4(cell, q) *
                                               symm_grad_Nx_v,
                                           q);
+              phi_current.submit_value(phi_current.get_value(q) *
+                                         cell_mat->rho_alpha *
+                                         cached_second_scalar(cell, q),
+                                       q);
             }
         }
       else if (cell_mat->formulation == 1 &&
@@ -1389,6 +1409,9 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
                 double_contract<2, 0, 3, 1>(cached_tensor4_ns(cell, q),
                                             grad_Nx_v),
                 q);
+              phi_reference.submit_value(phi_reference.get_value(q) *
+                                           cell_mat->rho_alpha,
+                                         q);
             }
         }
       else
@@ -1417,11 +1440,11 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
       if (mf_caching == MFCaching::tensor4_ns ||
           mf_caching == MFCaching::scalar_referential)
         {
-          phi_reference.integrate(false, true);
+          phi_reference.integrate(true, true);
         }
       else
         {
-          phi_current.integrate(false, true);
+          phi_current.integrate(true, true);
         }
     }
 }

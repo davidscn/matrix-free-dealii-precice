@@ -18,7 +18,7 @@ SET(TARGETLIB_SRC
 
 SET(CLEAN_UP_FILES
   # a custom list of globs, e.g. *.log *.vtk
-  *.vtk
+  *.vtu
 )
 
 MESSAGE(STATUS "Build type: ${CMAKE_BUILD_TYPE}")

@@ -191,6 +191,7 @@ namespace FSI
     {
       double       nu                   = 0.4;
       double       mu                   = 0.5e6;
+      double       rho                  = 1000;
       unsigned int material_formulation = 1;
 
       void
@@ -211,6 +212,8 @@ namespace FSI
                           mu,
                           "Shear modulus",
                           Patterns::Double(0.));
+
+        prm.add_parameter("Density", rho, "Density", Patterns::Double(0.));
 
         prm.add_parameter("Formulation",
                           material_formulation,
@@ -433,6 +436,9 @@ namespace FSI
 
       prm.parse_input(input_file);
 
+      AssertThrow((material_formulation == 0 && mf_caching == "scalar") ||
+                    material_formulation == 1,
+                  ExcInternalError());
       AssertDimension(dim, this->dim);
     }
 

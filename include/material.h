@@ -77,10 +77,14 @@ class Material_Compressible_Neo_Hook_One_Field
 public:
   Material_Compressible_Neo_Hook_One_Field(const double       mu,
                                            const double       nu,
+                                           const double       rho,
+                                           const double       alpha_1,
                                            const unsigned int formulation)
     : kappa((2.0 * mu * (1.0 + nu)) / (3.0 * (1.0 - 2.0 * nu)))
     , c_1(mu / 2.0)
     , mu(mu)
+    , rho(rho)
+    , rho_alpha(rho * alpha_1)
     , lambda((2.0 * mu * nu) / (1.0 - 2.0 * nu))
     , formulation(formulation)
   {
@@ -251,6 +255,8 @@ public:
   const double       kappa;
   const double       c_1;
   const double       mu;
+  const double       rho;
+  const double       rho_alpha;
   const double       lambda;
   const unsigned int formulation;
 
