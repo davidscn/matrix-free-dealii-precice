@@ -82,30 +82,6 @@ namespace FSI
           "Name of the write data in the precice-config.xml file",
           Patterns::Anything());
       }
-
-      const std::string error_message(
-        "Either specify a 'Mesh name', which will be applied to the read and write mesh (data location)"
-        " or a separate 'Read Mesh name' and a 'Write mesh name' in order to enable more mapping frindly "
-        "specialized data locations at the interface. Specifying both or none of these "
-        "options is invalid. Make sure you adjust your configuration file '" +
-        config_file + "' according to your settings.");
-
-      if (read_mesh_name == write_mesh_name)
-        {
-          AssertThrow((mesh_name != read_mesh_name), ExcMessage(error_message));
-
-          read_mesh_name  = mesh_name;
-          write_mesh_name = mesh_name;
-        }
-      else
-        {
-          AssertThrow(("default" != read_mesh_name) &&
-                        ("default" != write_mesh_name),
-                      ExcMessage(error_message));
-
-          AssertThrow("default" == mesh_name, ExcMessage(error_message));
-        }
-
       prm.leave_subsection();
     }
   } // namespace Parameters
