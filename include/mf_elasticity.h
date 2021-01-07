@@ -1195,8 +1195,15 @@ namespace FSI
     // TODO: Parametrize mapping
     if (reinit_mf_reference)
       {
-        mf_data_reference->reinit(
-          StaticMappingQ1<dim>::mapping, dof_handler, constraints, quad, data);
+        const std::vector<const AffineConstraints<double> *> constr = {
+          &constraints};
+        const std::vector<Quadrature<1>> quadratures = {
+          quad, QEquidistant<1>(n_q_points_1d)};
+        mf_data_reference->reinit(StaticMappingQ1<dim>::mapping,
+                                  {&dof_handler},
+                                  constr,
+                                  quadratures,
+                                  data);
 
         // Only reinitialized in case the reference MF has changed, since all
         // data structures are reinitialized according to the reference object

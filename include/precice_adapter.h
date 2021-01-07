@@ -276,11 +276,11 @@ namespace Adapter
     //    const int selected_sampling =
     //      write_sampling == std::numeric_limits<int>::max() ? fe_degree + 1 :
     //    write_sampling;
-
+    const int write_quad_index_ = 1;
     read_quad_index  = read_quad_index_;
     write_quad_index = read_write_on_same ?
                          read_quad_index :
-                         read_quad_index /*TODO: Implement sampling variant*/;
+                         write_quad_index_ /*TODO: Implement sampling variant*/;
 
     // get precice specific IDs from precice and store them in
     // the class they are later needed for data transfer
