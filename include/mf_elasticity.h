@@ -602,51 +602,55 @@ namespace FSI
     mf_nh_operator.set_material(material_vec, material_inclusion_vec);
 
     // print some data about how we run:
-    const int n_tasks =
-      dealii::Utilities::MPI::n_mpi_processes(mpi_communicator);
-    const int          n_threads      = dealii::MultithreadInfo::n_threads();
-    const unsigned int n_vect_doubles = VectorizedArray<double>::size();
-    const unsigned int n_vect_bits    = 8 * sizeof(double) * n_vect_doubles;
+    auto print = [&](ConditionalOStream &stream) {
+      const int n_tasks =
+        dealii::Utilities::MPI::n_mpi_processes(mpi_communicator);
+      const int          n_threads      = dealii::MultithreadInfo::n_threads();
+      const unsigned int n_vect_doubles = VectorizedArray<double>::size();
+      const unsigned int n_vect_bits    = 8 * sizeof(double) * n_vect_doubles;
 
-    timer_out
-      << "-----------------------------------------------------------------------------"
-      << std::endl
+      stream
+        << "-----------------------------------------------------------------------------"
+        << std::endl
 #ifdef DEBUG
-      << "--     . running in DEBUG mode" << std::endl
+        << "--     . running in DEBUG mode" << std::endl
 #else
-      << "--     . running in OPTIMIZED mode" << std::endl
+        << "--     . running in OPTIMIZED mode" << std::endl
 #endif
-      << "--     . running with " << n_tasks << " MPI process"
-      << (n_tasks == 1 ? "" : "es") << std::endl;
+        << "--     . running with " << n_tasks << " MPI process"
+        << (n_tasks == 1 ? "" : "es") << std::endl;
 
-    if (n_threads > 1)
-      timer_out << "--     . using " << n_threads << " threads "
-                << (n_tasks == 1 ? "" : "each") << std::endl;
+      if (n_threads > 1)
+        stream << "--     . using " << n_threads << " threads "
+               << (n_tasks == 1 ? "" : "each") << std::endl;
 
-    timer_out << "--     . vectorization over " << n_vect_doubles
-              << " doubles = " << n_vect_bits << " bits (";
+      stream << "--     . vectorization over " << n_vect_doubles
+             << " doubles = " << n_vect_bits << " bits (";
 
-    if (n_vect_bits == 64)
-      timer_out << "disabled";
-    else if (n_vect_bits == 128)
-      timer_out << "SSE2";
-    else if (n_vect_bits == 256)
-      timer_out << "AVX";
-    else if (n_vect_bits == 512)
-      timer_out << "AVX512";
-    else
-      AssertThrow(false, ExcNotImplemented());
+      if (n_vect_bits == 64)
+        stream << "disabled";
+      else if (n_vect_bits == 128)
+        stream << "SSE2";
+      else if (n_vect_bits == 256)
+        stream << "AVX";
+      else if (n_vect_bits == 512)
+        stream << "AVX512";
+      else
+        AssertThrow(false, ExcNotImplemented());
 
-    timer_out << ")" << std::endl;
-    timer_out << "--     . version " << GIT_TAG << " (revision " << GIT_SHORTREV
-              << " on branch " << GIT_BRANCH << ")" << std::endl;
-    timer_out << "--     . deal.II " << DEAL_II_PACKAGE_VERSION << " (revision "
-              << DEAL_II_GIT_SHORTREV << " on branch " << DEAL_II_GIT_BRANCH
-              << ")" << std::endl;
-    timer_out
-      << "-----------------------------------------------------------------------------"
-      << std::endl
-      << std::endl;
+      stream << ")" << std::endl;
+      stream << "--     . version " << GIT_TAG << " (revision " << GIT_SHORTREV
+             << " on branch " << GIT_BRANCH << ")" << std::endl;
+      stream << "--     . deal.II " << DEAL_II_PACKAGE_VERSION << " (revision "
+             << DEAL_II_GIT_SHORTREV << " on branch " << DEAL_II_GIT_BRANCH
+             << ")" << std::endl;
+      stream
+        << "-----------------------------------------------------------------------------"
+        << std::endl
+        << std::endl;
+    };
+    print(timer_out);
+    print(pcout);
   }
 
   // The class destructor simply clears the data held by the DOFHandler
@@ -916,8 +920,8 @@ namespace FSI
 
     vol_reference = GridTools::volume(triangulation);
     vol_current   = vol_reference;
-    pcout << "Grid:\n  Reference volume: " << vol_reference << std::endl;
-    bcout << "Grid:\n  Reference volume: " << vol_reference << std::endl;
+    pcout << "--     . Reference volume: " << vol_reference << std::endl;
+    bcout << "--     . Reference volume: " << vol_reference << std::endl;
   }
 
 
@@ -938,23 +942,21 @@ namespace FSI
     dof_handler.distribute_mg_dofs();
     DoFRenumbering::Cuthill_McKee(dof_handler);
 
-    std::locale s = pcout.get_stream().getloc();
-    pcout.get_stream().imbue(std::locale(""));
-    pcout << "Triangulation:"
-          << "\n  Number of active cells: "
-          << triangulation.n_global_active_cells()
-          << "\n  Number of degrees of freedom: " << dof_handler.n_dofs()
-          << std::endl;
-    pcout.get_stream().imbue(s);
-
-    std::locale f = bcout.get_stream().getloc();
-    bcout.get_stream().imbue(std::locale(""));
-    bcout << "Triangulation:"
-          << "\n  Number of active cells: "
-          << triangulation.n_global_active_cells()
-          << "\n  Number of degrees of freedom: " << dof_handler.n_dofs()
-          << std::endl;
-    bcout.get_stream().imbue(f);
+    auto print = [&](ConditionalOStream &stream) {
+      std::locale s = stream.get_stream().getloc();
+      stream.get_stream().imbue(std::locale(""));
+      stream << "--     . dim       = " << dim << "\n"
+             << "--     . fe_degree = " << degree << "\n"
+             << "--     . 1d_quad   = " << n_q_points_1d << "\n"
+             << "--     . Number of active cells: "
+             << triangulation.n_global_active_cells() << "\n"
+             << "--     . Number of degrees of freedom: "
+             << dof_handler.n_dofs() << "\n"
+             << std::endl;
+      stream.get_stream().imbue(s);
+    };
+    print(pcout);
+    print(bcout);
 
     locally_owned_dofs = dof_handler.locally_owned_dofs();
     locally_relevant_dofs.clear();
