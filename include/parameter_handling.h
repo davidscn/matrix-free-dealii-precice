@@ -2,6 +2,7 @@
 
 #include <deal.II/base/parameter_handler.h>
 
+#include <precice_parameter.h>
 using namespace dealii;
 
 namespace FSI
@@ -178,7 +179,7 @@ namespace FSI
         prm.add_parameter("Type",
                           type,
                           "Type of the problem",
-                          Patterns::Selection("CSM|Cook"));
+                          Patterns::Selection("CSM|Cook|PF"));
       }
       prm.leave_subsection();
     }
@@ -398,7 +399,8 @@ namespace FSI
                           public NonlinearSolver,
                           public Time,
                           public Misc<dim>,
-                          public BoundaryConditions<dim>
+                          public BoundaryConditions<dim>,
+                          public PreciceAdapterConfiguration
 
     {
     public:
@@ -430,6 +432,7 @@ namespace FSI
       LinearSolver::add_parameters(prm);
       NonlinearSolver::add_parameters(prm);
       Time::add_parameters(prm);
+      PreciceAdapterConfiguration::add_parameters(prm);
 
       this->add_misc_parameters(prm);
       this->add_bc_parameters(prm);
@@ -440,6 +443,27 @@ namespace FSI
                     material_formulation == 1,
                   ExcInternalError());
       AssertDimension(dim, this->dim);
+      const std::string error_message(
+        "Either specify a 'Mesh name', which will be applied to the read and write mesh (data location)"
+        " or a separate 'Read Mesh name' and a 'Write mesh name' in order to enable more mapping frindly "
+        "specialized data locations at the interface. Specifying both or none of these "
+        "options is invalid. Make sure you adjust your configuration file '" +
+        config_file + "' according to your settings.");
+
+      if (mesh_name != "default")
+        {
+          AssertThrow((mesh_name != read_mesh_name), ExcMessage(error_message));
+          read_mesh_name  = mesh_name;
+          write_mesh_name = mesh_name;
+        }
+      else
+        {
+          AssertThrow(("default" != read_mesh_name) &&
+                        ("default" != write_mesh_name),
+                      ExcMessage(error_message));
+
+          AssertThrow("default" == mesh_name, ExcMessage(error_message));
+        }
     }
 
   } // namespace Parameters

@@ -66,6 +66,11 @@ CONFIGURE_FILE(${CMAKE_SOURCE_DIR}/src/version.cc.in
 
 PROJECT(${TARGET})
 
+FIND_PACKAGE(precice REQUIRED
+  HINTS ${PRECICE_DIR}
+  )
+MESSAGE(STATUS "Using the preCICE version found at ${precice_CONFIG}")
+
 #
 # RPATHS: https://cmake.org/Wiki/CMake_RPATH_handling#Mac_OS_X_and_the_RPATH
 #
@@ -106,6 +111,8 @@ ADD_EXECUTABLE(${TARGET}
 
 DEAL_II_SETUP_TARGET(${TARGETLIB})
 DEAL_II_SETUP_TARGET(${TARGET})
+
+TARGET_LINK_LIBRARIES(${TARGETLIB} precice::precice)
 
 TARGET_LINK_LIBRARIES(${TARGET}
     ${TARGETLIB}

@@ -22,9 +22,6 @@ subsection Boundary conditions
 
   # Dirichlet component mask for each boundary ID
   set Dirichlet IDs and component mask = 1:true,true
-
-  # Neumann functions for each boundary ID
-  set Neumann IDs and expressions = 11:0,(-19.44599873)
 end
 
 
@@ -81,6 +78,9 @@ subsection Material properties
 
   # Formulation of the energy function
   set Formulation = 1
+
+  # Density
+  set Density       = 1000
 end
 
 
@@ -108,4 +108,24 @@ subsection Time
 
   # Time step size
   set Time step size = 0.2
+end
+
+subsection precice configuration
+  # Cases: FSI3 or PF for perpendicular flap
+  set Scenario            = FSI3
+
+  # Name of the precice configuration file
+  set precice config-file = precice-config.xml
+
+  # Name of the participant in the precice-config.xml file
+  set Participant name    = dealii
+
+  # Name of the coupling mesh in the precice-config.xml file
+  set Mesh name           = dealii-mesh
+
+  # Name of the read data in the precice-config.xml file
+  set Read data name      = Stress
+
+  # Name of the write data in the precice-config.xml file
+  set Write data name     = Displacement
 end

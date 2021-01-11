@@ -61,10 +61,13 @@ static const unsigned int debug_level = 1;
 
 #include <deal.II/physics/elasticity/kinematics.h>
 #include <deal.II/physics/elasticity/standard_tensors.h>
+#include <deal.II/physics/transformations.h>
 
 #include <material.h>
 #include <mf_nh_operator.h>
 #include <parameter_handling.h>
+#include <precice_adapter.h>
+#include <q_equidistant.h>
 #include <sys/stat.h>
 #include <version.h>
 
@@ -181,7 +184,7 @@ namespace FSI
 
     // Apply Dirichlet boundary conditions on the displacement field
     void
-    make_constraints(const int &it_nr);
+    make_constraints(const int &it_nr, const bool print = true);
 
     bool
     check_convergence(const unsigned int newton_iteration);
@@ -196,11 +199,6 @@ namespace FSI
     // iterations, residual and condition number estiamte.
     std::tuple<unsigned int, double, double>
     solve_linear_system(VectorType &newton_update) const;
-
-    // Set total solution based on the current values of solution_n and
-    // solution_delta:
-    void
-    set_total_solution();
 
     void
     output_results() const;
@@ -296,6 +294,8 @@ namespace FSI
     const double alpha_5 = 1 - (gamma / beta);
     const double alpha_6 = (1 - (gamma / (2 * beta))) * parameters.delta_t;
 
+    const types::boundary_id interface_id = 11;
+
     // matrix material
     std::shared_ptr<Material_Compressible_Neo_Hook_One_Field<dim, Number>>
       material;
@@ -318,6 +318,10 @@ namespace FSI
     std::shared_ptr<
       Material_Compressible_Neo_Hook_One_Field<dim, LevelVectorizedArrayType>>
       material_inclusion_level;
+
+    std::unique_ptr<
+      Adapter::Adapter<dim, degree, VectorType, VectorizedArrayType>>
+      precice_adapter;
 
     static const unsigned int n_components      = dim;
     static const unsigned int first_u_component = 0;
@@ -595,51 +599,55 @@ namespace FSI
     mf_nh_operator.set_material(material_vec, material_inclusion_vec);
 
     // print some data about how we run:
-    const int n_tasks =
-      dealii::Utilities::MPI::n_mpi_processes(mpi_communicator);
-    const int          n_threads      = dealii::MultithreadInfo::n_threads();
-    const unsigned int n_vect_doubles = VectorizedArray<double>::size();
-    const unsigned int n_vect_bits    = 8 * sizeof(double) * n_vect_doubles;
+    auto print = [&](ConditionalOStream &stream) {
+      const int n_tasks =
+        dealii::Utilities::MPI::n_mpi_processes(mpi_communicator);
+      const int          n_threads      = dealii::MultithreadInfo::n_threads();
+      const unsigned int n_vect_doubles = VectorizedArray<double>::size();
+      const unsigned int n_vect_bits    = 8 * sizeof(double) * n_vect_doubles;
 
-    timer_out
-      << "-----------------------------------------------------------------------------"
-      << std::endl
+      stream
+        << "-----------------------------------------------------------------------------"
+        << std::endl
 #ifdef DEBUG
-      << "--     . running in DEBUG mode" << std::endl
+        << "--     . running in DEBUG mode" << std::endl
 #else
-      << "--     . running in OPTIMIZED mode" << std::endl
+        << "--     . running in OPTIMIZED mode" << std::endl
 #endif
-      << "--     . running with " << n_tasks << " MPI process"
-      << (n_tasks == 1 ? "" : "es") << std::endl;
+        << "--     . running with " << n_tasks << " MPI process"
+        << (n_tasks == 1 ? "" : "es") << std::endl;
 
-    if (n_threads > 1)
-      timer_out << "--     . using " << n_threads << " threads "
-                << (n_tasks == 1 ? "" : "each") << std::endl;
+      if (n_threads > 1)
+        stream << "--     . using " << n_threads << " threads "
+               << (n_tasks == 1 ? "" : "each") << std::endl;
 
-    timer_out << "--     . vectorization over " << n_vect_doubles
-              << " doubles = " << n_vect_bits << " bits (";
+      stream << "--     . vectorization over " << n_vect_doubles
+             << " doubles = " << n_vect_bits << " bits (";
 
-    if (n_vect_bits == 64)
-      timer_out << "disabled";
-    else if (n_vect_bits == 128)
-      timer_out << "SSE2";
-    else if (n_vect_bits == 256)
-      timer_out << "AVX";
-    else if (n_vect_bits == 512)
-      timer_out << "AVX512";
-    else
-      AssertThrow(false, ExcNotImplemented());
+      if (n_vect_bits == 64)
+        stream << "disabled";
+      else if (n_vect_bits == 128)
+        stream << "SSE2";
+      else if (n_vect_bits == 256)
+        stream << "AVX";
+      else if (n_vect_bits == 512)
+        stream << "AVX512";
+      else
+        AssertThrow(false, ExcNotImplemented());
 
-    timer_out << ")" << std::endl;
-    timer_out << "--     . version " << GIT_TAG << " (revision " << GIT_SHORTREV
-              << " on branch " << GIT_BRANCH << ")" << std::endl;
-    timer_out << "--     . deal.II " << DEAL_II_PACKAGE_VERSION << " (revision "
-              << DEAL_II_GIT_SHORTREV << " on branch " << DEAL_II_GIT_BRANCH
-              << ")" << std::endl;
-    timer_out
-      << "-----------------------------------------------------------------------------"
-      << std::endl
-      << std::endl;
+      stream << ")" << std::endl;
+      stream << "--     . version " << GIT_TAG << " (revision " << GIT_SHORTREV
+             << " on branch " << GIT_BRANCH << ")" << std::endl;
+      stream << "--     . deal.II " << DEAL_II_PACKAGE_VERSION << " (revision "
+             << DEAL_II_GIT_SHORTREV << " on branch " << DEAL_II_GIT_BRANCH
+             << ")" << std::endl;
+      stream
+        << "-----------------------------------------------------------------------------"
+        << std::endl
+        << std::endl;
+    };
+    print(timer_out);
+    print(pcout);
   }
 
   // The class destructor simply clears the data held by the DOFHandler
@@ -687,29 +695,40 @@ namespace FSI
     // time domain.
     //
     setup_matrix_free();
+    precice_adapter = std::make_unique<
+      Adapter::Adapter<dim, degree, VectorType, VectorizedArrayType>>(
+      parameters, interface_id, false, mf_data_reference);
+    precice_adapter->initialize(total_displacement);
 
     // At the beginning, we reset the solution update for this time step...
-    while (time.current() <= time.end())
+    while (time.current() <= time.end() ||
+           precice_adapter->is_coupling_ongoing())
       {
         parameters.set_time(time.current());
-        delta_displacement = 0.0;
+        // preCICE complains otherwise
+        precice_adapter->save_current_state_if_required([&]() {});
 
-        // ...solve the current time step and update total solution vector
-        // $\mathbf{\Xi}_{\textrm{n}} = \mathbf{\Xi}_{\textrm{n-1}} +
-        // \varDelta \mathbf{\Xi}$...
         solve_nonlinear_timestep();
-        old_displacement += delta_displacement;
 
-        // Acceleration update is performed within a loop
-        update_velocity(delta_displacement);
+        precice_adapter->advance(total_displacement, time.get_delta_t());
+
+        precice_adapter->reload_old_state_if_required([&]() {
+          acceleration       = acceleration_old;
+          total_displacement = old_displacement;
+        });
 
         // ...and plot the results before moving on happily to the next time
         // step:
-        output_results();
-
-        print_solution();
-
-        time.increment();
+        if (precice_adapter->is_time_window_complete())
+          {
+            // TODO: Work with vectors without ghost entris
+            old_displacement = total_displacement;
+            // Acceleration update is performed within the Newton loop
+            update_velocity(delta_displacement);
+            output_results();
+            print_solution();
+            time.increment();
+          }
       }
 
     // for post-processing, print average CG iterations over the whole run:
@@ -825,7 +844,7 @@ namespace FSI
                   if (face->boundary_id() == id_flap_short_top ||
                       face->boundary_id() == id_flap_long_bottom ||
                       face->boundary_id() == id_flap_long_top)
-                    face->set_boundary_id(interface_boundary_id);
+                    face->set_boundary_id(interface_id);
                   // Boundaries clamped in all directions
                   else if (face->boundary_id() == id_flap_short_bottom)
                     face->set_boundary_id(clamped_mesh_id);
@@ -882,7 +901,7 @@ namespace FSI
                     cell->face(face)->set_boundary_id(1); // -X faces
                   else if (std::abs(cell->face(face)->center()[0] - 48.0) <
                            tol_boundary)
-                    cell->face(face)->set_boundary_id(11); // +X faces
+                    cell->face(face)->set_boundary_id(interface_id); // +X faces
                   else if (std::abs(std::abs(cell->face(face)->center()[0]) -
                                     0.5) < tol_boundary)
                     cell->face(face)->set_boundary_id(2); // +Z and -Z faces
@@ -904,8 +923,8 @@ namespace FSI
 
     vol_reference = GridTools::volume(triangulation);
     vol_current   = vol_reference;
-    pcout << "Grid:\n  Reference volume: " << vol_reference << std::endl;
-    bcout << "Grid:\n  Reference volume: " << vol_reference << std::endl;
+    pcout << "--     . Reference volume: " << vol_reference << std::endl;
+    bcout << "--     . Reference volume: " << vol_reference << std::endl;
   }
 
 
@@ -926,23 +945,21 @@ namespace FSI
     dof_handler.distribute_mg_dofs();
     DoFRenumbering::Cuthill_McKee(dof_handler);
 
-    std::locale s = pcout.get_stream().getloc();
-    pcout.get_stream().imbue(std::locale(""));
-    pcout << "Triangulation:"
-          << "\n  Number of active cells: "
-          << triangulation.n_global_active_cells()
-          << "\n  Number of degrees of freedom: " << dof_handler.n_dofs()
-          << std::endl;
-    pcout.get_stream().imbue(s);
-
-    std::locale f = bcout.get_stream().getloc();
-    bcout.get_stream().imbue(std::locale(""));
-    bcout << "Triangulation:"
-          << "\n  Number of active cells: "
-          << triangulation.n_global_active_cells()
-          << "\n  Number of degrees of freedom: " << dof_handler.n_dofs()
-          << std::endl;
-    bcout.get_stream().imbue(f);
+    auto print = [&](ConditionalOStream &stream) {
+      std::locale s = stream.get_stream().getloc();
+      stream.get_stream().imbue(std::locale(""));
+      stream << "--     . dim       = " << dim << "\n"
+             << "--     . fe_degree = " << degree << "\n"
+             << "--     . 1d_quad   = " << n_q_points_1d << "\n"
+             << "--     . Number of active cells: "
+             << triangulation.n_global_active_cells() << "\n"
+             << "--     . Number of degrees of freedom: "
+             << dof_handler.n_dofs() << "\n"
+             << std::endl;
+      stream.get_stream().imbue(s);
+    };
+    print(pcout);
+    print(bcout);
 
     locally_owned_dofs = dof_handler.locally_owned_dofs();
     locally_relevant_dofs.clear();
@@ -953,6 +970,7 @@ namespace FSI
     system_rhs.reinit(locally_owned_dofs,
                       locally_relevant_dofs,
                       mpi_communicator);
+    // TODO: Switch to vectors without ghosts
     old_displacement.reinit(system_rhs);
     delta_displacement.reinit(system_rhs);
     total_displacement.reinit(system_rhs);
@@ -963,7 +981,6 @@ namespace FSI
     velocity_old.reinit(system_rhs);
 
     // switch to ghost mode:
-    old_displacement.update_ghost_values();
     delta_displacement.update_ghost_values();
     total_displacement.update_ghost_values();
     acceleration.update_ghost_values();
@@ -986,7 +1003,7 @@ namespace FSI
   void
   Solid<dim, degree, n_q_points_1d, Number>::setup_matrix_free()
   {
-    make_constraints(0);
+    make_constraints(0, false);
     // Setup MF dditional data
     typename MatrixFree<dim, double>::AdditionalData data;
     setup_mf_additional_data(data,
@@ -1083,6 +1100,13 @@ namespace FSI
     // Setup MF additional data
     if (level == numbers::invalid_unsigned_int)
       {
+        // TODO: Sets up the structure for inner face batches as well, maybe
+        // another option way is possible. Also, this option is only required
+        // for the referential MatrixFree, but consistency between referential
+        // and Eulerian MatrixFree is required
+        data.mapping_update_flags_boundary_faces =
+          update_values | update_gradients | update_quadrature_points |
+          update_JxW_values;
         data.cell_vectorization_category.resize(triangulation.n_active_cells());
         for (const auto &cell : triangulation.active_cell_iterators())
           if (cell->is_locally_owned())
@@ -1171,8 +1195,15 @@ namespace FSI
     // TODO: Parametrize mapping
     if (reinit_mf_reference)
       {
-        mf_data_reference->reinit(
-          StaticMappingQ1<dim>::mapping, dof_handler, constraints, quad, data);
+        const std::vector<const AffineConstraints<double> *> constr = {
+          &constraints};
+        const std::vector<Quadrature<1>> quadratures = {
+          quad, QEquidistant<1>(n_q_points_1d)};
+        mf_data_reference->reinit(StaticMappingQ1<dim>::mapping,
+                                  {&dof_handler},
+                                  constr,
+                                  quadratures,
+                                  data);
 
         // Only reinitialized in case the reference MF has changed, since all
         // data structures are reinitialized according to the reference object
@@ -1634,12 +1665,10 @@ namespace FSI
         // and do the solve of the linearized system:
         make_constraints(newton_iteration);
 
-        update_acceleration(delta_displacement);
         // update total solution prior to assembly
-        set_total_solution();
 
-        // now ready to go-on and assmble linearized problem around solution_n
-        // + solution_delta for this iteration.
+        // now ready to go-on and assmble linearized problem around the total
+        // displacement
         assemble_system();
 
         if (check_convergence(newton_iteration))
@@ -1664,7 +1693,14 @@ namespace FSI
         error_update_norm = error_update;
         error_update_norm.normalise(error_update_0);
 
-        delta_displacement += newton_update;
+        if (newton_iteration != 0)
+          delta_displacement += newton_update;
+        else
+          delta_displacement = newton_update;
+
+        update_acceleration(delta_displacement);
+        total_displacement += newton_update;
+
 
         pcout << " | " << std::fixed << std::setprecision(3) << std::setw(7)
               << std::scientific << std::get<0>(lin_solver_output) << "  "
@@ -1767,7 +1803,7 @@ namespace FSI
                 fe_values_soln.reinit(cell_point.first);
 
                 std::vector<Tensor<1, dim>> soln_values(soln_qrule.size());
-                fe_values_soln[u_fe].get_function_values(old_displacement,
+                fe_values_soln[u_fe].get_function_values(total_displacement,
                                                          soln_values);
                 displacement = soln_values[0];
               }
@@ -1786,20 +1822,6 @@ namespace FSI
               << "  displacement: " << displacement << std::endl;
 
       } // end loop over output points
-  }
-
-
-  // @sect4{Solid::set_total_solution}
-
-  // This function sets the total solution, which is valid at any Newton step.
-  // This is required as, to reduce computational error, the total solution is
-  // only updated at the end of the timestep.
-  template <int dim, int degree, int n_q_points_1d, typename Number>
-  void
-  Solid<dim, degree, n_q_points_1d, Number>::set_total_solution()
-  {
-    total_displacement.equ(1, old_displacement);
-    total_displacement += delta_displacement;
   }
 
 
@@ -1855,10 +1877,6 @@ namespace FSI
 
     FEValues<dim> fe_values(
       fe, qf_cell, update_values | update_gradients | update_JxW_values);
-    FEFaceValues<dim> fe_face_values(fe,
-                                     qf_face,
-                                     update_values | update_quadrature_points |
-                                       update_JxW_values);
 
     for (const auto &cell : dof_handler.active_cell_iterators())
       if (cell->is_locally_owned())
@@ -1927,49 +1945,49 @@ namespace FSI
                 }
 
             } // end loop over quadrature points
-
-          // Next we assemble the Neumann contribution. We first check to see it
-          // the cell face exists on a boundary on which a traction is applied
-          // and add the contribution if this is the case.
-          for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
-               ++face)
-            if (cell->face(face)->at_boundary() == true)
-              {
-                const auto &el =
-                  parameters.neumann.find(cell->face(face)->boundary_id());
-                if (el == parameters.neumann.end())
-                  continue;
-
-                fe_face_values.reinit(cell, face);
-                for (unsigned int f_q_point = 0; f_q_point < n_q_points_f;
-                     ++f_q_point)
-                  {
-                    // We specify the traction in reference configuration
-                    // according to the parameter file.
-
-                    // Note that the contributions to the right hand side
-                    // vector we compute here only exist in the displacement
-                    // components of the vector.
-                    Vector<double> traction(dim);
-                    (*el).second->vector_value(
-                      fe_face_values.quadrature_point(f_q_point), traction);
-
-                    for (unsigned int i = 0; i < dofs_per_cell; ++i)
-                      {
-                        const unsigned int component_i =
-                          fe.system_to_component_index(i).first;
-                        const double Ni =
-                          fe_face_values.shape_value(i, f_q_point);
-                        const double JxW = fe_face_values.JxW(f_q_point);
-                        cell_rhs(i) += (Ni * traction[component_i]) * JxW;
-                      }
-                  }
-              }
-
           constraints.distribute_local_to_global(cell_rhs,
                                                  local_dof_indices,
                                                  system_rhs);
         }
+
+    FEFaceEvaluation<dim, degree, n_q_points_1d, dim, Number> phi(
+      *mf_data_reference);
+    auto q_index = precice_adapter->begin_interface_IDs();
+
+    for (unsigned int face = mf_data_reference->n_inner_face_batches();
+         face < mf_data_reference->n_boundary_face_batches() +
+                  mf_data_reference->n_inner_face_batches();
+         ++face)
+      {
+        const auto boundary_id = mf_data_reference->get_boundary_id(face);
+
+        // Only interfaces
+        if (boundary_id != interface_id)
+          continue;
+
+        // Read out the total displacment
+        phi.reinit(face);
+        phi.gather_evaluate(total_displacement, false, true);
+        // Number of active faces
+        const auto active_faces =
+          mf_data_reference->n_active_entries_per_face_batch(face);
+
+        for (unsigned int q = 0; q < phi.n_q_points; ++q)
+          {
+            // Evaluate deformation gradient
+            const auto F =
+              Physics::Elasticity::Kinematics::F(phi.get_gradient(q));
+            // Get the value from preCICE
+            const auto traction =
+              precice_adapter->read_on_quadrature_point(*q_index, active_faces);
+            // Perform pull-back operation and submit value
+            phi.submit_value(
+              Physics::Transformations::Covariant::pull_back(traction, F), q);
+            ++q_index;
+          }
+        // Integrate the result and write into the rhs vector
+        phi.integrate_scatter(true, false, system_rhs);
+      }
 
     system_rhs.compress(VectorOperation::add);
 
@@ -1992,9 +2010,11 @@ namespace FSI
   // are already exactly satisfied.
   template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::make_constraints(const int &it_nr)
+  Solid<dim, degree, n_q_points_1d, Number>::make_constraints(const int &it_nr,
+                                                              const bool print)
   {
-    pcout << " CST " << std::flush;
+    if (print)
+      pcout << " CST " << std::flush;
 
     // Since the constraints are different at different Newton iterations, we
     // need to clear the constraints matrix and completely rebuild
@@ -2059,6 +2079,7 @@ namespace FSI
     double       cond_number = 1.0;
 
     // reset solution vector each iteration
+    // TODO: We use zero dst anyway, so this can be removed
     newton_update = 0.;
 
     // We solve for the incremental displacement $d\mathbf{u}$.
@@ -2164,7 +2185,7 @@ namespace FSI
     std::vector<std::string> solution_name(dim, "displacement");
 
     data_out.attach_dof_handler(dof_handler);
-    data_out.add_data_vector(old_displacement,
+    data_out.add_data_vector(total_displacement,
                              solution_name,
                              DataOut<dim>::type_dof_data,
                              data_component_interpretation);

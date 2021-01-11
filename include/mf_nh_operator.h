@@ -73,7 +73,7 @@ outer_product_ikjl(const Tensor<2, dim, Number> &A,
 enum class MFMask : unsigned
 {
   Empty    = 0,
-  Zero     = 1 << 0, // zero source vector
+  Zero     = 1 << 0, // zero destination vector
   MPI      = 1 << 1, // do MPI communication (ghosts/compress)
   RW       = 1 << 2, // read/write, constraints and reinit() of FEEvaluation
   SF       = 1 << 3, // Local integration with sum factorization
@@ -172,8 +172,10 @@ public:
   void
   vmult(VectorType &dst, const VectorType &src) const;
 
+  template <MFMask mask = MFMask::Default>
   void
   Tvmult(VectorType &dst, const VectorType &src) const;
+
   template <MFMask mask = MFMask::Default>
   void
   vmult_add(VectorType &dst, const VectorType &src) const;
@@ -609,12 +611,14 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::vmult(
 
 
 template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+template <MFMask mask>
 void
 NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::Tvmult(
   VectorType &      dst,
   const VectorType &src) const
 {
-  dst = 0;
+  if (mask & MFMask::Zero)
+    dst = 0;
   vmult_add(dst, src);
 }
 
