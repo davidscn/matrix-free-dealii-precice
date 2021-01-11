@@ -61,8 +61,9 @@ namespace Adapter
      */
     void
     initialize(const VectorType &dealii_to_precice,
-               const int         dof_index        = 0,
-               const int         read_quad_index_ = 0);
+               const int         dof_index         = 0,
+               const int         read_quad_index_  = 0,
+               const int         write_quad_index_ = 1);
 
     /**
      * @brief      Advances preCICE after every timestep, converts data formats
@@ -261,7 +262,8 @@ namespace Adapter
   Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::initialize(
     const VectorType &dealii_to_precice,
     const int         dof_index,
-    const int         read_quad_index_)
+    const int         read_quad_index_,
+    const int         write_quad_index_)
   {
     AssertThrow(
       dim == precice->getDimensions(),
@@ -276,10 +278,9 @@ namespace Adapter
     //    const int selected_sampling =
     //      write_sampling == std::numeric_limits<int>::max() ? fe_degree + 1 :
     //    write_sampling;
-    const int write_quad_index_ = 1;
     read_quad_index  = read_quad_index_;
     write_quad_index = read_write_on_same ?
-                         read_quad_index :
+                         read_quad_index_ :
                          write_quad_index_ /*TODO: Implement sampling variant*/;
 
     // get precice specific IDs from precice and store them in
@@ -620,7 +621,9 @@ namespace Adapter
       << " ( = " << (r_size / (fe_degree + 1)) << " [face-batches] x "
       << fe_degree + 1 << " [nodes/face] x " << VectorizedArrayType::size()
       << " [faces/face-batch]) \n"
-      << "--     . Node location: Gauss-Legendre\n"
+      << "--     . Read node location: Gauss-Legendre\n"
+      << "--     . Write node location:"
+      << (read_write_on_same ? "Gauss-Legendre" : "equidistant") << "\n"
       << std::endl;
   }
 } // namespace Adapter
