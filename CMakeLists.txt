@@ -3,7 +3,7 @@
 ##
 
 # Set the name of the project and target:
-SET(TARGET "main")
+SET(TARGET "solid")
 SET(TARGETLIB "mf_elasticity")
 
 INCLUDE_DIRECTORIES(
@@ -106,7 +106,7 @@ ADD_LIBRARY(${TARGETLIB} SHARED
   )
 
 ADD_EXECUTABLE(${TARGET}
-    src/main.cc
+    src/${TARGET}.cc
   )
 
 DEAL_II_SETUP_TARGET(${TARGETLIB})
