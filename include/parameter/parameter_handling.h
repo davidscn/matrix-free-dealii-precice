@@ -129,12 +129,8 @@ namespace FSI
     // Make adjustments to the problem geometry and its discretisation.
     struct Geometry
     {
-      unsigned int elements_per_edge   = 2;
-      double       scale               = 1e-3;
       unsigned int dim                 = 2;
       unsigned int n_global_refinement = 0;
-      unsigned int extrusion_slices    = 5;
-      double       extrusion_height    = 1;
       std::string  testcase            = "turek_hron";
 
       void
@@ -146,29 +142,9 @@ namespace FSI
     {
       prm.enter_subsection("Geometry");
       {
-        prm.add_parameter("Elements per edge",
-                          elements_per_edge,
-                          "Number of elements per long edge of the beam",
-                          Patterns::Integer(0));
-
         prm.add_parameter("Global refinement",
                           n_global_refinement,
                           "Number of global refinements",
-                          Patterns::Integer(0));
-
-        prm.add_parameter("Grid scale",
-                          scale,
-                          "Global grid scaling factor",
-                          Patterns::Double(0.0));
-
-        prm.add_parameter("Extrusion height",
-                          extrusion_height,
-                          "Extrusion height",
-                          Patterns::Double(0.0));
-
-        prm.add_parameter("Extrusion slices",
-                          extrusion_slices,
-                          "Number of extrusion slices",
                           Patterns::Integer(0));
 
         prm.add_parameter("Dimension",

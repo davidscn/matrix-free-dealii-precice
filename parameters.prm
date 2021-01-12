@@ -27,16 +27,13 @@ end
 
 subsection Geometry
   # Dimension of the problem
-  set Dimension = 2
+  set Dimension          = 2
 
   # Number of global refinements
   set Global refinement  = 4
 
-  # Global grid scaling factor
-  set Grid scale         = 1e-3
-
   # Testcase to compute
-  set Testcase       = turek_hron
+  set Testcase           = turek_hron
 end
 
 
