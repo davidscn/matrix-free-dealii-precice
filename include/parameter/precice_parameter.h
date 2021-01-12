@@ -19,7 +19,6 @@ namespace FSI
      */
     struct PreciceAdapterConfiguration
     {
-      std::string scenario         = "FSI3";
       std::string config_file      = "precice config-file";
       std::string participant_name = "dealiisolver";
       std::string mesh_name        = "default";
@@ -39,10 +38,6 @@ namespace FSI
     {
       prm.enter_subsection("precice configuration");
       {
-        prm.add_parameter("Scenario",
-                          scenario,
-                          "Cases: FSI3 or PF for perpendicular flap",
-                          Patterns::Selection("FSI3|PF"));
         prm.add_parameter("precice config-file",
                           config_file,
                           "Name of the precice configuration file",

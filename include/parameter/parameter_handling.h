@@ -2,7 +2,7 @@
 
 #include <deal.II/base/parameter_handler.h>
 
-#include <precice_parameter.h>
+#include <parameter/precice_parameter.h>
 using namespace dealii;
 
 namespace FSI
@@ -135,7 +135,7 @@ namespace FSI
       unsigned int n_global_refinement = 0;
       unsigned int extrusion_slices    = 5;
       double       extrusion_height    = 1;
-      std::string  type                = "CSM";
+      std::string  testcase            = "turek_hron";
 
       void
       add_parameters(ParameterHandler &prm);
@@ -176,10 +176,10 @@ namespace FSI
                           "Dimension of the problem",
                           Patterns::Integer(2, 3));
 
-        prm.add_parameter("Type",
-                          type,
-                          "Type of the problem",
-                          Patterns::Selection("CSM|Cook|PF"));
+        prm.add_parameter("testcase",
+                          testcase,
+                          "Testcase to compute",
+                          Patterns::Selection("turek_hron|cook"));
       }
       prm.leave_subsection();
     }
