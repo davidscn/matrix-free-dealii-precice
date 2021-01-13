@@ -1,4 +1,4 @@
-name: Building
+name: GitHub CI
 
 on:
   push:
@@ -19,14 +19,15 @@ jobs:
 
       run: |
          command="sudo apt-get -y update && \
+                  wget https://github.com/precice/precice/releases/download/v2.1.1/libprecice2_2.1.1_focal.deb && \
+                  sudo apt-get -y install ./libprecice2_2.1.1_focal.deb && \
                   git clone https://$ACCESS_TOKEN@github.com/${{ github.repository }} && \
                   cd matrix-free-dealii-precice && \
                   git fetch origin ${{ github.ref }} && \
                   git checkout FETCH_HEAD && \
-                  cmake . && \
-                  make && \
-                  ctest -V";
-
+                  cd tests && \
+                  ./run_tests.sh"; 
+         
          echo $command
 
          docker pull dealii/dealii:master-focal
