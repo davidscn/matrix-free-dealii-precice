@@ -445,7 +445,7 @@ namespace Adapter
 
             // Transform Tensor<1,dim,VectorizedArrayType> into preCICE conform
             // format
-            // Alternatively: Loop directly iver active_faces instead of size()
+            // Alternatively: Loop directly over active_faces instead of size()
             // and use writeVectorData
             for (int d = 0; d < dim; ++d)
               for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)

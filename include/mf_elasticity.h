@@ -674,11 +674,6 @@ namespace FSI
   }
 
 
-  // In solving the quasi-static problem, the time becomes a loading parameter,
-  // i.e. we increasing the loading linearly with time, making the two concepts
-  // interchangeable. We choose to increment time linearly using a constant time
-  // step size.
-  //
   // We start the function with preprocessing, and then output the initial grid
   // before starting the simulation proper with the first time (and loading)
   // increment.
@@ -711,6 +706,7 @@ namespace FSI
         // preCICE complains otherwise
         precice_adapter->save_current_state_if_required([&]() {});
 
+        delta_displacement = 0.0;
         solve_nonlinear_timestep();
 
         precice_adapter->advance(total_displacement, time.get_delta_t());
@@ -1510,6 +1506,8 @@ namespace FSI
 
         // now ready to go-on and assmble linearized problem around the total
         // displacement
+        update_acceleration(delta_displacement);
+
         assemble_system();
 
         if (check_convergence(newton_iteration))
@@ -1539,7 +1537,6 @@ namespace FSI
         else
           delta_displacement = newton_update;
 
-        update_acceleration(delta_displacement);
         total_displacement += newton_update;
 
 
