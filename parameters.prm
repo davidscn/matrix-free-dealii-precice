@@ -8,12 +8,18 @@ subsection Finite element system
   set Quadrature order  = 2
 end
 
-subsection Misc
+subsection Output
+   # At which time to write a vtu output file
+   set Output tick     = 0.1
+
+   # Output solution watchpoint
+   set Output solution = true
+
    # Watchpoint in undeformed configuration to output unknown fields
    set Output points   = 0.6, 0.2
 
-   # Output solution and mesh
-   set Output solution = true
+   # Output folder
+   set Output folder   = dealii-output
 end
 
 

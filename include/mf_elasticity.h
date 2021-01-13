@@ -202,7 +202,7 @@ namespace FSI
     solve_linear_system(VectorType &newton_update) const;
 
     void
-    output_results() const;
+    output_results(const unsigned int result_number) const;
 
     // Set up an Additional data object
     template <typename AdditionalData>
@@ -401,7 +401,7 @@ namespace FSI
     print_conv_footer();
 
     void
-    print_solution();
+    print_solution_watchpoint();
 
     std::shared_ptr<MappingQEulerian<dim, VectorType>> eulerian_mapping;
     std::shared_ptr<MatrixFree<dim, double>>           mf_data_current;
@@ -691,7 +691,7 @@ namespace FSI
     testcase = testcase_;
     make_grid();
     system_setup();
-    output_results();
+    output_results(0);
     time.increment();
 
     // We then declare the incremental solution update $\varDelta
@@ -728,8 +728,14 @@ namespace FSI
             old_displacement = total_displacement;
             // Acceleration update is performed within the Newton loop
             update_velocity(delta_displacement);
-            output_results();
-            print_solution();
+
+            if (static_cast<int>(time.current() / parameters.output_tick) !=
+                  static_cast<int>((time.current() - time.get_delta_t()) /
+                                   parameters.output_tick) ||
+                time.current() >= time.end() - 1e-12)
+              output_results(static_cast<unsigned int>(
+                std::round(time.current() / parameters.output_tick)));
+            print_solution_watchpoint();
             time.increment();
           }
       }
@@ -1606,8 +1612,11 @@ namespace FSI
   // Print solution at a given point
   template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::print_solution()
+  Solid<dim, degree, n_q_points_1d, Number>::print_solution_watchpoint()
   {
+    if (!parameters.output_solution)
+      return;
+
     static const unsigned int l_width = 87;
 
     for (unsigned int i = 0; i < l_width; ++i)
@@ -2002,11 +2011,9 @@ namespace FSI
 
   template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::output_results() const
+  Solid<dim, degree, n_q_points_1d, Number>::output_results(
+    const unsigned int result_number) const
   {
-    if (!parameters.output_solution)
-      return;
-
     DataOutBase::VtkFlags flags;
     flags.write_higher_order_cells = true;
 
@@ -2053,7 +2060,7 @@ namespace FSI
                            DataOut<dim>::curved_inner_cells);
 
     const std::string filename = parameters.output_folder + "solution-" +
-                                 std::to_string(time.get_timestep()) + ".vtu";
+                                 std::to_string(result_number) + ".vtu";
 
     data_out.write_vtu_in_parallel(filename, mpi_communicator);
 
