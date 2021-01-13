@@ -19,7 +19,7 @@ subsection Output
    set Output points   = 0.6, 0.2
 
    # Output folder (must exist)
-   set Output folder   = turek_gmg_scalar_form0
+   set Output folder   = turek_jacobi_tensor2
 end
 
 
@@ -43,7 +43,7 @@ subsection Linear solver
   set Max iteration multiplier  = 1
 
   # Preconditioner type
-  set Preconditioner type        = gmg
+  set Preconditioner type        = jacobi
 
   # Preconditioner relaxation value
   set Preconditioner relaxation  = 0.65
@@ -52,7 +52,7 @@ subsection Linear solver
   set Condition number CG iterations = 20
 
   # Type of caching for matrix-free operator
-  set MF caching = scalar
+  set MF caching = tensor2
 
   # Use Chebyshev smoother as coarse level solver
   set MF Chebyshev coarse = true
@@ -73,7 +73,7 @@ subsection Material properties
   set Shear modulus   = 0.5e6
 
   # Formulation of the energy function
-  set Formulation = 0
+  set Formulation = 1
 
   # Density
   set Density       = 1000

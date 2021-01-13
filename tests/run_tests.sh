@@ -7,7 +7,8 @@ NOCOLOR='\033[0m'
 # Run from this directory
 cd ${0%/*} || exit 1
 
-declare -a arr=("turek_gmg_scalar_referential" "turek_gmg_tensor2" "turek_gmg_tensor4" "turek_gmg_tensor4_ns" "turek_gmg_scalar" "turek_gmg_scalar_form0" )
+# Declare test names
+declare -a tests=("turek_gmg_scalar_referential" "turek_gmg_tensor2" "turek_gmg_tensor4" "turek_gmg_tensor4_ns" "turek_gmg_scalar" "turek_gmg_scalar_form0" "turek_jacobi_tensor2")
 
 exit_code=0
 
@@ -25,7 +26,7 @@ print_result() {
 	else
             echo -ne "${RED} failed ${NOCOLOR}\n"
             exit_code=$[$exit_code +1]
-            cat $@/$@.diff
+            cat $@
 	fi
 }
 
@@ -33,7 +34,7 @@ test_name="building"
 print_start ${test_name}
 mkdir -p build && cd build
 (cmake ../../ && make debug) &>${test_name}.log
-print_result ${test_name}
+print_result ${test_name}.log
 cd ..
 cp ./build/solid ./dummy_tester
 
@@ -43,13 +44,18 @@ cd ./dummy_tester
 
 # Specify the precice-config
 ln -sf precice-config_unified.xml precice-config.xml
-for i in "${arr[@]}"
+for i in "${tests[@]}"
     do
-    test_name=$i
+    test_name="${i}_serial"
     print_start ${test_name}
-    ./solid $i/$i.prm&> $i/$i.log & ./dummy_tester &>$i/tester.log
+    ./solid $i/$i.prm&> $i/${test_name}.log & ./dummy_tester &>$i/tester-${test_name}.log
     numdiff  $i/output $i/${test_name}.output &>$i/${test_name}.diff
-print_result ${test_name}
+    print_result ${test_name}
+    test_name="${i}_parallel"
+    print_start ${test_name}
+    mpirun -np 4 ./solid $i/$i.prm&> $i/${test_name}.log & ./dummy_tester &>$i/tester-${test_name}.log
+    numdiff  $i/output $i/${test_name}.output &>$i/${test_name}.diff
+    print_result $i/${test_name}.diff
 done
 
 if [ $exit_code -eq 0 ]
