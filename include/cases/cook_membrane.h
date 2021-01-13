@@ -11,14 +11,15 @@ namespace FSI
     {
     public:
       virtual void
-      make_coarse_grid(Triangulation<dim> &triangulation) const override;
+      make_coarse_grid_and_bcs(Triangulation<dim> &triangulation) override;
     };
 
 
 
     template <int dim>
     void
-    CookMembrane<dim>::make_coarse_grid(Triangulation<dim> &triangulation) const
+    CookMembrane<dim>::make_coarse_grid_and_bcs(
+      Triangulation<dim> &triangulation)
     {
       // Divide the beam, but only along the x- and y-coordinate directions
       std::vector<unsigned int> repetitions(dim, 2 /*elements_per_edge*/);
@@ -36,6 +37,23 @@ namespace FSI
                                                 repetitions,
                                                 bottom_left,
                                                 top_right);
+
+      const types::boundary_id clamped_mesh_id              = 1;
+      const types::boundary_id out_of_plane_clamped_mesh_id = 2;
+
+      // Set boundary conditions
+      // Fix all boundary components
+      this->dirichlet_mask[clamped_mesh_id] = ComponentMask(dim, true);
+      this->dirichlet[clamped_mesh_id] =
+        std::make_unique<Functions::ZeroFunction<dim>>(dim);
+      // In case we run a 3D case, only the z component is fixed
+      if (dim == 3)
+        {
+          this->dirichlet_mask[out_of_plane_clamped_mesh_id] =
+            ComponentMask({false /*x*/, false /*y*/, true /*z*/});
+          this->dirichlet[out_of_plane_clamped_mesh_id] =
+            std::make_unique<Functions::ZeroFunction<dim>>(dim);
+        }
 
       // Since we wish to apply a Neumann BC to the right-hand surface, we
       // must find the cell faces in this part of the domain and mark them
@@ -56,14 +74,16 @@ namespace FSI
               {
                 if (std::abs(cell->face(face)->center()[0] - 0.0) <
                     tol_boundary)
-                  cell->face(face)->set_boundary_id(1); // -X faces
+                  cell->face(face)->set_boundary_id(
+                    clamped_mesh_id); // -X faces
                 else if (std::abs(cell->face(face)->center()[0] - 48.0) <
                          tol_boundary)
                   cell->face(face)->set_boundary_id(
                     this->interface_id); // +X faces
                 else if (std::abs(std::abs(cell->face(face)->center()[0]) -
                                   0.5) < tol_boundary)
-                  cell->face(face)->set_boundary_id(2); // +Z and -Z faces
+                  cell->face(face)->set_boundary_id(
+                    out_of_plane_clamped_mesh_id); // +Z and -Z faces
               }
           // on the coarse mesh reset material ID
           cell->set_material_id(0);

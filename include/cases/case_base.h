@@ -23,11 +23,14 @@ namespace FSI
     template <int dim>
     struct TestCaseBase
     {
-      static constexpr unsigned int interface_id = 11;
-
     public:
+      static constexpr types::boundary_id interface_id = 11;
+      // Optional TODO in case of more involved BCs: use FunctionParser
+      std::map<types::boundary_id, std::unique_ptr<Function<dim>>> dirichlet;
+      std::map<types::boundary_id, ComponentMask> dirichlet_mask;
+
       virtual void
-      make_coarse_grid(Triangulation<dim> &triangulation) const = 0;
+      make_coarse_grid_and_bcs(Triangulation<dim> &triangulation) = 0;
 
     protected:
       void

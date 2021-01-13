@@ -56,41 +56,6 @@ namespace FSI
       prm.leave_subsection();
     }
 
-    template <int dim>
-    class BoundaryConditions
-    {
-    public:
-      std::map<types::boundary_id, std::unique_ptr<FunctionParser<dim>>>
-                                                  dirichlet;
-      std::map<types::boundary_id, ComponentMask> dirichlet_mask;
-
-      std::map<types::boundary_id, std::unique_ptr<FunctionParser<dim>>>
-        neumann;
-
-      void
-      add_bc_parameters(ParameterHandler &prm);
-    };
-
-
-    template <int dim>
-    void
-    BoundaryConditions<dim>::add_bc_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("Boundary conditions");
-      prm.add_parameter("Dirichlet IDs and expressions",
-                        dirichlet,
-                        "Dirichlet functions for each boundary ID");
-
-      prm.add_parameter("Dirichlet IDs and component mask",
-                        dirichlet_mask,
-                        "Dirichlet component mask for each boundary ID");
-
-      prm.add_parameter("Neumann IDs and expressions",
-                        neumann,
-                        "Neumann functions for each boundary ID");
-
-      prm.leave_subsection();
-    }
 
     // @sect4{Finite Element system}
 
@@ -375,27 +340,14 @@ namespace FSI
                           public NonlinearSolver,
                           public Time,
                           public Misc<dim>,
-                          public BoundaryConditions<dim>,
                           public PreciceAdapterConfiguration
 
     {
     public:
       AllParameters(const std::string &input_file);
-
-      void
-      set_time(const double time) const;
     };
 
-    template <int dim>
-    void
-    AllParameters<dim>::set_time(const double time) const
-    {
-      for (const auto &d : this->dirichlet)
-        d.second->set_time(time);
 
-      for (const auto &n : this->neumann)
-        n.second->set_time(time);
-    }
 
     template <int dim>
     AllParameters<dim>::AllParameters(const std::string &input_file)
@@ -411,7 +363,6 @@ namespace FSI
       PreciceAdapterConfiguration::add_parameters(prm);
 
       this->add_misc_parameters(prm);
-      this->add_bc_parameters(prm);
 
       prm.parse_input(input_file);
 

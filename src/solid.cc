@@ -5,6 +5,7 @@
 #include <boost/preprocessor/tuple/elem.hpp>
 #include <boost/preprocessor/tuple/to_list.hpp>
 
+#include <cases/case_selector.h>
 #include <mf_elasticity.h>
 
 #define GET_D(L) BOOST_PP_TUPLE_ELEM(3, 0, BOOST_PP_TUPLE_ELEM(1, 0, L))

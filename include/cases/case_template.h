@@ -11,14 +11,14 @@ namespace FSI
     {
     public:
       virtual void
-      make_coarse_grid(Triangulation<dim> &triangulation) const override;
+      make_coarse_grid_and_bcs(Triangulation<dim> &triangulation) override;
     };
 
 
 
     template <int dim>
     void
-    MyCase<dim>::make_coarse_grid(Triangulation<dim> &triangulation) const
+    MyCase<dim>::make_coarse_grid_and_bcs(Triangulation<dim> &triangulation)
     {
       // Create your coarse mesh here
       // make sure you use this->interface_id for the coupling interface when

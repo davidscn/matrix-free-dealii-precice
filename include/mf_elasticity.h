@@ -63,7 +63,7 @@ static const unsigned int debug_level = 1;
 #include <deal.II/physics/elasticity/standard_tensors.h>
 #include <deal.II/physics/transformations.h>
 
-#include <cases/case_selector.h>
+#include <cases/case_base.h>
 #include <material.h>
 #include <mf_nh_operator.h>
 #include <parameter/parameter_handling.h>
@@ -159,13 +159,13 @@ namespace FSI
     virtual ~Solid();
 
     void
-    run(std::shared_ptr<TestCases::TestCaseBase<dim>> testcase);
+    run(std::shared_ptr<TestCases::TestCaseBase<dim>> testcase_);
 
   private:
     // We start the collection of member functions with one that builds the
     // grid:
     void
-    make_grid(std::shared_ptr<TestCases::TestCaseBase<dim>> testcase);
+    make_grid();
 
     // Set up the finite element system to be solved:
     void
@@ -264,6 +264,9 @@ namespace FSI
     // ...and description of the geometry on which the problem is solved:
     parallel::distributed::Triangulation<dim> triangulation;
 
+    // In order to hold the copy
+    std::shared_ptr<TestCases::TestCaseBase<dim>> testcase;
+
     // Also, keep track of the current time and the time spent evaluating
     // certain functions
     Time                time;
@@ -294,8 +297,6 @@ namespace FSI
     const double alpha_4 = gamma / (beta * parameters.delta_t);
     const double alpha_5 = 1 - (gamma / beta);
     const double alpha_6 = (1 - (gamma / (2 * beta))) * parameters.delta_t;
-
-    const types::boundary_id interface_id = 11;
 
     // matrix material
     std::shared_ptr<Material_Compressible_Neo_Hook_One_Field<dim, Number>>
@@ -685,9 +686,10 @@ namespace FSI
   template <int dim, int degree, int n_q_points_1d, typename Number>
   void
   Solid<dim, degree, n_q_points_1d, Number>::run(
-    std::shared_ptr<TestCases::TestCaseBase<dim>> testcase)
+    std::shared_ptr<TestCases::TestCaseBase<dim>> testcase_)
   {
-    make_grid(testcase);
+    testcase = testcase_;
+    make_grid();
     system_setup();
     output_results();
     time.increment();
@@ -699,14 +701,13 @@ namespace FSI
     setup_matrix_free();
     precice_adapter = std::make_unique<
       Adapter::Adapter<dim, degree, VectorType, VectorizedArrayType>>(
-      parameters, interface_id, false, mf_data_reference);
+      parameters, testcase->interface_id, false, mf_data_reference);
     precice_adapter->initialize(total_displacement);
 
     // At the beginning, we reset the solution update for this time step...
     while (time.current() <= time.end() ||
            precice_adapter->is_coupling_ongoing())
       {
-        parameters.set_time(time.current());
         // preCICE complains otherwise
         precice_adapter->save_current_state_if_required([&]() {});
 
@@ -749,10 +750,10 @@ namespace FSI
 
   template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::make_grid(
-    std::shared_ptr<TestCases::TestCaseBase<dim>> testcase)
+  Solid<dim, degree, n_q_points_1d, Number>::make_grid()
   {
-    testcase->make_coarse_grid(triangulation);
+    Assert(testcase.get() != nullptr, ExcInternalError());
+    testcase->make_coarse_grid_and_bcs(triangulation);
     triangulation.refine_global(parameters.n_global_refinement);
 
     vol_reference = GridTools::volume(triangulation);
@@ -1796,7 +1797,7 @@ namespace FSI
         const auto boundary_id = mf_data_reference->get_boundary_id(face);
 
         // Only interfaces
-        if (boundary_id != interface_id)
+        if (boundary_id != testcase->interface_id)
           continue;
 
         // Read out the total displacment
@@ -1876,10 +1877,10 @@ namespace FSI
     // We also setup GMG constraints
 
     Functions::ZeroFunction<dim> zero(n_components);
-    for (const auto &el : parameters.dirichlet)
+    for (const auto &el : testcase->dirichlet)
       {
-        const auto &mask = parameters.dirichlet_mask.find(el.first);
-        Assert(mask != parameters.dirichlet_mask.end(),
+        const auto &mask = testcase->dirichlet_mask.find(el.first);
+        Assert(mask != testcase->dirichlet_mask.end(),
                ExcMessage("Could not find component mask for ID " +
                           std::to_string(el.first)));
 

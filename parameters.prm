@@ -16,14 +16,6 @@ subsection Misc
    set Output solution = true
 end
 
-subsection Boundary conditions
-  # Dirichlet functions for each boundary ID
-  set Dirichlet IDs and expressions = 1:0,0
-
-  # Dirichlet component mask for each boundary ID
-  set Dirichlet IDs and component mask = 1:true,true
-end
-
 
 subsection Geometry
   # Dimension of the problem
