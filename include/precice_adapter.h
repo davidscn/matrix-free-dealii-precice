@@ -310,9 +310,8 @@ namespace Adapter
 
         precice->markActionFulfilled(
           precice::constants::actionWriteInitialData());
-
-        precice->initializeData();
       }
+    precice->initializeData();
 
     // Maybe, read block-wise and work with an AlignedVector since the read data
     // (forces) is multiple times required during the Newton iteration

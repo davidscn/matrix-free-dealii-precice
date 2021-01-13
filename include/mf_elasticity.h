@@ -1506,6 +1506,7 @@ namespace FSI
 
         // now ready to go-on and assmble linearized problem around the total
         // displacement
+        // TODO: merge this function call with zeroing in main loop
         update_acceleration(delta_displacement);
 
         assemble_system();
