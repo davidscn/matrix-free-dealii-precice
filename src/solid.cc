@@ -5,6 +5,7 @@
 #include <boost/preprocessor/tuple/elem.hpp>
 #include <boost/preprocessor/tuple/to_list.hpp>
 
+#include <cases/case_selector.h>
 #include <mf_elasticity.h>
 
 #define GET_D(L) BOOST_PP_TUPLE_ELEM(3, 0, BOOST_PP_TUPLE_ELEM(1, 0, L))
@@ -19,7 +20,7 @@
   {                                                                      \
     Parameters::AllParameters<2>         parameters(parameter_filename); \
     Solid<2, GET_D(L), GET_Q(L), double> solid_2d(parameters);           \
-    solid_2d.run();                                                      \
+    solid_2d.run(testcase);                                              \
   }
 
 
@@ -28,7 +29,7 @@
   {                                                                      \
     Parameters::AllParameters<3>         parameters(parameter_filename); \
     Solid<3, GET_D(L), GET_Q(L), double> solid_3d(parameters);           \
-    solid_3d.run();                                                      \
+    solid_3d.run(testcase);                                              \
   }
 
 
@@ -62,15 +63,20 @@ main(int argc, char *argv[])
         Utilities::MPI::MPI_InitFinalize mpi_initialization(
           argc, argv, 1 /*dealii::numbers::invalid_unsigned_int*/);
 
-        typedef double     NumberType;
         const unsigned int degree     = fesystem.poly_degree;
         const unsigned int n_q_points = fesystem.quad_order;
         const unsigned int dim        = geometry.dim;
+        const std::string  case_name  = geometry.testcase;
+
         if (dim == 2)
           {
+            // query the testcase
+            TestCases::CaseSelector<2> selector;
+            auto testcase = selector.get_test_case(case_name);
+
             if (degree == 0)
               {
-                AssertThrow(false, ExcInternalError());
+                AssertThrow(degree > 0, ExcInternalError());
               }
             BOOST_PP_LIST_FOR_EACH_PRODUCT(DOIF2, 1, (MF_DQ))
             else
@@ -85,9 +91,13 @@ main(int argc, char *argv[])
           }
         else if (dim == 3)
           {
+            // query the testcase
+            TestCases::CaseSelector<3> selector;
+            auto testcase = selector.get_test_case(case_name);
+
             if (degree == 0)
               {
-                AssertThrow(false, ExcInternalError());
+                AssertThrow(degree > 0, ExcInternalError());
               }
             BOOST_PP_LIST_FOR_EACH_PRODUCT(DOIF3, 1, (MF_DQ))
             else

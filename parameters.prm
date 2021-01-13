@@ -9,33 +9,23 @@ subsection Finite element system
 end
 
 subsection Misc
-   # Points in undeformed configuration to output unknown fields
+   # Watchpoint in undeformed configuration to output unknown fields
    set Output points   = 0.6, 0.2
 
    # Output solution and mesh
    set Output solution = true
 end
 
-subsection Boundary conditions
-  # Dirichlet functions for each boundary ID
-  set Dirichlet IDs and expressions = 1:0,0
-
-  # Dirichlet component mask for each boundary ID
-  set Dirichlet IDs and component mask = 1:true,true
-end
-
 
 subsection Geometry
   # Dimension of the problem
-  set Dimension = 2
+  set Dimension          = 2
 
   # Number of global refinements
   set Global refinement  = 4
 
-  # Global grid scaling factor
-  set Grid scale         = 1e-3
-
-  set Type       = CSM
+  # Testcase to compute
+  set Testcase           = turek_hron
 end
 
 
@@ -111,9 +101,6 @@ subsection Time
 end
 
 subsection precice configuration
-  # Cases: FSI3 or PF for perpendicular flap
-  set Scenario            = FSI3
-
   # Name of the precice configuration file
   set precice config-file = precice-config.xml
 

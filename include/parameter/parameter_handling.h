@@ -2,7 +2,7 @@
 
 #include <deal.II/base/parameter_handler.h>
 
-#include <precice_parameter.h>
+#include <parameter/precice_parameter.h>
 using namespace dealii;
 
 namespace FSI
@@ -56,41 +56,6 @@ namespace FSI
       prm.leave_subsection();
     }
 
-    template <int dim>
-    class BoundaryConditions
-    {
-    public:
-      std::map<types::boundary_id, std::unique_ptr<FunctionParser<dim>>>
-                                                  dirichlet;
-      std::map<types::boundary_id, ComponentMask> dirichlet_mask;
-
-      std::map<types::boundary_id, std::unique_ptr<FunctionParser<dim>>>
-        neumann;
-
-      void
-      add_bc_parameters(ParameterHandler &prm);
-    };
-
-
-    template <int dim>
-    void
-    BoundaryConditions<dim>::add_bc_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("Boundary conditions");
-      prm.add_parameter("Dirichlet IDs and expressions",
-                        dirichlet,
-                        "Dirichlet functions for each boundary ID");
-
-      prm.add_parameter("Dirichlet IDs and component mask",
-                        dirichlet_mask,
-                        "Dirichlet component mask for each boundary ID");
-
-      prm.add_parameter("Neumann IDs and expressions",
-                        neumann,
-                        "Neumann functions for each boundary ID");
-
-      prm.leave_subsection();
-    }
 
     // @sect4{Finite Element system}
 
@@ -129,13 +94,9 @@ namespace FSI
     // Make adjustments to the problem geometry and its discretisation.
     struct Geometry
     {
-      unsigned int elements_per_edge   = 2;
-      double       scale               = 1e-3;
       unsigned int dim                 = 2;
       unsigned int n_global_refinement = 0;
-      unsigned int extrusion_slices    = 5;
-      double       extrusion_height    = 1;
-      std::string  type                = "CSM";
+      std::string  testcase            = "turek_hron";
 
       void
       add_parameters(ParameterHandler &prm);
@@ -146,29 +107,9 @@ namespace FSI
     {
       prm.enter_subsection("Geometry");
       {
-        prm.add_parameter("Elements per edge",
-                          elements_per_edge,
-                          "Number of elements per long edge of the beam",
-                          Patterns::Integer(0));
-
         prm.add_parameter("Global refinement",
                           n_global_refinement,
                           "Number of global refinements",
-                          Patterns::Integer(0));
-
-        prm.add_parameter("Grid scale",
-                          scale,
-                          "Global grid scaling factor",
-                          Patterns::Double(0.0));
-
-        prm.add_parameter("Extrusion height",
-                          extrusion_height,
-                          "Extrusion height",
-                          Patterns::Double(0.0));
-
-        prm.add_parameter("Extrusion slices",
-                          extrusion_slices,
-                          "Number of extrusion slices",
                           Patterns::Integer(0));
 
         prm.add_parameter("Dimension",
@@ -176,10 +117,10 @@ namespace FSI
                           "Dimension of the problem",
                           Patterns::Integer(2, 3));
 
-        prm.add_parameter("Type",
-                          type,
-                          "Type of the problem",
-                          Patterns::Selection("CSM|Cook|PF"));
+        prm.add_parameter("testcase",
+                          testcase,
+                          "Testcase to compute",
+                          Patterns::Selection("turek_hron|cook"));
       }
       prm.leave_subsection();
     }
@@ -399,27 +340,14 @@ namespace FSI
                           public NonlinearSolver,
                           public Time,
                           public Misc<dim>,
-                          public BoundaryConditions<dim>,
                           public PreciceAdapterConfiguration
 
     {
     public:
       AllParameters(const std::string &input_file);
-
-      void
-      set_time(const double time) const;
     };
 
-    template <int dim>
-    void
-    AllParameters<dim>::set_time(const double time) const
-    {
-      for (const auto &d : this->dirichlet)
-        d.second->set_time(time);
 
-      for (const auto &n : this->neumann)
-        n.second->set_time(time);
-    }
 
     template <int dim>
     AllParameters<dim>::AllParameters(const std::string &input_file)
@@ -435,7 +363,6 @@ namespace FSI
       PreciceAdapterConfiguration::add_parameters(prm);
 
       this->add_misc_parameters(prm);
-      this->add_bc_parameters(prm);
 
       prm.parse_input(input_file);
 

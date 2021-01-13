@@ -63,9 +63,10 @@ static const unsigned int debug_level = 1;
 #include <deal.II/physics/elasticity/standard_tensors.h>
 #include <deal.II/physics/transformations.h>
 
+#include <cases/case_base.h>
 #include <material.h>
 #include <mf_nh_operator.h>
-#include <parameter_handling.h>
+#include <parameter/parameter_handling.h>
 #include <precice_adapter.h>
 #include <q_equidistant.h>
 #include <sys/stat.h>
@@ -158,7 +159,7 @@ namespace FSI
     virtual ~Solid();
 
     void
-    run();
+    run(std::shared_ptr<TestCases::TestCaseBase<dim>> testcase_);
 
   private:
     // We start the collection of member functions with one that builds the
@@ -263,6 +264,9 @@ namespace FSI
     // ...and description of the geometry on which the problem is solved:
     parallel::distributed::Triangulation<dim> triangulation;
 
+    // In order to hold the copy
+    std::shared_ptr<TestCases::TestCaseBase<dim>> testcase;
+
     // Also, keep track of the current time and the time spent evaluating
     // certain functions
     Time                time;
@@ -293,8 +297,6 @@ namespace FSI
     const double alpha_4 = gamma / (beta * parameters.delta_t);
     const double alpha_5 = 1 - (gamma / beta);
     const double alpha_6 = (1 - (gamma / (2 * beta))) * parameters.delta_t;
-
-    const types::boundary_id interface_id = 11;
 
     // matrix material
     std::shared_ptr<Material_Compressible_Neo_Hook_One_Field<dim, Number>>
@@ -683,8 +685,10 @@ namespace FSI
   //
   template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::run()
+  Solid<dim, degree, n_q_points_1d, Number>::run(
+    std::shared_ptr<TestCases::TestCaseBase<dim>> testcase_)
   {
+    testcase = testcase_;
     make_grid();
     system_setup();
     output_results();
@@ -697,14 +701,13 @@ namespace FSI
     setup_matrix_free();
     precice_adapter = std::make_unique<
       Adapter::Adapter<dim, degree, VectorType, VectorizedArrayType>>(
-      parameters, interface_id, false, mf_data_reference);
+      parameters, testcase->interface_id, false, mf_data_reference);
     precice_adapter->initialize(total_displacement);
 
     // At the beginning, we reset the solution update for this time step...
     while (time.current() <= time.end() ||
            precice_adapter->is_coupling_ongoing())
       {
-        parameters.set_time(time.current());
         // preCICE complains otherwise
         precice_adapter->save_current_state_if_required([&]() {});
 
@@ -744,181 +747,13 @@ namespace FSI
   }
 
 
-  // @sect3{Private interface}
-
-  // @sect4{Solid::make_grid}
-
-  // On to the first of the private member functions. Here we create the
-  // triangulation of the domain, for which we choose a scaled an
-  // anisotripically discretised rectangle which is subsequently transformed
-  // into the correct of the Cook cantilever. Each relevant boundary face is
-  // then given a boundary ID number.
-  //
-  // We then determine the volume of the reference configuration and print it
-  // for comparison.
-
-  template <int dim>
-  Point<dim>
-  grid_y_transform(const Point<dim> &pt_in)
-  {
-    const double &x = pt_in[0];
-    const double &y = pt_in[1];
-
-    const double y_upper =
-      44.0 + (16.0 / 48.0) * x; // Line defining upper edge of beam
-    const double y_lower =
-      0.0 + (44.0 / 48.0) * x;     // Line defining lower edge of beam
-    const double theta = y / 44.0; // Fraction of height along left side of beam
-    const double y_transform =
-      (1 - theta) * y_lower + theta * y_upper; // Final transformation
-
-    Point<dim> pt_out = pt_in;
-    pt_out[1]         = y_transform;
-
-    return pt_out;
-  }
-
-
 
   template <int dim, int degree, int n_q_points_1d, typename Number>
   void
   Solid<dim, degree, n_q_points_1d, Number>::make_grid()
   {
-    // material_id 2 is currently used for the inclusion material, which is 100
-    // x stiffer (mu) than the usual material
-    if (parameters.type == "CSM")
-      {
-        uint n_x = 5;
-        uint n_y = 1;
-        uint n_z = 1;
-
-        const std::vector<unsigned int> repetitions =
-          dim == 2 ? std::vector<unsigned int>({n_x, n_y}) :
-                     std::vector<unsigned int>({n_x, n_y, n_z});
-
-        const Point<dim> bottom_left =
-          (dim == 3 ? Point<dim>(0.24899, 0.19, -0.005) :
-                      Point<dim>(0.24899, 0.19));
-        const Point<dim> top_right =
-          dim == 3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21);
-
-        GridGenerator::subdivided_hyper_rectangle(triangulation,
-                                                  repetitions,
-                                                  bottom_left,
-                                                  top_right,
-                                                  /*colorize*/ true);
-
-        // Since we wish to apply a Neumann BC to the right-hand surface, we
-        // must find the cell faces in this part of the domain and mark them
-        // with a distinct boundary ID number. The faces we are looking for are
-        // on the +x surface and will get boundary ID 11. Dirichlet boundaries
-        // exist on the left-hand face of the beam (this fixed boundary will get
-        // ID 1) and on the +Z and -Z faces (which correspond to ID 2 and we
-        // will use to impose the plane strain condition)
-        //        const double tol_boundary = 1e-6;
-        // NOTE: we need to set IDs regardless of cell being locally owned or
-        // not as in the global refinement cells will be repartitioned and faces
-        // of their parents should have right IDs
-
-        const unsigned int clamped_mesh_id              = 1;
-        const unsigned int out_of_plane_clamped_mesh_id = 2;
-        const unsigned int interface_boundary_id        = 11;
-
-        // boundary IDs are obtained through colorize = true
-
-        uint id_flap_long_bottom         = 2; // x direction
-        uint id_flap_long_top            = 3;
-        uint id_flap_short_bottom        = 0; // y direction
-        uint id_flap_short_top           = 1;
-        uint id_flap_out_of_plane_bottom = 4; // z direction
-        uint id_flap_out_of_plane_top    = 5;
-
-
-        // Iterate over all cells and set the IDs
-        for (const auto &cell : triangulation.active_cell_iterators())
-          {
-            for (const auto &face : cell->face_iterators())
-              if (face->at_boundary() == true)
-                {
-                  // Boundaries for the interface
-                  if (face->boundary_id() == id_flap_short_top ||
-                      face->boundary_id() == id_flap_long_bottom ||
-                      face->boundary_id() == id_flap_long_top)
-                    face->set_boundary_id(interface_id);
-                  // Boundaries clamped in all directions
-                  else if (face->boundary_id() == id_flap_short_bottom)
-                    face->set_boundary_id(clamped_mesh_id);
-                  // Boundaries clamped out-of-plane (z) direction
-                  else if (face->boundary_id() == id_flap_out_of_plane_bottom ||
-                           face->boundary_id() == id_flap_out_of_plane_top)
-                    face->set_boundary_id(out_of_plane_clamped_mesh_id);
-                  // on the coarse mesh reset material ID
-                }
-            cell->set_material_id(0);
-          }
-        //        GridTools::scale(parameters.scale, triangulation);
-      }
-    else if (parameters.type == "Cook")
-      {
-        // Divide the beam, but only along the x- and y-coordinate directions
-        std::vector<unsigned int> repetitions(dim,
-                                              parameters.elements_per_edge);
-        // Only allow one element through the thickness
-        // (modelling a plane strain condition)
-        if (dim == 3)
-          repetitions[dim - 1] = 1;
-
-        const Point<dim> bottom_left =
-          (dim == 3 ? Point<dim>(0.0, 0.0, -0.5) : Point<dim>(0.0, 0.0));
-        const Point<dim> top_right =
-          (dim == 3 ? Point<dim>(48.0, 44.0, 0.5) : Point<dim>(48.0, 44.0));
-
-        GridGenerator::subdivided_hyper_rectangle(triangulation,
-                                                  repetitions,
-                                                  bottom_left,
-                                                  top_right);
-
-        // Since we wish to apply a Neumann BC to the right-hand surface, we
-        // must find the cell faces in this part of the domain and mark them
-        // with a distinct boundary ID number.  The faces we are looking for are
-        // on the +x surface and will get boundary ID 11. Dirichlet boundaries
-        // exist on the left-hand face of the beam (this fixed boundary will get
-        // ID 1) and on the +Z and -Z faces (which correspond to ID 2 and we
-        // will use to impose the plane strain condition)
-        const double tol_boundary = 1e-6;
-        // NOTE: we need to set IDs regardless of cell being locally owned or
-        // not as in the global refinement cells will be repartitioned and faces
-        // of their parents should have right IDs
-        for (auto cell : triangulation.active_cell_iterators())
-          {
-            for (unsigned int face = 0;
-                 face < GeometryInfo<dim>::faces_per_cell;
-                 ++face)
-              if (cell->face(face)->at_boundary() == true)
-                {
-                  if (std::abs(cell->face(face)->center()[0] - 0.0) <
-                      tol_boundary)
-                    cell->face(face)->set_boundary_id(1); // -X faces
-                  else if (std::abs(cell->face(face)->center()[0] - 48.0) <
-                           tol_boundary)
-                    cell->face(face)->set_boundary_id(interface_id); // +X faces
-                  else if (std::abs(std::abs(cell->face(face)->center()[0]) -
-                                    0.5) < tol_boundary)
-                    cell->face(face)->set_boundary_id(2); // +Z and -Z faces
-                }
-            // on the coarse mesh reset material ID
-            cell->set_material_id(0);
-          }
-
-        // Transform the hyper-rectangle into the beam shape
-        GridTools::transform(&grid_y_transform<dim>, triangulation);
-        GridTools::scale(parameters.scale, triangulation);
-      }
-    else
-      {
-        Assert(false, ExcNotImplemented())
-      }
-
+    Assert(testcase.get() != nullptr, ExcInternalError());
+    testcase->make_coarse_grid_and_bcs(triangulation);
     triangulation.refine_global(parameters.n_global_refinement);
 
     vol_reference = GridTools::volume(triangulation);
@@ -1962,7 +1797,7 @@ namespace FSI
         const auto boundary_id = mf_data_reference->get_boundary_id(face);
 
         // Only interfaces
-        if (boundary_id != interface_id)
+        if (boundary_id != testcase->interface_id)
           continue;
 
         // Read out the total displacment
@@ -2042,10 +1877,10 @@ namespace FSI
     // We also setup GMG constraints
 
     Functions::ZeroFunction<dim> zero(n_components);
-    for (const auto &el : parameters.dirichlet)
+    for (const auto &el : testcase->dirichlet)
       {
-        const auto &mask = parameters.dirichlet_mask.find(el.first);
-        Assert(mask != parameters.dirichlet_mask.end(),
+        const auto &mask = testcase->dirichlet_mask.find(el.first);
+        Assert(mask != testcase->dirichlet_mask.end(),
                ExcMessage("Could not find component mask for ID " +
                           std::to_string(el.first)));
 
