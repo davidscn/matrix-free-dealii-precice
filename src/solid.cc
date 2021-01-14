@@ -5,6 +5,7 @@
 #include <boost/preprocessor/tuple/elem.hpp>
 #include <boost/preprocessor/tuple/to_list.hpp>
 
+#include <cases/case_base.h>
 #include <cases/case_selector.h>
 #include <mf_elasticity.h>
 

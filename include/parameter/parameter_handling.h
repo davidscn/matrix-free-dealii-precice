@@ -14,23 +14,23 @@ namespace FSI
   namespace Parameters
   {
     template <int dim>
-    class Misc
+    class Output
     {
     public:
-      std::string output_folder   = std::string("");
-      bool        output_solution = true;
-
+      std::string             output_folder   = std::string("");
+      bool                    output_solution = true;
+      double                  output_tick     = 0.1;
       std::vector<Point<dim>> output_points;
 
       void
-      add_misc_parameters(ParameterHandler &prm);
+      add_output_parameters(ParameterHandler &prm);
     };
 
     template <int dim>
     void
-    Misc<dim>::add_misc_parameters(ParameterHandler &prm)
+    Output<dim>::add_output_parameters(ParameterHandler &prm)
     {
-      prm.enter_subsection("Misc");
+      prm.enter_subsection("Output");
       {
         prm.declare_entry("Output folder",
                           "",
@@ -45,13 +45,18 @@ namespace FSI
 
         prm.add_parameter("Output solution",
                           output_solution,
-                          "Output solution and mesh",
+                          "Output solution watchpoint",
                           Patterns::Bool());
 
         prm.add_parameter("Output points",
                           output_points,
                           "Points in undeformed configuration to "
                           "output unknown fields");
+
+        prm.add_parameter("Output tick",
+                          output_tick,
+                          "At which time to write a vtu output file",
+                          Patterns::Double(0));
       }
       prm.leave_subsection();
     }
@@ -117,7 +122,7 @@ namespace FSI
                           "Dimension of the problem",
                           Patterns::Integer(2, 3));
 
-        prm.add_parameter("testcase",
+        prm.add_parameter("Testcase",
                           testcase,
                           "Testcase to compute",
                           Patterns::Selection("turek_hron|cook"));
@@ -339,7 +344,7 @@ namespace FSI
                           public LinearSolver,
                           public NonlinearSolver,
                           public Time,
-                          public Misc<dim>,
+                          public Output<dim>,
                           public PreciceAdapterConfiguration
 
     {
@@ -362,7 +367,7 @@ namespace FSI
       Time::add_parameters(prm);
       PreciceAdapterConfiguration::add_parameters(prm);
 
-      this->add_misc_parameters(prm);
+      this->add_output_parameters(prm);
 
       prm.parse_input(input_file);
 
@@ -391,6 +396,11 @@ namespace FSI
 
           AssertThrow("default" == mesh_name, ExcMessage(error_message));
         }
+
+      AssertThrow(
+        this->output_tick >= this->delta_t,
+        ExcMessage(
+          "The output tick cannot be smaller than the time step size."));
     }
 
   } // namespace Parameters

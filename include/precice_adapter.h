@@ -310,9 +310,8 @@ namespace Adapter
 
         precice->markActionFulfilled(
           precice::constants::actionWriteInitialData());
-
-        precice->initializeData();
       }
+    precice->initializeData();
 
     // Maybe, read block-wise and work with an AlignedVector since the read data
     // (forces) is multiple times required during the Newton iteration
@@ -445,7 +444,7 @@ namespace Adapter
 
             // Transform Tensor<1,dim,VectorizedArrayType> into preCICE conform
             // format
-            // Alternatively: Loop directly iver active_faces instead of size()
+            // Alternatively: Loop directly over active_faces instead of size()
             // and use writeVectorData
             for (int d = 0; d < dim; ++d)
               for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)

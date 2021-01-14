@@ -10,16 +10,16 @@ end
 
 subsection Output
    # At which time to write a vtu output file
-   set Output tick     = 0.1
+   set Output tick     = 1
 
-   # Output solution watchpoint
+   # Output solution watchpoint 
    set Output solution = true
 
    # Watchpoint in undeformed configuration to output unknown fields
    set Output points   = 0.6, 0.2
 
-   # Output folder
-   set Output folder   = dealii-output
+   # Output folder (must exist)
+   set Output folder   = turek_jacobi_tensor2
 end
 
 
@@ -43,7 +43,7 @@ subsection Linear solver
   set Max iteration multiplier  = 1
 
   # Preconditioner type
-  set Preconditioner type        = gmg
+  set Preconditioner type        = jacobi
 
   # Preconditioner relaxation value
   set Preconditioner relaxation  = 0.65
@@ -94,7 +94,7 @@ subsection Nonlinear solver
   set Tolerance force               = 1.0e-9
 
   # Force residual absolute tolerance
-  set Absolute tolerance force = 2e-9
+  set Absolute tolerance force      = 2e-9
 end
 
 
