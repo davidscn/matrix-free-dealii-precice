@@ -1,20 +1,6 @@
-// own headers
-#include <boost/preprocessor/facilities/empty.hpp>
-#include <boost/preprocessor/list/at.hpp>
-#include <boost/preprocessor/list/for_each_product.hpp>
-#include <boost/preprocessor/tuple/elem.hpp>
-#include <boost/preprocessor/tuple/to_list.hpp>
-
-#include <cases/case_base.h>
 #include <cases/case_selector.h>
 #include <mf_elasticity.h>
-
-#define GET_D(L) BOOST_PP_TUPLE_ELEM(3, 0, BOOST_PP_TUPLE_ELEM(1, 0, L))
-#define GET_Q(L) BOOST_PP_TUPLE_ELEM(3, 1, BOOST_PP_TUPLE_ELEM(1, 0, L))
-
-//#define MF_DQ BOOST_PP_TUPLE_TO_LIST(8, ((1, 2), (2, 3), (3, 4), (4, 5),
-//(5,6), (6,7), (7,8), (8,9)))
-#define MF_DQ BOOST_PP_TUPLE_TO_LIST(1, ((1, 2)))
+#include <template_list.h>
 
 #define DOIF2(R, L)                                                      \
   else if ((degree == GET_D(L)) && (n_q_points == GET_Q(L)))             \
@@ -82,12 +68,15 @@ main(int argc, char *argv[])
             BOOST_PP_LIST_FOR_EACH_PRODUCT(DOIF2, 1, (MF_DQ))
             else
             {
-              AssertThrow(false,
-                          ExcMessage(
-                            "Matrix-free calculations with degree=" +
-                            std::to_string(degree) +
-                            " and n_q_points_1d=" + std::to_string(n_q_points) +
-                            " are not supported."));
+              AssertThrow(
+                false,
+                ExcMessage(
+                  "Matrix-free calculations with degree = " +
+                  std::to_string(degree) +
+                  " and n_q_points_1d = " + std::to_string(n_q_points) +
+                  " are not compiled. You may want to add your parameter "
+                  "combination to the template parameter list located at "
+                  "./include/template_list.h"));
             }
           }
         else if (dim == 3)
@@ -103,12 +92,15 @@ main(int argc, char *argv[])
             BOOST_PP_LIST_FOR_EACH_PRODUCT(DOIF3, 1, (MF_DQ))
             else
             {
-              AssertThrow(false,
-                          ExcMessage(
-                            "Matrix-free calculations with degree=" +
-                            std::to_string(degree) +
-                            " and n_q_points_1d=" + std::to_string(n_q_points) +
-                            " are not supported."));
+              AssertThrow(
+                false,
+                ExcMessage(
+                  "Matrix-free calculations with degree = " +
+                  std::to_string(degree) +
+                  " and n_q_points_1d = " + std::to_string(n_q_points) +
+                  " are not compiled. You may want to add your parameter "
+                  "combination to the template parameter list located at "
+                  "./include/template_list.h"));
             }
           }
       }
