@@ -34,9 +34,17 @@ test_name="building"
 print_start ${test_name}
 mkdir -p build && cd build
 (cmake ../../ && make debug) &>${test_name}.log
-print_result ${test_name}.log
+ if [ $? -eq 0 ]
+    then
+    echo -ne "${GREEN} passed ${NOCOLOR}\n"
+    else
+    echo -ne "${RED} failed ${NOCOLOR}\n"
+    cat ${test_name}.log
+    exit 1
+ fi
+
 cd ..
-cp ./build/solid ./dummy_tester
+cp ./build/solid ./dummy_tester/
 
 echo "Building the tester..."
 cd ./dummy_tester
@@ -48,13 +56,13 @@ for i in "${tests[@]}"
     do
     test_name="${i}_serial"
     print_start ${test_name}
-    ./solid $i/$i.prm&> $i/${test_name}.log & ./dummy_tester &>$i/tester-${test_name}.log
-    numdiff  $i/output $i/${test_name}.output &>$i/${test_name}.diff
-    print_result ${test_name}
+    ./solid $i/$i.prm &> $i/${test_name}.log & ./dummy_tester &> $i/tester-${test_name}.log
+    numdiff  $i/output $i/${test_name}.output &> $i/${test_name}.diff
+    print_result $i/${test_name}.diff
     test_name="${i}_parallel"
     print_start ${test_name}
-    mpirun -np 4 ./solid $i/$i.prm&> $i/${test_name}.log & ./dummy_tester &>$i/tester-${test_name}.log
-    numdiff  $i/output $i/${test_name}.output &>$i/${test_name}.diff
+    mpirun --oversubscribe -np 4 ./solid $i/$i.prm  & ./dummy_tester
+    numdiff  $i/output $i/${test_name}.output &> $i/${test_name}.diff
     print_result $i/${test_name}.diff
 done
 

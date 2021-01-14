@@ -783,8 +783,6 @@ namespace FSI
     DoFRenumbering::Cuthill_McKee(dof_handler);
 
     auto print = [&](ConditionalOStream &stream) {
-      std::locale s = stream.get_stream().getloc();
-      stream.get_stream().imbue(std::locale(""));
       stream << "--     . dim       = " << dim << "\n"
              << "--     . fe_degree = " << degree << "\n"
              << "--     . 1d_quad   = " << n_q_points_1d << "\n"
@@ -793,9 +791,11 @@ namespace FSI
              << "--     . Number of degrees of freedom: "
              << dof_handler.n_dofs() << "\n"
              << std::endl;
-      stream.get_stream().imbue(s);
     };
+    std::locale s = pcout.get_stream().getloc();
+    pcout.get_stream().imbue("");
     print(pcout);
+    pcout.get_stream().imbue(s);
     print(bcout);
 
     locally_owned_dofs = dof_handler.locally_owned_dofs();

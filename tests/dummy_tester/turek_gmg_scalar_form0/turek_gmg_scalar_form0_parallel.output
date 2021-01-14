@@ -2,8 +2,8 @@
 --     . dim       = 2
 --     . fe_degree = 1
 --     . 1d_quad   = 2
---     . Number of active cells: 1.280
---     . Number of degrees of freedom: 2.754
+--     . Number of active cells: 1280
+--     . Number of degrees of freedom: 2754
 
 
 Timestep 1 @ 0.2s

@@ -7,6 +7,7 @@ rm -fv ./dummy_tester/*.log
 rm -fv ./dummy_tester/*.json
 rm -fvr ./dummy_tester/precice-run
 rm -fv ./dummy_tester/Makefile
+rm -fv ./dummy_tester/solid
 rm -fv ./dummy_tester/CMakeCache.txt
 rm -fv ./dummy_tester/*.cmake
 rm -fvr ./dummy_tester/CMakeFiles
