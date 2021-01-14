@@ -696,7 +696,10 @@ namespace FSI
     setup_matrix_free();
     precice_adapter = std::make_unique<
       Adapter::Adapter<dim, degree, VectorType, VectorizedArrayType>>(
-      parameters, testcase->interface_id, false, mf_data_reference);
+      parameters,
+      int(TestCases::TestCaseBase<dim>::interface_id),
+      false,
+      mf_data_reference);
     precice_adapter->initialize(total_displacement);
 
     // At the beginning, we reset the solution update for this time step...
@@ -1804,7 +1807,7 @@ namespace FSI
         const auto boundary_id = mf_data_reference->get_boundary_id(face);
 
         // Only interfaces
-        if (boundary_id != testcase->interface_id)
+        if (boundary_id != int(TestCases::TestCaseBase<dim>::interface_id))
           continue;
 
         // Read out the total displacment
