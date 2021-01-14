@@ -796,7 +796,7 @@ namespace FSI
              << std::endl;
     };
     std::locale s = pcout.get_stream().getloc();
-    pcout.get_stream().imbue("");
+    pcout.get_stream().imbue(std::locale(""));
     print(pcout);
     pcout.get_stream().imbue(s);
     print(bcout);

@@ -61,7 +61,7 @@ for i in "${tests[@]}"
     print_result $i/${test_name}.diff
     test_name="${i}_parallel"
     print_start ${test_name}
-    mpirun --oversubscribe -np 4 ./solid $i/$i.prm  & ./dummy_tester
+    mpirun --oversubscribe -np 4 ./solid $i/$i.prm &> $i/${test_name}.log & ./dummy_tester &> $i/tester-${test_name}.log
     numdiff  $i/output $i/${test_name}.output &> $i/${test_name}.diff
     print_result $i/${test_name}.diff
 done
