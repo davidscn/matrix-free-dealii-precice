@@ -43,7 +43,7 @@ mkdir -p build && cd build
  fi
 
 cd ..
-rm -fv ./build/solid
+rm -fv ./dummy_tester/solid
 cp ./build/solid ./dummy_tester/
 
 echo "Building the tester..."
