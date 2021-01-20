@@ -444,6 +444,9 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::cache()
         data_current->get_cell_iterator(cell, 0)->material_id();
       const auto &cell_mat = (material_id == 0 ? material : material_inclusion);
 
+      Assert(cell_mat->formulation <= 1,
+             ExcMessage("Unknown material formulation"));
+
       phi_reference.reinit(cell);
       phi_reference.read_dof_values_plain(*displacement);
       phi_reference.evaluate(mf_caching == MFCaching::scalar_referential,
@@ -452,27 +455,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::cache()
 
       if (cell_mat->formulation == 0)
         {
-          for (unsigned int q = 0; q < phi_reference.n_q_points; ++q)
-            {
-              const Tensor<2, dim, VectorizedArrayType> &grad_u =
-                phi_reference.get_gradient(q);
-              const Tensor<2, dim, VectorizedArrayType> F =
-                Physics::Elasticity::Kinematics::F(grad_u);
-              const VectorizedArrayType det_F = determinant(F);
-
-              for (unsigned int i = 0;
-                   i < data_current->n_active_entries_per_cell_batch(cell);
-                   ++i)
-                Assert(det_F[i] > 0,
-                       ExcMessage(
-                         "det_F[" + std::to_string(i) +
-                         "] is not positive: " + std::to_string(det_F[i])));
-
-              cached_scalar(cell, q) = std::pow(det_F, Number(-1.0 / dim));
-            }
-        }
-      else if (cell_mat->formulation == 1)
-        {
+          Assert(mf_caching == MFCaching::scalar, ExcInternalError());
           for (unsigned int q = 0; q < phi_reference.n_q_points; ++q)
             {
               const Tensor<2, dim, VectorizedArrayType> &grad_u =
@@ -488,93 +471,115 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::cache()
                        0,
                      ExcMessage("det_F is not positive. "));
 
-              const VectorizedArrayType scalar =
-                cell_mat->mu - 2.0 * cell_mat->lambda * std::log(det_F);
-              if (mf_caching == MFCaching::scalar)
-                {
-                  cached_scalar(cell, q) = scalar;
-                }
-              else if (mf_caching == MFCaching::scalar_referential)
-                {
-                  cached_scalar(cell, q) = scalar;
-                  // MK:
-                  // This is to avoid the phi_reference.read_dof_values() call
-                  // and the full phi_reference.evaluate(false, true) calls.
-                  // With this quadrature point information, I only need to call
-                  // a cheap "collocation gradient" function, which is likely
-                  // the best compromise in terms of caching some data versus
-                  // computing: read_dof_values is expensive because it is not
-                  // fully vectorized (indirect addressing gather access) and
-                  // once you start to store things element-by-element you can
-                  // eliminate the interpolation from nodes to quadrature points
-                  // (that happens in the usual matrix-free interpolations as
-                  // well). So my code makes use of some internal workings of
-                  // the matrix-free framework that one would need to clean up
-                  // in case one really wanted to make user-friendly programs
-                  for (unsigned int d = 0; d < dim; ++d)
-                    cached_second_scalar(cell,
-                                         q + d * phi_reference.n_q_points) =
-                      phi_reference
-                        .begin_values()[q + d * phi_reference.n_q_points];
-                }
-              else if (mf_caching == MFCaching::tensor2)
-                {
-                  cached_scalar(cell, q) = scalar * 2. / det_F;
-                  cached_second_scalar(cell, q) =
-                    make_vectorized_array<Number>(1.) / det_F;
-
-                  SymmetricTensor<2, dim, VectorizedArrayType> tau;
-                  {
-                    tau = cell_mat->mu * Physics::Elasticity::Kinematics::b(F);
-                    for (unsigned int d = 0; d < dim; ++d)
-                      tau[d][d] -= scalar;
-                  }
-                  cached_tensor2(cell, q) = tau / det_F;
-                }
-              else if (mf_caching == MFCaching::tensor4)
-                {
-                  SymmetricTensor<2, dim, VectorizedArrayType> tau;
-                  {
-                    tau = cell_mat->mu * Physics::Elasticity::Kinematics::b(F);
-                    for (unsigned int d = 0; d < dim; ++d)
-                      tau[d][d] -= scalar;
-                  }
-                  cached_second_scalar(cell, q) =
-                    make_vectorized_array<Number>(1.) / det_F;
-                  cached_tensor2(cell, q) = tau / det_F;
-                  cached_tensor4(cell, q) =
-                    (scalar * 2. / det_F) *
-                      Physics::Elasticity::StandardTensors<dim>::S +
-                    (cell_mat->lambda * 2. / det_F) *
-                      Physics::Elasticity::StandardTensors<dim>::IxI;
-                }
-              else if (mf_caching == MFCaching::tensor4_ns)
-                {
-                  const Tensor<2, dim, VectorizedArrayType> F_inv = invert(F);
-                  const Tensor<2, dim, VectorizedArrayType> F_inv_t(
-                    transpose(F_inv));
-                  const VectorizedArrayType ln_J = std::log(det_F);
-
-                  const Tensor<4, dim, VectorizedArrayType>
-                    F_inv_t_otimes_F_inv_t = outer_product(F_inv_t, F_inv_t);
-
-                  const Tensor<4, dim, VectorizedArrayType> F_inv_t_F_inv =
-                    outer_product_iljk(F_inv_t, F_inv);
-
-                  cached_tensor4_ns(cell, q) =
-                    (2. * cell_mat->lambda) * F_inv_t_otimes_F_inv_t +
-                    (cell_mat->mu - 2.0 * cell_mat->lambda * ln_J) *
-                      F_inv_t_F_inv +
-                    cell_mat->mu * IxI_ikjl;
-                }
-              else
-                {
-                  AssertThrow(false, ExcMessage("Unknown caching"));
-                }
+              cached_scalar(cell, q) = std::pow(det_F, Number(-1.0 / dim));
             }
         }
       else
-        AssertThrow(false, ExcMessage("Unknown material formulation"));
+        for (unsigned int q = 0; q < phi_reference.n_q_points; ++q)
+          {
+            const Tensor<2, dim, VectorizedArrayType> &grad_u =
+              phi_reference.get_gradient(q);
+            const Tensor<2, dim, VectorizedArrayType> F =
+              Physics::Elasticity::Kinematics::F(grad_u);
+            const VectorizedArrayType det_F = determinant(F);
+
+            Assert(*std::min_element(
+                     det_F.begin(),
+                     det_F.begin() +
+                       data_current->n_active_entries_per_cell_batch(cell)) > 0,
+                   ExcMessage("det_F is not positive. "));
+
+            const VectorizedArrayType scalar =
+              cell_mat->mu - 2.0 * cell_mat->lambda * std::log(det_F);
+            switch (mf_caching)
+              {
+                  case MFCaching::scalar: {
+                    cached_scalar(cell, q) = scalar;
+                    break;
+                  }
+                  case MFCaching::scalar_referential: {
+                    cached_scalar(cell, q) = scalar;
+                    // MK:
+                    // This is to avoid the phi_reference.read_dof_values()
+                    // call and the full phi_reference.evaluate(false, true)
+                    // calls. With this quadrature point information, I only
+                    // need to call a cheap "collocation gradient" function,
+                    // which is likely the best compromise in terms of caching
+                    // some data versus computing: read_dof_values is
+                    // expensive because it is not fully vectorized (indirect
+                    // addressing gather access) and once you start to store
+                    // things element-by-element you can eliminate the
+                    // interpolation from nodes to quadrature points (that
+                    // happens in the usual matrix-free interpolations as
+                    // well). So my code makes use of some internal workings
+                    // of the matrix-free framework that one would need to
+                    // clean up in case one really wanted to make
+                    // user-friendly programs
+                    for (unsigned int d = 0; d < dim; ++d)
+                      cached_second_scalar(cell,
+                                           q + d * phi_reference.n_q_points) =
+                        phi_reference
+                          .begin_values()[q + d * phi_reference.n_q_points];
+                    break;
+                  }
+                  case MFCaching::tensor2: {
+                    cached_scalar(cell, q) = scalar * 2. / det_F;
+                    cached_second_scalar(cell, q) =
+                      make_vectorized_array<Number>(1.) / det_F;
+
+                    SymmetricTensor<2, dim, VectorizedArrayType> tau;
+                    {
+                      tau =
+                        cell_mat->mu * Physics::Elasticity::Kinematics::b(F);
+                      for (unsigned int d = 0; d < dim; ++d)
+                        tau[d][d] -= scalar;
+                    }
+                    cached_tensor2(cell, q) = tau / det_F;
+                    break;
+                  }
+                  case MFCaching::tensor4: {
+                    SymmetricTensor<2, dim, VectorizedArrayType> tau;
+                    {
+                      tau =
+                        cell_mat->mu * Physics::Elasticity::Kinematics::b(F);
+                      for (unsigned int d = 0; d < dim; ++d)
+                        tau[d][d] -= scalar;
+                    }
+                    cached_second_scalar(cell, q) =
+                      make_vectorized_array<Number>(1.) / det_F;
+                    cached_tensor2(cell, q) = tau / det_F;
+                    cached_tensor4(cell, q) =
+                      (scalar * 2. / det_F) *
+                        Physics::Elasticity::StandardTensors<dim>::S +
+                      (cell_mat->lambda * 2. / det_F) *
+                        Physics::Elasticity::StandardTensors<dim>::IxI;
+                    break;
+                  }
+                  case MFCaching::tensor4_ns: {
+                    const Tensor<2, dim, VectorizedArrayType> F_inv = invert(F);
+                    const Tensor<2, dim, VectorizedArrayType> F_inv_t(
+                      transpose(F_inv));
+                    const VectorizedArrayType ln_J = std::log(det_F);
+
+                    const Tensor<4, dim, VectorizedArrayType>
+                      F_inv_t_otimes_F_inv_t = outer_product(F_inv_t, F_inv_t);
+
+                    const Tensor<4, dim, VectorizedArrayType> F_inv_t_F_inv =
+                      outer_product_iljk(F_inv_t, F_inv);
+
+                    cached_tensor4_ns(cell, q) =
+                      (2. * cell_mat->lambda) * F_inv_t_otimes_F_inv_t +
+                      (cell_mat->mu - 2.0 * cell_mat->lambda * ln_J) *
+                        F_inv_t_F_inv +
+                      cell_mat->mu * IxI_ikjl;
+                    break;
+                  }
+                  case MFCaching::none: {
+                    AssertThrow(false, ExcMessage("Unknown caching"));
+                    break;
+                  }
+              }
+          }
     }
 }
 
