@@ -1370,7 +1370,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
                 break;
               }
               // moderate cache of two scalar + 2nd order tensor
-              case mf_caching == MFCaching::tensor2: {
+              case MFCaching::tensor2: {
                 for (unsigned int q = 0; q < phi_current.n_q_points; ++q)
                   {
                     const Tensor<2, dim, VectorizedArrayType> grad_Nx_v =
@@ -1398,7 +1398,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
                   }
                 break;
               }
-            case mf_caching == MFCaching::tensor4:
+            case MFCaching::tensor4:
               // maximum cache (2nd order  4th order sym)
               {
                 for (unsigned int q = 0; q < phi_current.n_q_points; ++q)
