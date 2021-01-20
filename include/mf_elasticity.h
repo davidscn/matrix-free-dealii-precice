@@ -16,7 +16,6 @@ static const unsigned int debug_level = 1;
 
 #include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/function.h>
-#include <deal.II/base/parameter_handler.h>
 #include <deal.II/base/point.h>
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/base/revision.h>
@@ -25,7 +24,6 @@ static const unsigned int debug_level = 1;
 #include <deal.II/base/timer.h>
 
 #include <deal.II/dofs/dof_renumbering.h>
-#include <deal.II/dofs/dof_tools.h>
 
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/fe_system.h>
@@ -33,19 +31,19 @@ static const unsigned int debug_level = 1;
 #include <deal.II/fe/mapping_q.h>
 #include <deal.II/fe/mapping_q_eulerian.h>
 
-#include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/grid_in.h>
 #include <deal.II/grid/grid_out.h>
 #include <deal.II/grid/grid_tools.h>
-#include <deal.II/grid/manifold_lib.h>
 #include <deal.II/grid/tria.h>
 
 #include <deal.II/lac/affine_constraints.h>
-#include <deal.II/lac/block_vector.h>
 #include <deal.II/lac/full_matrix.h>
+#include <deal.II/lac/la_parallel_vector.h>
 #include <deal.II/lac/precondition.h>
-#include <deal.II/lac/precondition_selector.h>
 #include <deal.II/lac/solver_cg.h>
+
+#include <deal.II/matrix_free/fe_evaluation.h>
+#include <deal.II/matrix_free/matrix_free.h>
 
 #include <deal.II/multigrid/mg_coarse.h>
 #include <deal.II/multigrid/mg_constrained_dofs.h>
@@ -1911,6 +1909,8 @@ namespace FSI
     constraints.close();
   }
 
+
+
   // @sect4{Solid::solve_linear_system}
   // As the system is composed of a single block, defining a solution scheme
   // for the linear problem is straight-forward.
@@ -2007,8 +2007,6 @@ namespace FSI
 
     return std::make_tuple(lin_it, lin_res, cond_number);
   }
-
-
 
   template <int dim, int degree, int n_q_points_1d, typename Number>
   void
