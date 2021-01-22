@@ -32,13 +32,13 @@ cmake \
     -D DEAL_II_CXX_FLAGS_RELEASE="-O3" \
     -D DEAL_II_WITH_MPI="ON" \
     -D DEAL_II_WITH_P4EST="ON" \
-    -D P4EST_DIR="../path/to/p4est/installation"
+    -D P4EST_DIR="../path/to/p4est/installation" \
     -D DEAL_II_WITH_LAPACK="ON" \
     -D DEAL_II_WITH_HDF5="OFF" \
     -D DEAL_II_WITH_MUPARSER="ON" \
     -D DEAL_II_WITH_THREADS="ON" \
     -D DEAL_II_COMPONENT_EXAMPLES="OFF" \
-    ../dealii
+    ..
 
 make -j8
 ```
