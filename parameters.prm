@@ -13,10 +13,10 @@ subsection Output
    set Output tick     = 0.2
 
    # Output solution watchpoint
-   set Output solution = true
+   set Output solution = false
 
    # Watchpoint in undeformed configuration to output unknown fields
-   set Output points   = 0.6, 0.2
+   set Output points   = 0.6, 0.2, 0
 
    # Output folder
    set Output folder   = dealii-output
@@ -25,13 +25,13 @@ end
 
 subsection Geometry
   # Dimension of the problem
-  set Dimension          = 2
+  set Dimension          = 3
 
   # Number of global refinements
-  set Global refinement  = 4
+  set Global refinement  = 3
 
   # Testcase to compute
-  set Testcase           = turek_hron
+  set Testcase           = tube3d
 end
 
 

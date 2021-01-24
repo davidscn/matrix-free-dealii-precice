@@ -125,7 +125,7 @@ namespace FSI
         prm.add_parameter("Testcase",
                           testcase,
                           "Testcase to compute",
-                          Patterns::Selection("turek_hron|cook"));
+                          Patterns::Selection("turek_hron|cook|tube3d"));
       }
       prm.leave_subsection();
     }
