@@ -620,8 +620,9 @@ namespace Adapter
       << "--     . Number of interface nodes (upper bound due to potential empty "
       << "lanes):\n--     . " << std::setw(5)
       << r_size * VectorizedArrayType::size()
-      << " ( = " << (r_size / (fe_degree + 1)) << " [face-batches] x "
-      << fe_degree + 1 << " [nodes/face] x " << VectorizedArrayType::size()
+      << " ( = " << (r_size / Utilities::pow(fe_degree + 1, dim - 1))
+      << " [face-batches] x " << Utilities::pow(fe_degree + 1, dim - 1)
+      << " [nodes/face] x " << VectorizedArrayType::size()
       << " [faces/face-batch]) \n"
       << "--     . Read node location: Gauss-Legendre\n"
       << "--     . Write node location:"
