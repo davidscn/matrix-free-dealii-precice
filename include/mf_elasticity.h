@@ -701,8 +701,7 @@ namespace FSI
     precice_adapter->initialize(total_displacement);
 
     // At the beginning, we reset the solution update for this time step...
-    while (time.current() <= time.end() ||
-           precice_adapter->is_coupling_ongoing())
+    while (precice_adapter->is_coupling_ongoing())
       {
         // preCICE complains otherwise
         precice_adapter->save_current_state_if_required([&]() {});

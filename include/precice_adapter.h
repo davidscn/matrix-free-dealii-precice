@@ -599,8 +599,11 @@ namespace Adapter
   void
   Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::print_info() const
   {
-    const unsigned int r_size = read_nodes_ids.size();
-    const bool         warn_unused_write_option =
+    const unsigned int r_size =
+      Utilities::MPI::sum(static_cast<unsigned int>(read_nodes_ids.size()),
+                          MPI_COMM_WORLD);
+
+    const bool warn_unused_write_option =
       (write_sampling != std::numeric_limits<int>::max());
     const std::string write_message =
       ("--     . (a write sampling different from default is not yet supported)");
