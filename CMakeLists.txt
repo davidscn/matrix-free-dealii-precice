@@ -1,20 +1,19 @@
-##
-#  CMake script for the step-<XYZ> tutorial program:
-##
-
 # Set the name of the project and target:
 SET(TARGET "solid")
 SET(TARGETLIB "mf_elasticity")
 
-INCLUDE_DIRECTORIES(
- ${CMAKE_SOURCE_DIR}/include
-)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.1.0)
 
 # Disable in-source compilation
 IF (${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
-  MESSAGE(FATAL_ERROR "In-source builds are disabled. Change to seperate build directory and run cmake again.
+  MESSAGE(FATAL_ERROR "In-source builds are disabled. Please change to a seperate
+      build directory and run cmake again.
      ")
 ENDIF()
+
+INCLUDE_DIRECTORIES(
+ ${CMAKE_SOURCE_DIR}/include
+)
 
 # Declare all source files the target consists of:
 SET(TARGETLIB_SRC
@@ -27,11 +26,14 @@ SET(CLEAN_UP_FILES
   *.vtu
 )
 
+# Assume a debug build if not specified
+IF(NOT CMAKE_BUILD_TYPE)
+  SET(CMAKE_BUILD_TYPE "DEBUG")
+  MESSAGE(STATUS "No build type specified. Building in debug mode.")
+ENDIF()
+
+# Print the current build type
 MESSAGE(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
-
-# Usually, you will not need to modify anything beyond this point...
-
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8.8)
 
 FIND_PACKAGE(deal.II 9.2 QUIET
   HINTS ${deal.II_DIR} ${DEAL_II_DIR} ../ ../../ $ENV{DEAL_II_DIR}
@@ -57,7 +59,6 @@ which conflict with the requirements."
     )
 ENDIF()
 
-
 DEAL_II_INITIALIZE_CACHED_VARIABLES()
 
 # Run macro to get Git info:
@@ -70,10 +71,17 @@ MESSAGE(STATUS "Code version ${GIT_TAG}")
 CONFIGURE_FILE(${CMAKE_SOURCE_DIR}/src/version.cc.in
                ${CMAKE_CURRENT_BINARY_DIR}/version.cc)
 
-PROJECT(${TARGET})
+PROJECT(${TARGET} LANGUAGES CXX)
+
+# This project requires c++17
+IF(NOT ${DEAL_II_WITH_CXX17})
+    SET(CMAKE_CXX_STANDARD 17)
+    SET(CMAKE_CXX_EXTENSIONS OFF)
+    SET(CMAKE_CXX_STANDARD_REQUIRED ON)
+ENDIF()
 
 FIND_PACKAGE(precice REQUIRED
-  HINTS ${PRECICE_DIR}
+  HINTS ${PRECICE_DIR} $ENV{precice_DIR}
   )
 MESSAGE(STATUS "Using the preCICE version found at ${precice_CONFIG}")
 
