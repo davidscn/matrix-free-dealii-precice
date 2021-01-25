@@ -10,7 +10,7 @@ end
 
 subsection Output
    # At which time to write a vtu output file
-   set Output tick     = 0.1
+   set Output tick     = 0.2
 
    # Output solution watchpoint
    set Output solution = true
@@ -47,6 +47,9 @@ subsection Linear solver
 
   # Preconditioner relaxation value
   set Preconditioner relaxation  = 0.65
+
+  # Disable condition estimate
+  set Estimate condition number  = true
 
   # Number of CG iterations to estimate condition number
   set Condition number CG iterations = 20

@@ -471,8 +471,8 @@ namespace Adapter
       const std::array<int, VectorizedArrayType::size()> &vertex_ids,
       const unsigned int                                  active_faces) const
   {
-    Tensor<1, dim, VectorizedArrayType>             dealii_data;
-    std::array<double, VectorizedArrayType::size()> precice_data;
+    Tensor<1, dim, VectorizedArrayType>                   dealii_data;
+    std::array<double, dim * VectorizedArrayType::size()> precice_data;
     // Assertion is exclusive at the boundaries
     AssertIndexRange(active_faces, VectorizedArrayType::size() + 1);
     // TODO: Check if the if statement still makes sense
