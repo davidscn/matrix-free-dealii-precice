@@ -10,6 +10,12 @@ INCLUDE_DIRECTORIES(
  ${CMAKE_SOURCE_DIR}/include
 )
 
+# Disable in-source compilation
+IF (${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
+  MESSAGE(FATAL_ERROR "In-source builds are disabled. Change to seperate build directory and run cmake again.
+     ")
+ENDIF()
+
 # Declare all source files the target consists of:
 SET(TARGETLIB_SRC
   src/mf_elasticity.cc

@@ -471,8 +471,8 @@ namespace Adapter
       const std::array<int, VectorizedArrayType::size()> &vertex_ids,
       const unsigned int                                  active_faces) const
   {
-    Tensor<1, dim, VectorizedArrayType>             dealii_data;
-    std::array<double, VectorizedArrayType::size()> precice_data;
+    Tensor<1, dim, VectorizedArrayType>                   dealii_data;
+    std::array<double, dim * VectorizedArrayType::size()> precice_data;
     // Assertion is exclusive at the boundaries
     AssertIndexRange(active_faces, VectorizedArrayType::size() + 1);
     // TODO: Check if the if statement still makes sense
@@ -599,8 +599,11 @@ namespace Adapter
   void
   Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::print_info() const
   {
-    const unsigned int r_size = read_nodes_ids.size();
-    const bool         warn_unused_write_option =
+    const unsigned int r_size =
+      Utilities::MPI::sum(static_cast<unsigned int>(read_nodes_ids.size()),
+                          MPI_COMM_WORLD);
+
+    const bool warn_unused_write_option =
       (write_sampling != std::numeric_limits<int>::max());
     const std::string write_message =
       ("--     . (a write sampling different from default is not yet supported)");
@@ -617,8 +620,9 @@ namespace Adapter
       << "--     . Number of interface nodes (upper bound due to potential empty "
       << "lanes):\n--     . " << std::setw(5)
       << r_size * VectorizedArrayType::size()
-      << " ( = " << (r_size / (fe_degree + 1)) << " [face-batches] x "
-      << fe_degree + 1 << " [nodes/face] x " << VectorizedArrayType::size()
+      << " ( = " << (r_size / Utilities::pow(fe_degree + 1, dim - 1))
+      << " [face-batches] x " << Utilities::pow(fe_degree + 1, dim - 1)
+      << " [nodes/face] x " << VectorizedArrayType::size()
       << " [faces/face-batch]) \n"
       << "--     . Read node location: Gauss-Legendre\n"
       << "--     . Write node location:"

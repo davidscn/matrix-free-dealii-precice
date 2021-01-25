@@ -36,7 +36,6 @@ cmake \
     -D DEAL_II_WITH_LAPACK="ON" \
     -D DEAL_II_WITH_HDF5="OFF" \
     -D DEAL_II_WITH_MUPARSER="ON" \
-    -D DEAL_II_WITH_THREADS="ON" \
     -D DEAL_II_COMPONENT_EXAMPLES="OFF" \
     ..
 
@@ -44,7 +43,7 @@ make -j8
 ```
 
 ### Step 2: install preCICE
-At least version 2.0 or greater is required. A nice overview of various installation options is given on the [preCICE installation page](https://www.precice.org/installation-overview.html). 
+At least version `2.0` or greater is required. A nice overview of various installation options is given on the [preCICE installation page](https://www.precice.org/installation-overview.html).
 
 ### Step 3: build the program
 Similar to deal.II, run
