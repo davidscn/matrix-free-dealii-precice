@@ -13,7 +13,7 @@ namespace FSI
     {
     public:
       static std::shared_ptr<TestCaseBase<dim>>
-      get_test_case(const std::string testcase_name)
+      get_test_case(const std::string &testcase_name)
       {
         if (testcase_name == "turek_hron")
           return std::make_shared<TurekHron<dim>>();

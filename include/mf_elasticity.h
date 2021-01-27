@@ -97,8 +97,7 @@ namespace FSI
       , delta_t(delta_t)
     {}
 
-    virtual ~Time()
-    {}
+    virtual ~Time() = default;
 
     double
     current() const
@@ -413,14 +412,14 @@ namespace FSI
 
     NeoHookOperator<dim, degree, n_q_points_1d, double> mf_nh_operator;
 
-    typedef NeoHookOperator<dim, degree, n_q_points_1d, float> LevelMatrixType;
+    using LevelMatrixType = NeoHookOperator<dim, degree, n_q_points_1d, float>;
 
     MGLevelObject<LevelMatrixType> mg_mf_nh_operator;
 
     std::shared_ptr<MGTransferMatrixFree<dim, float>> mg_transfer;
 
-    typedef PreconditionChebyshev<LevelMatrixType, LevelVectorType>
-      SmootherChebyshev;
+    using SmootherChebyshev =
+      PreconditionChebyshev<LevelMatrixType, LevelVectorType>;
 
     // MGSmootherPrecondition<LevelMatrixType, SmootherChebyshev,
     // LevelVectorType> mg_smoother_chebyshev;
@@ -1251,13 +1250,12 @@ namespace FSI
       mg_coarse_chebyshev.initialize(mg_smoother_chebyshev);
     }
 
-    coarse_solver_control =
-      std::make_shared<ReductionControl>(std::max(mg_mf_nh_operator[0].m(),
-                                                  (unsigned int)100),
-                                         1e-10,
-                                         1e-3,
-                                         false,
-                                         false);
+    coarse_solver_control = std::make_shared<ReductionControl>(
+      std::max(mg_mf_nh_operator[0].m(), static_cast<unsigned int>(100)),
+      1e-10,
+      1e-3,
+      false,
+      false);
 
     coarse_solver.reset();
     coarse_solver =

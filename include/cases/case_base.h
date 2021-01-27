@@ -32,6 +32,8 @@ namespace FSI
       virtual void
       make_coarse_grid_and_bcs(Triangulation<dim> &triangulation) = 0;
 
+      virtual ~TestCaseBase() = default;
+
     protected:
       void
       refine_boundary(Triangulation<dim> &     triangulation,

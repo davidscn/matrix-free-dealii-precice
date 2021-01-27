@@ -93,9 +93,6 @@ public:
            ExcInternalError());
   }
 
-  ~Material_Compressible_Neo_Hook_One_Field()
-  {}
-
   // The first function is the total energy
   // $\Psi = \Psi_{\textrm{iso}} + \Psi_{\textrm{vol}}$.
   Number

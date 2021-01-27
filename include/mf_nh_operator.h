@@ -149,7 +149,7 @@ public:
   initialize(std::shared_ptr<const MatrixFree<dim, Number>> data_current,
              std::shared_ptr<const MatrixFree<dim, Number>> data_reference,
              const VectorType &                             displacement,
-             const std::string                              caching);
+             const std::string &                            caching);
 
   void
   set_material(
@@ -381,7 +381,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::initialize(
   std::shared_ptr<const MatrixFree<dim, Number>> data_current_,
   std::shared_ptr<const MatrixFree<dim, Number>> data_reference_,
   const VectorType &                             displacement_,
-  const std::string                              caching)
+  const std::string &                            caching)
 {
   data_current   = data_current_;
   data_reference = data_reference_;
