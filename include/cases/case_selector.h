@@ -2,6 +2,7 @@
 
 #include <cases/case_base.h>
 #include <cases/cook_membrane.h>
+#include <cases/tube_3d.h>
 #include <cases/turek_hron.h>
 
 namespace FSI
@@ -19,6 +20,8 @@ namespace FSI
           return std::make_shared<TurekHron<dim>>();
         else if (testcase_name == "cook")
           return std::make_shared<CookMembrane<dim>>();
+        else if (testcase_name == "tube3d")
+          return std::make_shared<Tube3D<dim>>();
         // Add your case here
         else
           AssertThrow(false,
