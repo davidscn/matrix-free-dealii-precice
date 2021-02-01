@@ -1550,8 +1550,8 @@ namespace FSI
 
     // At the end, if it turns out that we have in fact done more iterations
     // than the parameter file allowed, we raise an exception.
-    AssertThrow(newton_iteration < parameters.max_iterations_NR,
-                ExcMessage("No convergence in nonlinear solver!"));
+    Assert(newton_iteration < parameters.max_iterations_NR,
+           ExcMessage("No convergence in nonlinear solver!"));
   }
 
 

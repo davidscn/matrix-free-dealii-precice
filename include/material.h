@@ -28,7 +28,7 @@ template <typename Number>
 Number
 divide_by_dim(const Number &x, const int dim)
 {
-  return Number(x / dim);
+  return x / Number(dim);
 }
 
 template <typename Number,
