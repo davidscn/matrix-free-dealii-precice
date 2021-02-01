@@ -1141,11 +1141,13 @@ namespace FSI
                  *mf_data_reference->get_vector_partitioner().get()),
                ExcInternalError());
 
+        // TODO: Use initialize_dof_vector
         adjust_ghost_range_if_necessary(partitioner, newton_update);
         adjust_ghost_range_if_necessary(partitioner, system_rhs);
-
         adjust_ghost_range_if_necessary(partitioner, total_displacement);
+        adjust_ghost_range_if_necessary(partitioner, acceleration);
         total_displacement.update_ghost_values();
+        acceleration.update_ghost_values();
       }
     else
       // FIXME: interpolate_to_mg will resize MG vector, make sure it has the
