@@ -1798,131 +1798,194 @@ namespace FSI
                                                      local_dof_indices,
                                                      system_rhs);
             }
+
+        FEFaceEvaluation<dim, degree, n_q_points_1d, dim, Number> phi(
+          *mf_data_reference);
+        auto q_index = precice_adapter->begin_interface_IDs();
+
+        for (unsigned int face = mf_data_reference->n_inner_face_batches();
+             face < mf_data_reference->n_boundary_face_batches() +
+                      mf_data_reference->n_inner_face_batches();
+             ++face)
+          {
+            const auto boundary_id = mf_data_reference->get_boundary_id(face);
+
+            // Only interfaces
+            if (boundary_id != int(TestCases::TestCaseBase<dim>::interface_id))
+              continue;
+
+            // Read out the total displacment
+            phi.reinit(face);
+            phi.gather_evaluate(total_displacement, false, true);
+            // Number of active faces
+            const auto active_faces =
+              mf_data_reference->n_active_entries_per_face_batch(face);
+
+            for (unsigned int q = 0; q < phi.n_q_points; ++q)
+              {
+                // Evaluate deformation gradient
+                const auto F =
+                  Physics::Elasticity::Kinematics::F(phi.get_gradient(q));
+                // Get the value from preCICE
+                const auto traction =
+                  precice_adapter->read_on_quadrature_point(*q_index,
+                                                            active_faces);
+                // Perform pull-back operation and submit value
+                phi.submit_value(
+                  Physics::Transformations::Covariant::pull_back(traction, F),
+                  q);
+                ++q_index;
+              }
+            // Integrate the result and write into the rhs vector
+            phi.integrate_scatter(true, false, system_rhs);
+          }
+
+        system_rhs.compress(VectorOperation::add);
       }
     else
       {
-        FEEvaluation<dim, degree, n_q_points_1d, dim, Number> phi_reference(
-          *mf_data_reference);
-        // Copy constructor
-        FEEvaluation<dim, degree, n_q_points_1d, dim, Number> phi_acc(
-          phi_reference);
-        const unsigned int n_cells = mf_data_reference->n_cell_batches();
+        mf_data_reference->template loop<VectorType, VectorType>(
+          [&](const auto &data,
+              auto &      dst,
+              const auto &src,
+              const auto &cell_range) {
+            FEEvaluation<dim, degree, n_q_points_1d, dim, Number> phi_reference(
+              data);
+            // Copy constructor
+            FEEvaluation<dim, degree, n_q_points_1d, dim, Number> phi_acc(
+              phi_reference);
 
-        for (unsigned int cell = 0; cell < n_cells; ++cell)
-          {
-            const unsigned int material_id =
-              mf_data_reference->get_cell_iterator(cell, 0)->material_id();
-            const auto &cell_mat =
-              (material_id == 0 ? material_vec : material_inclusion_vec);
-
-            phi_reference.reinit(cell);
-            phi_reference.read_dof_values_plain(total_displacement);
-            phi_reference.evaluate(false, true, false);
-
-            phi_acc.reinit(cell);
-            phi_acc.read_dof_values_plain(acceleration);
-            phi_acc.evaluate(true, false);
-
-
-            // Now we build the residual. In doing so, we first extract some
-            // configuration dependent variables from our QPH history objects
-            // for the current quadrature point.
-            for (unsigned int q_point = 0; q_point < phi_reference.n_q_points;
-                 ++q_point)
+            for (unsigned int cell = cell_range.first; cell < cell_range.second;
+                 ++cell)
               {
-                const Tensor<2, dim, VectorizedArray<Number>> grad_u =
-                  phi_reference.get_gradient(q_point);
+                const unsigned int material_id =
+                  mf_data_reference->get_cell_iterator(cell, 0)->material_id();
+                const auto &cell_mat =
+                  (material_id == 0 ? material_vec : material_inclusion_vec);
 
-                const Tensor<2, dim, VectorizedArray<Number>> F =
-                  Physics::Elasticity::Kinematics::F(grad_u);
+                phi_reference.reinit(cell);
+                phi_reference.read_dof_values_plain(src);
+                phi_reference.evaluate(false, true, false);
 
-                const SymmetricTensor<2, dim, VectorizedArray<Number>> b =
-                  Physics::Elasticity::Kinematics::b(F);
+                phi_acc.reinit(cell);
+                phi_acc.read_dof_values_plain(acceleration);
+                phi_acc.evaluate(true, false);
 
-                const VectorizedArray<Number> det_F = determinant(F);
 
-                Assert(*std::min_element(
-                         det_F.begin(),
-                         det_F.begin() +
-                           mf_data_reference->n_active_entries_per_cell_batch(
-                             cell)) > Number(0.0),
-                       ExcInternalError());
+                // Now we build the residual. In doing so, we first extract some
+                // configuration dependent variables from our QPH history
+                // objects for the current quadrature point.
+                for (unsigned int q_point = 0;
+                     q_point < phi_reference.n_q_points;
+                     ++q_point)
+                  {
+                    const Tensor<2, dim, VectorizedArrayType> grad_u =
+                      phi_reference.get_gradient(q_point);
 
-                const Tensor<2, dim, VectorizedArray<Number>> F_inv = invert(F);
+                    const Tensor<2, dim, VectorizedArrayType> F =
+                      Physics::Elasticity::Kinematics::F(grad_u);
 
-                // don't calculate b_bar if we don't need to:
-                const SymmetricTensor<2, dim, VectorizedArray<Number>> b_bar =
-                  cell_mat->formulation == 0 ?
-                    Physics::Elasticity::Kinematics::b(
-                      Physics::Elasticity::Kinematics::F_iso(F)) :
-                    SymmetricTensor<2, dim, VectorizedArray<Number>>();
+                    const SymmetricTensor<2, dim, VectorizedArrayType> b =
+                      Physics::Elasticity::Kinematics::b(F);
 
-                SymmetricTensor<2, dim, VectorizedArray<Number>> tau;
-                cell_mat->get_tau(tau, det_F, b_bar, b);
+                    const VectorizedArrayType det_F = determinant(F);
 
-                const Tensor<2, dim, VectorizedArray<Number>> res =
-                  Tensor<2, dim, VectorizedArray<Number>>(tau);
+                    Assert(
+                      *std::min_element(
+                        det_F.begin(),
+                        det_F.begin() +
+                          mf_data_reference->n_active_entries_per_cell_batch(
+                            cell)) > Number(0.0),
+                      ExcInternalError());
 
-                phi_reference.submit_gradient(-res * transpose(F_inv), q_point);
-                phi_acc.submit_value(-phi_acc.get_value(q_point) *
-                                       cell_mat->rho,
-                                     q_point);
-              } // end loop over quadrature points
+                    const Tensor<2, dim, VectorizedArrayType> F_inv = invert(F);
 
-            phi_reference.integrate(false, true);
-            phi_reference.distribute_local_to_global(system_rhs);
-            phi_acc.integrate(true, false);
-            phi_acc.distribute_local_to_global(system_rhs);
-          }
+                    // don't calculate b_bar if we don't need to:
+                    const SymmetricTensor<2, dim, VectorizedArrayType> b_bar =
+                      cell_mat->formulation == 0 ?
+                        Physics::Elasticity::Kinematics::b(
+                          Physics::Elasticity::Kinematics::F_iso(F)) :
+                        SymmetricTensor<2, dim, VectorizedArrayType>();
+
+                    SymmetricTensor<2, dim, VectorizedArrayType> tau;
+                    cell_mat->get_tau(tau, det_F, b_bar, b);
+
+                    const Tensor<2, dim, VectorizedArrayType> res =
+                      Tensor<2, dim, VectorizedArrayType>(tau);
+
+                    phi_reference.submit_gradient(-res * transpose(F_inv),
+                                                  q_point);
+                    phi_acc.submit_value(-phi_acc.get_value(q_point) *
+                                           cell_mat->rho,
+                                         q_point);
+                  } // end loop over quadrature points
+
+                phi_reference.integrate(false, true);
+                phi_reference.distribute_local_to_global(dst);
+                phi_acc.integrate(true, false);
+                phi_acc.distribute_local_to_global(dst);
+              }
+          },
+          [](const auto &, auto &, const auto &, const auto &) {},
+          [&](const auto &data,
+              auto &      dst,
+              const auto &src,
+              const auto &face_range) {
+            FEFaceEvaluation<dim, degree, n_q_points_1d, dim, Number> phi(data);
+            auto q_index = precice_adapter->begin_interface_IDs();
+
+            for (unsigned int face = face_range.first; face < face_range.second;
+                 ++face)
+              {
+                const auto boundary_id =
+                  mf_data_reference->get_boundary_id(face);
+
+                // Only interfaces
+                if (boundary_id !=
+                    int(TestCases::TestCaseBase<dim>::interface_id))
+                  continue;
+
+                // Read out the total displacment
+                phi.reinit(face);
+                phi.gather_evaluate(src, false, true);
+                // Number of active faces
+                const auto active_faces =
+                  mf_data_reference->n_active_entries_per_face_batch(face);
+
+                for (unsigned int q = 0; q < phi.n_q_points; ++q)
+                  {
+                    // Evaluate deformation gradient
+                    const auto F =
+                      Physics::Elasticity::Kinematics::F(phi.get_gradient(q));
+                    // Get the value from preCICE
+                    const auto traction =
+                      precice_adapter->read_on_quadrature_point(*q_index,
+                                                                active_faces);
+                    // Perform pull-back operation and submit value
+                    phi.submit_value(
+                      Physics::Transformations::Covariant::pull_back(traction,
+                                                                     F),
+                      q);
+                    ++q_index;
+                  }
+                // Integrate the result and write into the rhs vector
+                phi.integrate_scatter(true, false, dst);
+              }
+          },
+          system_rhs,
+          total_displacement,
+          true,
+          MatrixFree<dim, Number, VectorizedArrayType>::DataAccessOnFaces::none,
+          MatrixFree<dim, Number, VectorizedArrayType>::DataAccessOnFaces::
+            none);
       }
 
 
-
-    FEFaceEvaluation<dim, degree, n_q_points_1d, dim, Number> phi(
-      *mf_data_reference);
-    auto q_index = precice_adapter->begin_interface_IDs();
-
-    for (unsigned int face = mf_data_reference->n_inner_face_batches();
-         face < mf_data_reference->n_boundary_face_batches() +
-                  mf_data_reference->n_inner_face_batches();
-         ++face)
-      {
-        const auto boundary_id = mf_data_reference->get_boundary_id(face);
-
-        // Only interfaces
-        if (boundary_id != int(TestCases::TestCaseBase<dim>::interface_id))
-          continue;
-
-        // Read out the total displacment
-        phi.reinit(face);
-        phi.gather_evaluate(total_displacement, false, true);
-        // Number of active faces
-        const auto active_faces =
-          mf_data_reference->n_active_entries_per_face_batch(face);
-
-        for (unsigned int q = 0; q < phi.n_q_points; ++q)
-          {
-            // Evaluate deformation gradient
-            const auto F =
-              Physics::Elasticity::Kinematics::F(phi.get_gradient(q));
-            // Get the value from preCICE
-            const auto traction =
-              precice_adapter->read_on_quadrature_point(*q_index, active_faces);
-            // Perform pull-back operation and submit value
-            phi.submit_value(
-              Physics::Transformations::Covariant::pull_back(traction, F), q);
-            ++q_index;
-          }
-        // Integrate the result and write into the rhs vector
-        phi.integrate_scatter(true, false, system_rhs);
-      }
-
-    system_rhs.compress(VectorOperation::add);
-
-    // Determine the error in the residual for the unconstrained degrees of
-    // freedom. Note that to do so, we need to ignore constrained DOFs by
-    // setting the residual in these vector components to zero. That will not
-    // affect the solution of linear system, though.
+    // Determine the error in the residual for the unconstrained
+    // degrees of freedom. Note that to do so, we need to ignore
+    // constrained DOFs by setting the residual in these vector
+    // components to zero. That will not affect the solution of
+    // linear system, though.
     constraints.set_zero(system_rhs);
 
     error_residual.e = system_rhs.l2_norm();
