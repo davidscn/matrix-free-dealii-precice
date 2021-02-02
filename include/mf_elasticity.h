@@ -1844,6 +1844,9 @@ namespace FSI
       }
     else
       {
+        std::vector<typename DoFHandler<dim>::cell_iterator> cell_ids;
+        cell_ids.reserve(mf_data_reference->n_boundary_face_batches());
+
         mf_data_reference->template loop<VectorType, VectorType>(
           [&](const auto &data,
               auto &      dst,
@@ -1937,6 +1940,8 @@ namespace FSI
             for (unsigned int face = face_range.first; face < face_range.second;
                  ++face)
               {
+                cell_ids.emplace_back(data.get_face_iterator(face, 0).first);
+
                 const auto boundary_id =
                   mf_data_reference->get_boundary_id(face);
 
@@ -1978,6 +1983,26 @@ namespace FSI
           MatrixFree<dim, Number, VectorizedArrayType>::DataAccessOnFaces::none,
           MatrixFree<dim, Number, VectorizedArrayType>::DataAccessOnFaces::
             none);
+
+
+        int iter = 0;
+        for (unsigned int face = mf_data_reference->n_inner_face_batches();
+             face < mf_data_reference->n_boundary_face_batches() +
+                      mf_data_reference->n_inner_face_batches();
+             ++face)
+          {
+            if (cell_ids[iter] !=
+                mf_data_reference->get_face_iterator(face, 0).first)
+              {
+                std::cout << "False! Loop is " << cell_ids[iter]
+                          << " and pure is: "
+                          << mf_data_reference->get_face_iterator(face, 0).first
+                          << std::endl;
+              }
+            else
+              std::cout << "correct" << std::endl;
+            ++iter;
+          }
       }
 
 
