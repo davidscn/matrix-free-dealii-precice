@@ -1832,29 +1832,45 @@ namespace FSI
       }
     else
       {
-        std::vector<typename DoFHandler<dim>::cell_iterator> cell_ids;
-        cell_ids.reserve(mf_data_reference->n_boundary_face_batches());
-
-        mf_data_reference->template loop<VectorType, VectorType>(
-          [&](const auto &data,
-              auto &      dst,
-              const auto &src,
-              const auto &cell_range) {
-            local_apply_cell(data, dst, src, cell_range);
-          },
-          [](const auto &, auto &, const auto &, const auto &) {},
-          [&](const auto &data,
-              auto &      dst,
-              const auto &src,
-              const auto &face_range) {
-            local_apply_boundary_face(data, dst, src, face_range);
-          },
-          system_rhs,
-          total_displacement,
-          true,
-          MatrixFree<dim, Number, VectorizedArrayType>::DataAccessOnFaces::none,
-          MatrixFree<dim, Number, VectorizedArrayType>::DataAccessOnFaces::
-            none);
+        if (false)
+          {
+            mf_data_reference->template loop<VectorType, VectorType>(
+              [&](const auto &data,
+                  auto &      dst,
+                  const auto &src,
+                  const auto &cell_range) {
+                local_apply_cell(data, dst, src, cell_range);
+              },
+              [](const auto &, auto &, const auto &, const auto &) {},
+              [&](const auto &data,
+                  auto &      dst,
+                  const auto &src,
+                  const auto &face_range) {
+                local_apply_boundary_face(data, dst, src, face_range);
+              },
+              system_rhs,
+              total_displacement,
+              true,
+              MatrixFree<dim, Number, VectorizedArrayType>::DataAccessOnFaces::
+                none,
+              MatrixFree<dim, Number, VectorizedArrayType>::DataAccessOnFaces::
+                none);
+          }
+        else
+          {
+            local_apply_cell(mf_data_reference,
+                             system_rhs,
+                             total_displacement,
+                             std::make_pair(0,
+                                            mf_data_reference->n_cell_batches));
+            local_apply_boundary_face(
+              *mf_data_reference,
+              system_rhs,
+              total_displacement,
+              std::make_pair(mf_data_reference->n_inner_face_batches(),
+                             mf_data_reference->n_inner_face_batches() +
+                               mf_data_reference->n_boundary_face_batches()));
+          }
       }
 
 
