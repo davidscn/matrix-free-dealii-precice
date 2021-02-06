@@ -1,0 +1,77 @@
+<?xml version="1.0"?>
+<precice-configuration>
+  <log>
+    <sink
+      filter="%Severity% > debug and %Rank% = 0"
+      format="---[precice] %ColorizedSeverity% %Message%"
+      enabled="true" />
+  </log>
+
+  <solver-interface dimensions="3">
+    <data:vector name="Stress" />
+    <data:vector name="Displacement" />
+
+    <mesh name="Fluid-Mesh-Nodes">
+      <use-data name="Displacement" />
+    </mesh>
+
+    <mesh name="Fluid-Mesh-Faces">
+      <use-data name="Stress" />
+    </mesh>
+
+    <mesh name="Solid-write">
+      <use-data name="Displacement" />
+    </mesh>
+
+    <mesh name="Solid-read">
+      <use-data name="Stress" />
+    </mesh>
+
+    <participant name="Fluid">
+      <use-mesh name="Solid-write" from="Solid" />
+      <use-mesh name="Fluid-Mesh-Nodes" provide="yes" />
+      <use-mesh name="Fluid-Mesh-Faces" provide="yes" />
+      <write-data name="Stress" mesh="Fluid-Mesh-Faces" />
+      <read-data name="Displacement" mesh="Fluid-Mesh-Nodes" />
+      <mapping:nearest-neighbor
+        direction="read"
+        from="Solid-write"
+        to="Fluid-Mesh-Nodes"
+        constraint="consistent" />
+    </participant>
+
+    <participant name="Solid">
+      <use-mesh name="Solid-write" provide="yes" />
+      <use-mesh name="Solid-read" provide="yes" />
+      <use-mesh name="Fluid-Mesh-Faces" from="Fluid" />
+      <write-data name="Displacement" mesh="Solid-write" />
+      <read-data name="Stress" mesh="Solid-read" />
+      <mapping:nearest-neighbor
+        direction="read"
+        from="Fluid-Mesh-Faces"
+        to="Solid-read"
+        constraint="consistent" />
+    </participant>
+
+    <m2n:sockets from="Fluid" to="Solid" exchange-directory=".." />
+
+    <coupling-scheme:serial-implicit>
+      <participants first="Fluid" second="Solid" />
+      <max-time-windows value="10" />
+      <time-window-size value="1e-4" />
+      <exchange data="Stress" mesh="Fluid-Mesh-Faces" from="Fluid" to="Solid" />
+      <exchange data="Displacement" mesh="Solid-write" from="Solid" to="Fluid" />
+      <max-iterations value="50" />
+      <relative-convergence-measure limit="1e-3" data="Stress" mesh="Fluid-Mesh-Faces" />
+      <relative-convergence-measure limit="1e-3" data="Displacement" mesh="Solid-write" />
+      <acceleration:IQN-ILS>
+        <data name="Displacement" mesh="Solid-write" />
+        <preconditioner type="residual-sum" />
+        <filter type="QR2" limit="1e-3" />
+        <initial-relaxation value="0.1" />
+        <max-used-iterations value="10" />
+        <time-windows-reused value="15" />
+      </acceleration:IQN-ILS>
+    </coupling-scheme:serial-implicit>
+  </solver-interface>
+</precice-configuration>
