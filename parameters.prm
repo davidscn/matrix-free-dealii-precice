@@ -31,7 +31,7 @@ subsection Geometry
   set Global refinement  = 3
 
   # Testcase to compute
-  set Testcase           = tube3d
+  set Testcase           = bending_flap
 end
 
 
