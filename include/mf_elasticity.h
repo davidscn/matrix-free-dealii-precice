@@ -7,7 +7,7 @@
  * 2 - CG iterations
  * 3 - GMG iterations
  */
-static const unsigned int debug_level = 1;
+static const unsigned int debug_level = 0;
 
 // We start by including all the necessary deal.II header files and some C++
 // related ones. They have been discussed in detail in previous tutorial
@@ -1707,7 +1707,7 @@ namespace FSI
 
     system_rhs = 0.0;
 
-    const bool assemble_fast = it_nr < 4;
+    const bool assemble_fast = it_nr < 5;
 
     if (!assemble_fast)
       {
@@ -2009,7 +2009,6 @@ namespace FSI
     double       cond_number = 1.0;
 
     // reset solution vector each iteration
-    // TODO: We use zero dst anyway, so this can be removed
     newton_update = 0.;
 
     // We solve for the incremental displacement $d\mathbf{u}$.
@@ -2143,8 +2142,9 @@ namespace FSI
                            degree,
                            DataOut<dim>::curved_inner_cells);
 
-    const std::string filename = parameters.output_folder + "solution-" +
-                                 std::to_string(result_number) + ".vtu";
+    const std::string filename = parameters.output_folder + "solution_" +
+                                 Utilities::int_to_string(result_number, 3) +
+                                 ".vtu";
 
     data_out.write_vtu_in_parallel(filename, mpi_communicator);
 

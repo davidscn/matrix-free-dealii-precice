@@ -504,8 +504,9 @@ namespace Adapter
     const unsigned int mesh_id = is_read_mesh ? read_mesh_id : write_mesh_id;
     auto &interface_nodes_ids = is_read_mesh ? read_nodes_ids : write_nodes_ids;
 
-    // TODO: Find a suitable guess for the number of interface points (optional)
-    interface_nodes_ids.reserve(20);
+    // Initial guess: half of the boundary is part of the coupling interface
+    interface_nodes_ids.reserve(mf_data_reference->n_boundary_face_batches() *
+                                0.5);
     // TODO: n_qpoints_1D is hard coded
     FEFaceEvaluation<dim,
                      fe_degree,
@@ -517,6 +518,7 @@ namespace Adapter
 
     std::array<double, dim * VectorizedArrayType::size()> unrolled_vertices;
     std::array<int, VectorizedArrayType::size()>          node_ids;
+    unsigned int                                          size = 0;
 
     for (unsigned int face = mf_data_reference->n_inner_face_batches();
          face < mf_data_reference->n_boundary_face_batches() +
@@ -538,6 +540,9 @@ namespace Adapter
             const auto local_vertex = phi.quadrature_point(q);
 
             // Transform Point<Vectorized> into preCICE conform format
+            // We store here also the potential 'dummy'/empty lanes (not only
+            // active_faces), but it allows us to use a static loop as well as a
+            // static array for the indices
             for (int d = 0; d < dim; ++d)
               for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
                 unrolled_vertices[d + dim * v] = local_vertex[d][v];
@@ -547,7 +552,10 @@ namespace Adapter
                                      unrolled_vertices.data(),
                                      node_ids.data());
             interface_nodes_ids.emplace_back(node_ids);
+            ++size;
           }
+        // resize the IDs in case the initial guess was too large
+        interface_nodes_ids.resize(size);
       }
   }
 
