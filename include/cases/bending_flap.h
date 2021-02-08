@@ -1,5 +1,14 @@
-#pragma once
+/* ---------------------------------------------------------------------
+ * Setup for a 3D rubber-like flexible wall in a pulsating channel flow.
+ * Details as well as comparison results can be found in "Monolithic cut
+ * finite element–based approaches for fluid‐structure interaction" by
+ * Schott and Ager.
+ *
+ * https://doi.org/10.1002/nme.6072
+ * ---------------------------------------------------------------------
+ */
 
+#pragma once
 #include <cases/case_base.h>
 
 namespace FSI
@@ -28,9 +37,9 @@ namespace FSI
       uint       n_y = 2;
       uint       n_z = 3;
       Point<dim> point_bottom =
-        dim == 3 ? Point<dim>(0.49, 0.0, -0.3) : Point<dim>(0.49, 0);
+        dim == 3 ? Point<dim>(0.5, 0.0, -0.3) : Point<dim>(0.5, 0);
       Point<dim> point_tip =
-        dim == 3 ? Point<dim>(0.56, 0.35, 0.3) : Point<dim>(0.56, 0.35);
+        dim == 3 ? Point<dim>(0.57, 0.35, 0.3) : Point<dim>(0.57, 0.35);
 
       const std::vector<unsigned int> repetitions =
         dim == 3 ? std::vector<unsigned int>({n_x, n_y, n_z}) :

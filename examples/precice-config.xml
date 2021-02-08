@@ -46,6 +46,8 @@
       <use-mesh name="Fluid-Mesh-Faces" from="Fluid" />
       <write-data name="Displacement" mesh="Solid-write" />
       <read-data name="Stress" mesh="Solid-read" />
+      <watch-point mesh="Solid-write" name="center-front-tip" coordinate="0.5;0.35;0.0" />
+      <watch-point mesh="Solid-write" name="left-back-tip" coordinate="0.57;0.35;-0.3" />
       <mapping:nearest-neighbor
         direction="read"
         from="Fluid-Mesh-Faces"

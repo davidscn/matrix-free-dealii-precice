@@ -31,7 +31,7 @@ procs=$(getNumberOfProcessors)
 
 if [ $parallel -eq 1 ]; then
     decomposePar -force
-    mpirun -np $procs $solver -parallel
+    mpiexec -np $procs $solver -parallel
     reconstructPar
 else
     $solver
