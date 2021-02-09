@@ -7,7 +7,7 @@
  * 2 - CG iterations
  * 3 - GMG iterations
  */
-static const unsigned int debug_level = 1;
+static const unsigned int debug_level = 0;
 
 // We start by including all the necessary deal.II header files and some C++
 // related ones. They have been discussed in detail in previous tutorial
@@ -178,7 +178,7 @@ namespace FSI
 
     // Function to assemble the right hand side vector.
     void
-    assemble_system();
+    assemble_residual(const int it_nr);
 
     // Apply Dirichlet boundary conditions on the displacement field
     void
@@ -1141,11 +1141,13 @@ namespace FSI
                  *mf_data_reference->get_vector_partitioner().get()),
                ExcInternalError());
 
+        // TODO: Use initialize_dof_vector
         adjust_ghost_range_if_necessary(partitioner, newton_update);
         adjust_ghost_range_if_necessary(partitioner, system_rhs);
-
         adjust_ghost_range_if_necessary(partitioner, total_displacement);
+        adjust_ghost_range_if_necessary(partitioner, acceleration);
         total_displacement.update_ghost_values();
+        acceleration.update_ghost_values();
       }
     else
       // FIXME: interpolate_to_mg will resize MG vector, make sure it has the
@@ -1507,7 +1509,7 @@ namespace FSI
         // TODO: merge this function call with zeroing in main loop
         update_acceleration(delta_displacement);
 
-        assemble_system();
+        assemble_residual(newton_iteration);
 
         if (check_convergence(newton_iteration))
           break;
@@ -1550,8 +1552,8 @@ namespace FSI
 
     // At the end, if it turns out that we have in fact done more iterations
     // than the parameter file allowed, we raise an exception.
-    AssertThrow(newton_iteration < parameters.max_iterations_NR,
-                ExcMessage("No convergence in nonlinear solver!"));
+    Assert(newton_iteration < parameters.max_iterations_NR,
+           ExcMessage("No convergence in nonlinear solver!"));
   }
 
 
@@ -1698,97 +1700,190 @@ namespace FSI
   // the matrix is reset before any assembly operations can occur.
   template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::assemble_system()
+  Solid<dim, degree, n_q_points_1d, Number>::assemble_residual(const int it_nr)
   {
-    TimerOutput::Scope t(timer, "Assemble linear system");
-    pcout << " ASM " << std::flush;
+    TimerOutput::Scope t(timer, "Assemble residual");
+    pcout << " ASR " << std::flush;
 
     system_rhs = 0.0;
 
-    Vector<double>                       cell_rhs(dofs_per_cell);
-    std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
+    // FIXME: The fast assembly (FEEValuation) fails sometimes to converge with
+    // and stagnates shorty before the convergence limit as compared to the
+    // FEValues assembly e.g. try one of the tests. Hence, we use it only for
+    // the first five iterations and return to the more accurate assembly
+    // afterwards. However, most of the cases will already be converged at this
+    // stage.
+    const bool assemble_fast = it_nr < 5;
 
-    std::vector<Tensor<2, dim, Number>> solution_grads_u_total(qf_cell.size());
-    std::vector<Tensor<1, dim, Number>> local_acceleration(qf_cell.size());
+    // The usual assembly strategy
+    if (!assemble_fast)
+      {
+        Vector<double>                       cell_rhs(dofs_per_cell);
+        std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
-    // values at quadrature points:
-    std::vector<Tensor<2, dim, Number>>          grad_Nx(dofs_per_cell);
-    std::vector<SymmetricTensor<2, dim, Number>> symm_grad_Nx(dofs_per_cell);
+        std::vector<Tensor<2, dim, Number>> solution_grads_u_total(
+          qf_cell.size());
+        std::vector<Tensor<1, dim, Number>> local_acceleration(qf_cell.size());
 
-    FEValues<dim> fe_values(
-      fe, qf_cell, update_values | update_gradients | update_JxW_values);
+        // values at quadrature points:
+        std::vector<Tensor<2, dim, Number>>          grad_Nx(dofs_per_cell);
+        std::vector<SymmetricTensor<2, dim, Number>> symm_grad_Nx(
+          dofs_per_cell);
 
-    for (const auto &cell : dof_handler.active_cell_iterators())
-      if (cell->is_locally_owned())
-        {
-          const auto &cell_mat =
-            (cell->material_id() == 2 ? material_inclusion : material);
+        FEValues<dim> fe_values(
+          fe, qf_cell, update_values | update_gradients | update_JxW_values);
 
-          cell_rhs = 0.;
-          fe_values.reinit(cell);
-          cell->get_dof_indices(local_dof_indices);
-
-          // We first need to find the solution gradients at quadrature points
-          // inside the current cell and then we update each local QP using
-          // the displacement gradient:
-          fe_values[u_fe].get_function_gradients(total_displacement,
-                                                 solution_grads_u_total);
-
-          fe_values[u_fe].get_function_values(acceleration, local_acceleration);
-
-          // Now we build the residual. In doing so, we first extract some
-          // configuration dependent variables from our QPH history objects
-          // for the current quadrature point.
-          for (unsigned int q_point = 0; q_point < n_q_points; ++q_point)
+        for (const auto &cell : dof_handler.active_cell_iterators())
+          if (cell->is_locally_owned())
             {
-              const Tensor<2, dim, Number> &grad_u =
-                solution_grads_u_total[q_point];
-              const Tensor<2, dim, Number> F =
-                Physics::Elasticity::Kinematics::F(grad_u);
-              const SymmetricTensor<2, dim, Number> b =
-                Physics::Elasticity::Kinematics::b(F);
+              const auto &cell_mat =
+                (cell->material_id() == 2 ? material_inclusion : material);
 
-              const Number det_F = determinant(F);
-              Assert(det_F > Number(0.0), ExcInternalError());
-              const Tensor<2, dim, Number> F_inv = invert(F);
+              cell_rhs = 0.;
+              fe_values.reinit(cell);
+              cell->get_dof_indices(local_dof_indices);
 
-              // don't calculate b_bar if we don't need to:
-              const SymmetricTensor<2, dim, Number> b_bar =
-                cell_mat->formulation == 0 ?
-                  Physics::Elasticity::Kinematics::b(
-                    Physics::Elasticity::Kinematics::F_iso(F)) :
-                  SymmetricTensor<2, dim, Number>();
+              // We first need to find the solution gradients at quadrature
+              // points inside the current cell and then we update each local QP
+              // using the displacement gradient:
+              fe_values[u_fe].get_function_gradients(total_displacement,
+                                                     solution_grads_u_total);
 
-              for (unsigned int k = 0; k < dofs_per_cell; ++k)
+              fe_values[u_fe].get_function_values(acceleration,
+                                                  local_acceleration);
+
+              // Now we build the residual. In doing so, we first extract some
+              // configuration dependent variables from our QPH history objects
+              // for the current quadrature point.
+              for (unsigned int q_point = 0; q_point < n_q_points; ++q_point)
                 {
-                  grad_Nx[k] = fe_values[u_fe].gradient(k, q_point) * F_inv;
-                  symm_grad_Nx[k] = symmetrize(grad_Nx[k]);
-                }
+                  const Tensor<2, dim, Number> &grad_u =
+                    solution_grads_u_total[q_point];
+                  const Tensor<2, dim, Number> F =
+                    Physics::Elasticity::Kinematics::F(grad_u);
+                  const SymmetricTensor<2, dim, Number> b =
+                    Physics::Elasticity::Kinematics::b(F);
 
-              SymmetricTensor<2, dim, Number> tau;
-              cell_mat->get_tau(tau, det_F, b_bar, b);
-              const double JxW = fe_values.JxW(q_point);
+                  const Number det_F = determinant(F);
+                  Assert(det_F > Number(0.0), ExcInternalError());
+                  const Tensor<2, dim, Number> F_inv = invert(F);
 
-              // loop over j first to make caching a bit more
-              // straight-forward without recourse to symmetry
-              for (unsigned int j = 0; j < dofs_per_cell; ++j)
-                {
-                  cell_rhs(j) -= (symm_grad_Nx[j] * tau) * JxW;
-                  const unsigned int component_j =
-                    fe.system_to_component_index(j).first;
+                  // don't calculate b_bar if we don't need to:
+                  const SymmetricTensor<2, dim, Number> b_bar =
+                    cell_mat->formulation == 0 ?
+                      Physics::Elasticity::Kinematics::b(
+                        Physics::Elasticity::Kinematics::F_iso(F)) :
+                      SymmetricTensor<2, dim, Number>();
 
-                  for (unsigned int i = 0; i < dofs_per_cell; ++i)
-                    cell_rhs(j) -=
-                      fe_values[u_fe].value(j, q_point) * cell_mat->rho *
-                      fe_values[u_fe].value(i, q_point) *
-                      local_acceleration[q_point][component_j] * JxW;
-                }
+                  for (unsigned int k = 0; k < dofs_per_cell; ++k)
+                    {
+                      grad_Nx[k] = fe_values[u_fe].gradient(k, q_point) * F_inv;
+                      symm_grad_Nx[k] = symmetrize(grad_Nx[k]);
+                    }
 
-            } // end loop over quadrature points
-          constraints.distribute_local_to_global(cell_rhs,
-                                                 local_dof_indices,
-                                                 system_rhs);
-        }
+                  SymmetricTensor<2, dim, Number> tau;
+                  cell_mat->get_tau(tau, det_F, b_bar, b);
+                  const double JxW = fe_values.JxW(q_point);
+
+                  // loop over j first to make caching a bit more
+                  // straight-forward without recourse to symmetry
+                  for (unsigned int j = 0; j < dofs_per_cell; ++j)
+                    {
+                      cell_rhs(j) -= (symm_grad_Nx[j] * tau) * JxW;
+                      const unsigned int component_j =
+                        fe.system_to_component_index(j).first;
+
+                      for (unsigned int i = 0; i < dofs_per_cell; ++i)
+                        cell_rhs(j) -=
+                          fe_values[u_fe].value(j, q_point) * cell_mat->rho *
+                          fe_values[u_fe].value(i, q_point) *
+                          local_acceleration[q_point][component_j] * JxW;
+                    }
+
+                } // end loop over quadrature points
+              constraints.distribute_local_to_global(cell_rhs,
+                                                     local_dof_indices,
+                                                     system_rhs);
+            }
+      }
+    else
+      {
+        FEEvaluation<dim, degree, n_q_points_1d, dim, Number> phi_reference(
+          *mf_data_reference);
+        // Copy constructor
+        FEEvaluation<dim, degree, n_q_points_1d, dim, Number> phi_acc(
+          phi_reference);
+        const unsigned int n_cells = mf_data_reference->n_cell_batches();
+
+        for (unsigned int cell = 0; cell < n_cells; ++cell)
+          {
+            const unsigned int material_id =
+              mf_data_reference->get_cell_iterator(cell, 0)->material_id();
+            const auto &cell_mat =
+              (material_id == 0 ? material_vec : material_inclusion_vec);
+
+            phi_reference.reinit(cell);
+            phi_reference.read_dof_values_plain(total_displacement);
+            phi_reference.evaluate(false, true, false);
+
+            phi_acc.reinit(cell);
+            phi_acc.read_dof_values_plain(acceleration);
+            phi_acc.evaluate(true, false);
+
+
+            // Now we build the residual. In doing so, we first extract some
+            // configuration dependent variables from our QPH history objects
+            // for the current quadrature point.
+            for (unsigned int q_point = 0; q_point < phi_reference.n_q_points;
+                 ++q_point)
+              {
+                const Tensor<2, dim, VectorizedArray<Number>> grad_u =
+                  phi_reference.get_gradient(q_point);
+
+                const Tensor<2, dim, VectorizedArray<Number>> F =
+                  Physics::Elasticity::Kinematics::F(grad_u);
+
+                const SymmetricTensor<2, dim, VectorizedArray<Number>> b =
+                  Physics::Elasticity::Kinematics::b(F);
+
+                const VectorizedArray<Number> det_F = determinant(F);
+
+                Assert(*std::min_element(
+                         det_F.begin(),
+                         det_F.begin() +
+                           mf_data_reference->n_active_entries_per_cell_batch(
+                             cell)) > Number(0.0),
+                       ExcInternalError());
+
+                const Tensor<2, dim, VectorizedArray<Number>> F_inv = invert(F);
+
+                // don't calculate b_bar if we don't need to:
+                const SymmetricTensor<2, dim, VectorizedArray<Number>> b_bar =
+                  cell_mat->formulation == 0 ?
+                    Physics::Elasticity::Kinematics::b(
+                      Physics::Elasticity::Kinematics::F_iso(F)) :
+                    SymmetricTensor<2, dim, VectorizedArray<Number>>();
+
+                SymmetricTensor<2, dim, VectorizedArray<Number>> tau;
+                cell_mat->get_tau(tau, det_F, b_bar, b);
+
+                const Tensor<2, dim, VectorizedArray<Number>> res =
+                  Tensor<2, dim, VectorizedArray<Number>>(tau);
+
+                phi_reference.submit_gradient(-res * transpose(F_inv), q_point);
+                phi_acc.submit_value(-phi_acc.get_value(q_point) *
+                                       cell_mat->rho,
+                                     q_point);
+              } // end loop over quadrature points
+
+            phi_reference.integrate(false, true);
+            phi_reference.distribute_local_to_global(system_rhs);
+            phi_acc.integrate(true, false);
+            phi_acc.distribute_local_to_global(system_rhs);
+          }
+      }
+
+
 
     FEFaceEvaluation<dim, degree, n_q_points_1d, dim, Number> phi(
       *mf_data_reference);
@@ -1921,7 +2016,6 @@ namespace FSI
     double       cond_number = 1.0;
 
     // reset solution vector each iteration
-    // TODO: We use zero dst anyway, so this can be removed
     newton_update = 0.;
 
     // We solve for the incremental displacement $d\mathbf{u}$.
@@ -2055,8 +2149,9 @@ namespace FSI
                            degree,
                            DataOut<dim>::curved_inner_cells);
 
-    const std::string filename = parameters.output_folder + "solution-" +
-                                 std::to_string(result_number) + ".vtu";
+    const std::string filename = parameters.output_folder + "solution_" +
+                                 Utilities::int_to_string(result_number, 3) +
+                                 ".vtu";
 
     data_out.write_vtu_in_parallel(filename, mpi_communicator);
 
