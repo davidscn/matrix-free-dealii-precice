@@ -178,7 +178,7 @@ namespace FSI
 
     // Function to assemble the right hand side vector.
     void
-    assemble_system(const int it_nr);
+    assemble_residual(const int it_nr);
 
     // Apply Dirichlet boundary conditions on the displacement field
     void
@@ -1509,7 +1509,7 @@ namespace FSI
         // TODO: merge this function call with zeroing in main loop
         update_acceleration(delta_displacement);
 
-        assemble_system(newton_iteration);
+        assemble_residual(newton_iteration);
 
         if (check_convergence(newton_iteration))
           break;
@@ -1700,15 +1700,22 @@ namespace FSI
   // the matrix is reset before any assembly operations can occur.
   template <int dim, int degree, int n_q_points_1d, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::assemble_system(const int it_nr)
+  Solid<dim, degree, n_q_points_1d, Number>::assemble_residual(const int it_nr)
   {
-    TimerOutput::Scope t(timer, "Assemble linear system");
-    pcout << " ASM " << std::flush;
+    TimerOutput::Scope t(timer, "Assemble residual");
+    pcout << " ASR " << std::flush;
 
     system_rhs = 0.0;
 
+    // FIXME: The fast assembly (FEEValuation) fails sometimes to converge with
+    // and stagnates shorty before the convergence limit as compared to the
+    // FEValues assembly e.g. try one of the tests. Hence, we use it only for
+    // the first five iterations and return to the more accurate assembly
+    // afterwards. However, most of the cases will already be converged at this
+    // stage.
     const bool assemble_fast = it_nr < 5;
 
+    // The usual assembly strategy
     if (!assemble_fast)
       {
         Vector<double>                       cell_rhs(dofs_per_cell);
