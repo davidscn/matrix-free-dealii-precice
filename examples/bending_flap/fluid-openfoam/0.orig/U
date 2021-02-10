@@ -1,0 +1,49 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    location    "0";
+    object      U;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (0 0 0);
+
+boundaryField
+{
+    inlet
+    {
+     // Time-varying parabolic inlet profile
+     type            groovyBC;
+     variables "yp=pts().y;para=-2*((2500/81)*(pos().y)*(pos().y-0.6)*(pos().z+0.6)*(pos().z-0.6))*normal();";
+     valueExpression "time()<10 ? 0.5*(1-cos(pi*time()))*para : 0*para";
+     value           uniform (1 0 0);
+}
+    outlet
+    {
+        type            zeroGradient;
+    }
+    flap
+    {
+        type            movingWallVelocity;
+        value           uniform (0 0 0);
+    }
+    upperWall
+    {
+        type            noSlip;
+    }
+    lowerWall
+    {
+        type            noSlip;
+    }
+    frontAndBack
+    {
+        type            noSlip;
+    }
+}
+
+
+// ************************************************************************* //
