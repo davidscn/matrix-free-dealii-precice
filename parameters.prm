@@ -31,7 +31,7 @@ subsection Geometry
   set Global refinement  = 3
 
   # Testcase to compute
-  set Testcase           = tube3d
+  set Testcase           = bending_flap
 end
 
 
@@ -73,13 +73,13 @@ subsection Material properties
   set Poisson's ratio = 0.4
 
   # Shear modulus
-  set Shear modulus   = 0.5e6
+  set Shear modulus   = 178.57
 
   # Formulation of the energy function
-  set Formulation = 1
+  set Formulation     = 1
 
   # Density
-  set Density       = 1000
+  set Density         = 250
 end
 
 

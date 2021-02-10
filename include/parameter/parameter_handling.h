@@ -3,6 +3,7 @@
 #include <deal.II/base/parameter_handler.h>
 
 #include <parameter/precice_parameter.h>
+
 using namespace dealii;
 
 namespace FSI
@@ -125,7 +126,8 @@ namespace FSI
         prm.add_parameter("Testcase",
                           testcase,
                           "Testcase to compute",
-                          Patterns::Selection("turek_hron|cook|tube3d"));
+                          Patterns::Selection(
+                            "turek_hron|cook|tube3d|bending_flap"));
       }
       prm.leave_subsection();
     }
