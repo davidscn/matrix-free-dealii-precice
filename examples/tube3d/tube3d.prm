@@ -73,7 +73,7 @@ subsection Material properties
   set Poisson's ratio = 0.3
 
   # Shear modulus
-  set Shear modulus   = 3e5
+  set Shear modulus   = 115384
 
   # Formulation of the energy function
   set Formulation     = 1
