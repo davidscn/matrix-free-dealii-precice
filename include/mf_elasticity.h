@@ -1113,8 +1113,8 @@ namespace FSI
                                         level_constraints,
                                         quad,
                                         data);
-
-    mg_mf_data_current[level]->update_mapping(*mg_eulerian_mapping[level]);
+    if (update_mf_current_mapping)
+      mg_mf_data_current[level]->update_mapping(*mg_eulerian_mapping[level]);
 
     if (reinit_mf_reference)
       {
@@ -1420,7 +1420,8 @@ namespace FSI
 
         // Reinit
         reinit_multi_grid_matrix_free(mg_additional_data[level],
-                                      false update_current_mf,
+                                      false,
+                                      update_current_mf,
                                       false /*reference*/,
                                       level);
         adjust_ghost_range(level);
