@@ -226,6 +226,7 @@ namespace FSI
     void
     reinit_multi_grid_matrix_free(const AdditionalData &data,
                                   const bool            reinit_mf_current,
+                                  const bool            update_mapping_current,
                                   const bool            reinit_mf_reference,
                                   const unsigned int    level);
 
@@ -902,6 +903,7 @@ namespace FSI
         // Reinit
         reinit_multi_grid_matrix_free(mg_additional_data[level],
                                       true /*current*/,
+                                      false,
                                       true /*reference*/,
                                       level);
 
@@ -1075,12 +1077,14 @@ namespace FSI
   Solid<dim, degree, n_q_points_1d, Number>::reinit_multi_grid_matrix_free(
     const AdditionalData &data,
     const bool            reinit_mf_current,
+    const bool            update_mf_current_mapping,
     const bool            reinit_mf_reference,
     const unsigned int    level)
   {
     // Assumption: only zero boundary conditions are used. Otheriwse, we
     // (probably) have to rebuild the level constraints
-    if (!reinit_mf_current && !reinit_mf_reference)
+    if (!reinit_mf_current && !reinit_mf_reference &&
+        !update_mf_current_mapping)
       return;
 
     timer.enter_subsection("Setup MF: Reinit multi-grid MF");
@@ -1109,6 +1113,8 @@ namespace FSI
                                         level_constraints,
                                         quad,
                                         data);
+
+    mg_mf_data_current[level]->update_mapping(*mg_eulerian_mapping[level]);
 
     if (reinit_mf_reference)
       {
@@ -1414,7 +1420,7 @@ namespace FSI
 
         // Reinit
         reinit_multi_grid_matrix_free(mg_additional_data[level],
-                                      update_current_mf,
+                                      false update_current_mf,
                                       false /*reference*/,
                                       level);
         adjust_ghost_range(level);
