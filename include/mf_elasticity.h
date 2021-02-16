@@ -219,6 +219,7 @@ namespace FSI
     void
     reinit_matrix_free(const AdditionalData &data,
                        const bool            reinit_mf_current,
+                       const bool            update_mapping_current,
                        const bool            reinit_mf_reference);
 
     template <typename AdditionalData>
@@ -853,7 +854,7 @@ namespace FSI
       std::make_shared<MappingQEulerian<dim, VectorType>>(degree,
                                                           dof_handler,
                                                           total_displacement);
-    reinit_matrix_free(data, true /*current*/, true /*reference*/);
+    reinit_matrix_free(data, true /*current*/, false, true /*reference*/);
 
     adjust_ghost_range(numbers::invalid_unsigned_int);
     setup_operator_cache(mf_nh_operator, numbers::invalid_unsigned_int);
@@ -1013,9 +1014,10 @@ namespace FSI
   Solid<dim, degree, n_q_points_1d, Number>::reinit_matrix_free(
     const AdditionalData &data,
     const bool            reinit_mf_current,
+    const bool            update_mapping_current,
     const bool            reinit_mf_reference)
   {
-    if (!reinit_mf_current && !reinit_mf_reference)
+    if (!reinit_mf_current && !reinit_mf_reference && !update_mapping_current)
       return;
 
     timer.enter_subsection("Setup MF: Reinit matrix-free");
@@ -1027,6 +1029,9 @@ namespace FSI
     if (reinit_mf_current)
       mf_data_current->reinit(
         *eulerian_mapping, dof_handler, constraints, quad, data);
+
+    if (update_mapping_current)
+      mf_data_current->update_mapping(*eulerian_mapping);
 
     // TODO: Parametrize mapping
     if (reinit_mf_reference)
@@ -1379,7 +1384,8 @@ namespace FSI
                                initialize_indices);
     // Recompute Eulerian mapping if necessary
     reinit_matrix_free(data,
-                       update_current_mf /*current*/,
+                       false /*current*/,
+                       update_current_mf /*mapping*/,
                        false /*reference*/);
 
     adjust_ghost_range(numbers::invalid_unsigned_int);
