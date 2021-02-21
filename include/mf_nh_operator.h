@@ -417,7 +417,8 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::cache()
                        0,
                      ExcMessage("det_F is not positive. "));
 
-              cached_scalar(cell, q) = std::pow(det_F, Number(-1.0 / dim));
+              cached_scalar(cell, q)  = std::pow(det_F, Number(-1.0 / dim));
+              cached_tensor2(cell, q) = F;
             }
         }
       else
@@ -847,29 +848,22 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
 
   if (mf_caching == MFCaching::tensor4_ns ||
       mf_caching == MFCaching::scalar_referential)
-    {
-      phi_reference.evaluate(true, true, false);
-    }
+    phi_reference.evaluate(true, true, false);
   else
-    {
-      if (mf_caching == MFCaching::scalar)
-        phi_reference.evaluate(false, true, false);
+    phi_current.evaluate(true, true, false);
 
-      phi_current.evaluate(true, true, false);
-    }
 
 
   // VMult quadrature loop
   if (cell_mat->formulation == 0)
     // volumetric/deviatoric formulation (like step-44)
     {
+      Assert(mf_caching == MFCaching::tensor2, ExcNotImplemented());
       for (unsigned int q = 0; q < phi_current.n_q_points; ++q)
         {
-          // reference configuration:
-          const Tensor<2, dim, VectorizedArrayType> &grad_u =
-            phi_reference.get_gradient(q);
-          const Tensor<2, dim, VectorizedArrayType> F =
-            Physics::Elasticity::Kinematics::F(grad_u);
+          // reference configuration where F is precomputed:
+          const Tensor<2, dim, VectorizedArrayType> &F =
+            cached_tensor2(cell, q);
           const VectorizedArrayType                 det_F = determinant(F);
           const Tensor<2, dim, VectorizedArrayType> F_bar =
             F * cached_scalar(cell, q);
@@ -989,38 +983,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
             // c_bar==0 so we don't have a term with it.
           }
 
-#ifdef DEBUG
-          const VectorizedArrayType &JxW_current = phi_current.JxW(q);
-          VectorizedArrayType        JxW_scale   = phi_reference.JxW(q);
-          for (unsigned int i = 0;
-               i < data_current->n_active_entries_per_cell_batch(cell);
-               ++i)
-            {
-              Assert(std::abs(JxW_current[i]) > 0., ExcInternalError());
-              JxW_scale[i] *= 1. / JxW_current[i];
-              // indirect check of consistency between MappingQEulerian in
-              // MatrixFree data and displacement vector stored in this
-              // operator.
-              Assert(std::abs(JxW_scale[i] * det_F[i] - 1.) <
-                       1000. * std::numeric_limits<Number>::epsilon(),
-                     ExcMessage(
-                       std::to_string(i) + " out of " +
-                       std::to_string(VectorizedArrayType::size()) +
-                       ", filled " +
-                       std::to_string(
-                         data_current->n_active_entries_per_cell_batch(cell)) +
-                       " : " + std::to_string(det_F[i]) +
-                       "!=" + std::to_string(1. / JxW_scale[i]) + " " +
-                       std::to_string(std::abs(JxW_scale[i] * det_F[i] - 1.))));
-            }
-#endif
-
           // jc_part is the $\mathsf{\mathbf{k}}_{\mathbf{u} \mathbf{u}}$
           // contribution. It comprises a material contribution, and a
           // geometrical stress contribution which is only added along
-          // the local matrix diagonals:
-
-          // geometrical stress contribution
+          // the local matrix diagonals: geometrical stress contribution
           // In index notation this tensor is $ [j e^{geo}]_{ijkl} = j
           // \delta_{ik} \sigma^{tot}_{jl} = \delta_{ik} \tau^{tot}_{jl} $.
           // the product is actually  GradN * tau^T but due to symmetry of
