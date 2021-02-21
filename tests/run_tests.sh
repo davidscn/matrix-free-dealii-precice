@@ -8,7 +8,7 @@ NOCOLOR='\033[0m'
 cd ${0%/*} || exit 1
 
 # Declare test names
-declare -a tests=("turek_gmg_scalar_referential" "turek_gmg_tensor2" "turek_gmg_tensor4" "turek_gmg_tensor4_ns" "turek_gmg_scalar" "turek_gmg_scalar_form0" "turek_jacobi_tensor2")
+declare -a tests=("turek_gmg_scalar_referential" "turek_gmg_tensor2" "turek_gmg_tensor4" "turek_gmg_tensor4_ns" "turek_gmg_tensor2_form0" "turek_jacobi_tensor2")
 
 exit_code=0
 
