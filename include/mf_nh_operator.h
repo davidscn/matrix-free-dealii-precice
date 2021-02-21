@@ -855,173 +855,151 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
 
 
   // VMult quadrature loop
+  // volumetric/deviatoric formulation (like step-44)
   if (cell_mat->formulation == 0)
-    // volumetric/deviatoric formulation (like step-44)
-    {
-      Assert(mf_caching == MFCaching::tensor2, ExcNotImplemented());
-      for (unsigned int q = 0; q < phi_current.n_q_points; ++q)
+    for (unsigned int q = 0; q < phi_current.n_q_points; ++q)
+      {
+        // reference configuration where F is precomputed:
+        const Tensor<2, dim, VectorizedArrayType> &F = cached_tensor2(cell, q);
+        const VectorizedArrayType                  det_F = determinant(F);
+        const Tensor<2, dim, VectorizedArrayType>  F_bar =
+          F * cached_scalar(cell, q);
+        const SymmetricTensor<2, dim, VectorizedArrayType> b_bar =
+          Physics::Elasticity::Kinematics::b(F_bar);
+
+        Assert(mf_caching == MFCaching::tensor2, ExcNotImplemented());
+        Assert(cached_scalar(cell, q) == std::pow(det_F, Number(-1.0 / dim)),
+               ExcMessage("Cached scalar and det_F do not match"));
+
+        Assert(*std::min_element(
+                 det_F.begin(),
+                 det_F.begin() +
+                   data_current->n_active_entries_per_cell_batch(cell)) > 0,
+               ExcMessage("det_F is not positive."));
+
+        // current configuration
+        const Tensor<2, dim, VectorizedArrayType> grad_Nx_v =
+          phi_current.get_gradient(q);
+        const SymmetricTensor<2, dim, VectorizedArrayType> symm_grad_Nx_v =
+          symmetrize(grad_Nx_v);
+
+        // Next, determine the isochoric Kirchhoff stress
+        // $\boldsymbol{\tau}_{\textrm{iso}} =
+        // \mathcal{P}:\overline{\boldsymbol{\tau}}$
+        const SymmetricTensor<2, dim, VectorizedArrayType> tau_bar =
+          b_bar * (2.0 * c_1);
+
+        // trace of fictitious Kirchhoff stress
+        // $\overline{\boldsymbol{\tau}}$: 2.0 * c_1 * b_bar
+        const VectorizedArrayType tr_tau_bar     = trace(tau_bar);
+        const VectorizedArrayType tr_tau_bar_dim = tr_tau_bar * inv_dim_f;
+
+        // Derivative of the volumetric free energy with respect to
+        // $J$ return $\frac{\partial \Psi_{\text{vol}}(J)}{\partial J}$
+        const VectorizedArrayType dPsi_vol_dJ =
+          (kappa / 2.0) * (det_F - 1.0 / det_F);
+
+        const VectorizedArrayType dPsi_vol_dJ_J = dPsi_vol_dJ * det_F;
+        const VectorizedArrayType d2Psi_vol_dJ2 =
+          ((kappa / 2.0) * (1.0 + 1.0 / (det_F * det_F)));
+
+        // Kirchoff stress:
+        SymmetricTensor<2, dim, VectorizedArrayType> tau;
         {
-          // reference configuration where F is precomputed:
-          const Tensor<2, dim, VectorizedArrayType> &F =
-            cached_tensor2(cell, q);
-          const VectorizedArrayType                 det_F = determinant(F);
-          const Tensor<2, dim, VectorizedArrayType> F_bar =
-            F * cached_scalar(cell, q);
-          const SymmetricTensor<2, dim, VectorizedArrayType> b_bar =
-            Physics::Elasticity::Kinematics::b(F_bar);
+          tau = VectorizedArrayType();
+          // See Holzapfel p231 eq6.98 onwards
+          // The following functions are used internally in determining the
+          // result of some of the public functions above. The first one
+          // determines the volumetric Kirchhoff stress
+          // $\boldsymbol{\tau}_{\textrm{vol}}$. Note the difference in its
+          // definition when compared to step-44.
+          for (unsigned int d = 0; d < dim; ++d)
+            tau[d][d] = dPsi_vol_dJ_J - tr_tau_bar_dim;
 
-          Assert(cached_scalar(cell, q) == std::pow(det_F, Number(-1.0 / dim)),
-                 ExcMessage("Cached scalar and det_F do not match"));
+          tau += tau_bar;
+        }
 
-          Assert(*std::min_element(
-                   det_F.begin(),
-                   det_F.begin() +
-                     data_current->n_active_entries_per_cell_batch(cell)) > 0,
-                 ExcMessage("det_F is not positive."));
+        // material part of the action of tangent: The action of the
+        // fourth-order material elasticity tensor in the spatial setting on
+        // symmetric tensor. $\mathfrak{c}$ is calculated from the SEF $\Psi$ as
+        // $ J \mathfrak{c}_{ijkl} = F_{iA} F_{jB} \mathfrak{C}_{ABCD} F_{kC}
+        // F_{lD}$ where $ \mathfrak{C} = 4 \frac{\partial^2
+        // \Psi(\mathbf{C})}{\partial \mathbf{C} \partial \mathbf{C}}$
+        SymmetricTensor<2, dim, VectorizedArrayType> jc_part;
+        {
+          const VectorizedArrayType tr = trace(symm_grad_Nx_v);
 
-          // current configuration
-          const Tensor<2, dim, VectorizedArrayType> grad_Nx_v =
-            phi_current.get_gradient(q);
-          const SymmetricTensor<2, dim, VectorizedArrayType> symm_grad_Nx_v =
-            symmetrize(grad_Nx_v);
+          SymmetricTensor<2, dim, VectorizedArrayType> dev_src(symm_grad_Nx_v);
+          for (unsigned int i = 0; i < dim; ++i)
+            dev_src[i][i] -= tr * inv_dim_f;
 
-          // Next, determine the isochoric Kirchhoff stress
-          // $\boldsymbol{\tau}_{\textrm{iso}} =
-          // \mathcal{P}:\overline{\boldsymbol{\tau}}$
-          const SymmetricTensor<2, dim, VectorizedArrayType> tau_bar =
-            b_bar * (2.0 * c_1);
+          // 1) The volumetric part of the tangent $J
+          // \mathfrak{c}_\textrm{vol}$. Again, note the difference in its
+          // definition when compared to step-44. The extra terms result from
+          // two quantities in $\boldsymbol{\tau}_{\textrm{vol}}$ being
+          // dependent on $\boldsymbol{F}$. See Holzapfel p265
 
-          // trace of fictitious Kirchhoff stress
-          // $\overline{\boldsymbol{\tau}}$:
-          // 2.0 * c_1 * b_bar
-          const VectorizedArrayType tr_tau_bar = trace(tau_bar);
+          // the term with the 4-th order symmetric tensor which gives symmetric
+          // part of the tensor it acts on
+          jc_part = symm_grad_Nx_v;
+          jc_part *= -dPsi_vol_dJ_J * 2.0;
 
-          const VectorizedArrayType tr_tau_bar_dim = tr_tau_bar * inv_dim_f;
+          // term with IxI results in trace of the tensor times I
+          const VectorizedArrayType tmp =
+            det_F * (dPsi_vol_dJ + det_F * d2Psi_vol_dJ2) * tr;
+          for (unsigned int i = 0; i < dim; ++i)
+            jc_part[i][i] += tmp;
 
-          // Derivative of the volumetric free energy with respect to
-          // $J$ return $\frac{\partial
-          // \Psi_{\text{vol}}(J)}{\partial J}$
-          const VectorizedArrayType dPsi_vol_dJ =
-            (kappa / 2.0) * (det_F - 1.0 / det_F);
+          // 2) the isochoric part of the tangent $J \mathfrak{c}_\textrm{iso}$:
 
-          const VectorizedArrayType dPsi_vol_dJ_J = dPsi_vol_dJ * det_F;
+          // The isochoric Kirchhoff stress $\boldsymbol{\tau}_{\textrm{iso}} =
+          // \mathcal{P}:\overline{\boldsymbol{\tau}}$:
+          SymmetricTensor<2, dim, VectorizedArrayType> tau_iso(tau_bar);
+          for (unsigned int i = 0; i < dim; ++i)
+            tau_iso[i][i] -= tr_tau_bar_dim;
 
-          const VectorizedArrayType d2Psi_vol_dJ2 =
-            ((kappa / 2.0) * (1.0 + 1.0 / (det_F * det_F)));
+          // term with deviatoric part of the tensor
+          jc_part += (two_over_dim * tr_tau_bar) * dev_src;
 
-          // Kirchoff stress:
-          SymmetricTensor<2, dim, VectorizedArrayType> tau;
-          {
-            tau = VectorizedArrayType();
-            // See Holzapfel p231 eq6.98 onwards
+          // term with tau_iso_x_I + I_x_tau_iso
+          jc_part -= (two_over_dim * tr) * tau_iso;
+          const VectorizedArrayType tau_iso_src = tau_iso * symm_grad_Nx_v;
+          for (unsigned int i = 0; i < dim; ++i)
+            jc_part[i][i] -= two_over_dim * tau_iso_src;
 
-            // The following functions are used internally in determining
-            // the result of some of the public functions above. The first
-            // one determines the volumetric Kirchhoff stress
-            // $\boldsymbol{\tau}_{\textrm{vol}}$. Note the difference in
-            // its definition when compared to step-44.
-            for (unsigned int d = 0; d < dim; ++d)
-              tau[d][d] = dPsi_vol_dJ_J - tr_tau_bar_dim;
+          // c_bar==0 so we don't have a term with it.
+        }
 
-            tau += tau_bar;
-          }
-
-          // material part of the action of tangent:
-          // The action of the fourth-order material elasticity tensor in
-          // the spatial setting on symmetric tensor.
-          // $\mathfrak{c}$ is calculated from the SEF $\Psi$ as $ J
-          // \mathfrak{c}_{ijkl} = F_{iA} F_{jB} \mathfrak{C}_{ABCD} F_{kC}
-          // F_{lD}$ where $ \mathfrak{C} = 4 \frac{\partial^2
-          // \Psi(\mathbf{C})}{\partial \mathbf{C} \partial \mathbf{C}}$
-          SymmetricTensor<2, dim, VectorizedArrayType> jc_part;
-          {
-            const VectorizedArrayType tr = trace(symm_grad_Nx_v);
-
-            SymmetricTensor<2, dim, VectorizedArrayType> dev_src(
-              symm_grad_Nx_v);
-            for (unsigned int i = 0; i < dim; ++i)
-              dev_src[i][i] -= tr * inv_dim_f;
-
-            // 1) The volumetric part of the tangent $J
-            // \mathfrak{c}_\textrm{vol}$. Again, note the difference in its
-            // definition when compared to step-44. The extra terms result
-            // from two quantities in $\boldsymbol{\tau}_{\textrm{vol}}$
-            // being dependent on
-            // $\boldsymbol{F}$.
-            // See Holzapfel p265
-
-            // the term with the 4-th order symmetric tensor which gives
-            // symmetric part of the tensor it acts on
-            jc_part = symm_grad_Nx_v;
-            jc_part *= -dPsi_vol_dJ_J * 2.0;
-
-            // term with IxI results in trace of the tensor times I
-            const VectorizedArrayType tmp =
-              det_F * (dPsi_vol_dJ + det_F * d2Psi_vol_dJ2) * tr;
-            for (unsigned int i = 0; i < dim; ++i)
-              jc_part[i][i] += tmp;
-
-            // 2) the isochoric part of the tangent $J
-            // \mathfrak{c}_\textrm{iso}$:
-
-            // The isochoric Kirchhoff stress
-            // $\boldsymbol{\tau}_{\textrm{iso}} =
-            // \mathcal{P}:\overline{\boldsymbol{\tau}}$:
-            SymmetricTensor<2, dim, VectorizedArrayType> tau_iso(tau_bar);
-            for (unsigned int i = 0; i < dim; ++i)
-              tau_iso[i][i] -= tr_tau_bar_dim;
-
-            // term with deviatoric part of the tensor
-            jc_part += (two_over_dim * tr_tau_bar) * dev_src;
-
-            // term with tau_iso_x_I + I_x_tau_iso
-            jc_part -= (two_over_dim * tr) * tau_iso;
-            const VectorizedArrayType tau_iso_src = tau_iso * symm_grad_Nx_v;
-            for (unsigned int i = 0; i < dim; ++i)
-              jc_part[i][i] -= two_over_dim * tau_iso_src;
-
-            // c_bar==0 so we don't have a term with it.
-          }
-
-          // jc_part is the $\mathsf{\mathbf{k}}_{\mathbf{u} \mathbf{u}}$
-          // contribution. It comprises a material contribution, and a
-          // geometrical stress contribution which is only added along
-          // the local matrix diagonals: geometrical stress contribution
-          // In index notation this tensor is $ [j e^{geo}]_{ijkl} = j
-          // \delta_{ik} \sigma^{tot}_{jl} = \delta_{ik} \tau^{tot}_{jl} $.
-          // the product is actually  GradN * tau^T but due to symmetry of
-          // tau we can do GradN * tau
-          const VectorizedArrayType inv_det_F = Number(1.0) / det_F;
-          const Tensor<2, dim, VectorizedArrayType> tau_ns(tau);
-          const Tensor<2, dim, VectorizedArrayType> geo = grad_Nx_v * tau_ns;
-          phi_current.submit_gradient(
-            (jc_part + geo) * inv_det_F
-            // Note: We need to integrate over the reference element,
-            // thus we divide by det_F so that FEEvaluation with
-            // mapping does the right thing.
-            ,
-            q);
-          phi_current.submit_value(phi_current.get_value(q) *
-                                     cell_mat->rho_alpha * inv_det_F,
-                                   q);
-        } // end of the loop over quadrature points
-    }
+        // jc_part is the $\mathsf{\mathbf{k}}_{\mathbf{u} \mathbf{u}}$
+        // contribution. It comprises a material contribution, and a
+        // geometrical stress contribution which is only added along
+        // the local matrix diagonals: geometrical stress contribution
+        // In index notation this tensor is $ [j e^{geo}]_{ijkl} = j
+        // \delta_{ik} \sigma^{tot}_{jl} = \delta_{ik} \tau^{tot}_{jl} $.
+        // the product is actually  GradN * tau^T but due to symmetry of
+        // tau we can do GradN * tau
+        const VectorizedArrayType inv_det_F = Number(1.0) / det_F;
+        const Tensor<2, dim, VectorizedArrayType> tau_ns(tau);
+        const Tensor<2, dim, VectorizedArrayType> geo = grad_Nx_v * tau_ns;
+        phi_current.submit_gradient(
+          (jc_part + geo) * inv_det_F
+          // Note: We need to integrate over the reference element, thus we
+          // divide by det_F so that FEEvaluation with mapping does the right
+          // thing.
+          ,
+          q);
+        phi_current.submit_value(phi_current.get_value(q) *
+                                   cell_mat->rho_alpha * inv_det_F,
+                                 q);
+      } // end of the loop over quadrature points
   else
     switch (mf_caching)
       {
-        // the least amount of cache and the most calculations
-        case MFCaching::scalar_referential:
-          // What I implemented here is essentially the same as the usual
-          // scalar variant. The only thing I had to change was to replace
-          // grad x (and submit_gradient() in the spatial frame) by Grad x
-          // (get_gradient() in referential frame) and then multiplying by
-          // F^{-T}. And this is the F that gets computed in the scalar case
-          // as well, I just hardcoded it as this was the way I thought
-          // about it in the implementation, but one could of course use the
-          // phi_reference.get_gradient() function. And similarly by F^{-T}
-          // for submit_gradient(). In other words, I simply pulled out the
-          // Eulerian motion of the grid into F; nothing else changed.
-          {
+          // the least amount of cache and the most calculations Instead of
+          // using the current dof handler grad x (and submit_gradient()), Grad
+          // x (get_gradient() in referential frame) is used and then multiplied
+          // by F^{-T}
+          case MFCaching::scalar_referential: {
             const VectorizedArrayType  one = make_vectorized_array<Number>(1.);
             const VectorizedArrayType *cached_position =
               &cached_second_scalar(cell, 0);
@@ -1130,14 +1108,6 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
                 phi_reference.submit_value(phi_reference.get_value(q) *
                                              cell_mat->rho_alpha,
                                            q);
-                // MK: The 60 lines above this are the interesting part: I
-                // only need to work with phi_reference. What happens in
-                // addition to the scalar caching variant is that I have to
-                // multiply grad_Nx_v also by F^{-T} to transform it to the
-                // spatial configuration. Note that I expanded some of the
-                // contractions manually in terms of the loops to be fully
-                // sure what happens but we could also express them via
-                // operator* between Tensor<2,dim> objects.
               }
             break;
           }

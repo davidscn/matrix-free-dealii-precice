@@ -231,12 +231,11 @@ namespace FSI
                           "estimate condition number",
                           Patterns::Integer(1));
 
-        prm.add_parameter(
-          "MF caching",
-          mf_caching,
-          "Type of caching for matrix-free operator",
-          Patterns::Selection(
-            "scalar_referential|tensor2|tensor4|tensor4_ns"));
+        prm.add_parameter("MF caching",
+                          mf_caching,
+                          "Type of caching for matrix-free operator",
+                          Patterns::Selection(
+                            "scalar_referential|tensor2|tensor4|tensor4_ns"));
 
         prm.add_parameter(
           "MF Chebyshev number CG iterations",
