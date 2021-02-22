@@ -200,6 +200,7 @@ private:
 
   std::shared_ptr<const MatrixFree<dim, Number>> data_current;
   std::shared_ptr<const MatrixFree<dim, Number>> data_reference;
+  std::shared_ptr<const MatrixFree<dim, Number>> data_in_use;
 
   const VectorType *displacement;
 
@@ -232,6 +233,14 @@ private:
   };
   MFCaching mf_caching;
 
+  enum class MFFrame
+  {
+    none,
+    referential,
+    deformed
+  };
+  MFFrame mf_frame;
+
   Tensor<4, dim, VectorizedArrayType> IxI_ikjl;
 };
 
@@ -249,8 +258,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::memory_consumption()
              cached_tensor4_ns.memory_consumption();
 
   // matrix-free data:
-  if (mf_caching == MFCaching::tensor4_ns ||
-      mf_caching == MFCaching::scalar_referential)
+  if (mf_frame == MFFrame::referential)
     res += data_reference->memory_consumption();
   else
     res += data_current->memory_consumption();
@@ -267,6 +275,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::NeoHookOperator()
   : Subscriptor()
   , diagonal_is_available(false)
   , mf_caching(MFCaching::none)
+  , mf_frame(MFFrame::none)
 {
   Tensor<2, dim, VectorizedArrayType> I;
   for (unsigned int i = 0; i < dim; ++i)
@@ -342,32 +351,42 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::initialize(
 
   if (caching == "scalar_referential")
     {
-      mf_caching = MFCaching::scalar_referential;
+      mf_caching  = MFCaching::scalar_referential;
+      mf_frame    = MFFrame::referential;
+      data_in_use = data_reference_;
       cached_scalar.reinit(n_cells, phi.n_q_points);
       cached_second_scalar.reinit(n_cells, phi.n_q_points * dim);
     }
   else if (caching == "tensor2")
     {
-      mf_caching = MFCaching::tensor2;
+      mf_caching  = MFCaching::tensor2;
+      mf_frame    = MFFrame::deformed;
+      data_in_use = data_current_;
+      // TODO: Check second scalar for formulation 0
       cached_scalar.reinit(n_cells, phi.n_q_points);
       cached_second_scalar.reinit(n_cells, phi.n_q_points);
       cached_tensor2.reinit(n_cells, phi.n_q_points);
     }
   else if (caching == "tensor4")
     {
-      mf_caching = MFCaching::tensor4;
+      mf_caching  = MFCaching::tensor4;
+      mf_frame    = MFFrame::deformed;
+      data_in_use = data_current_;
       cached_tensor2.reinit(n_cells, phi.n_q_points);
       cached_tensor4.reinit(n_cells, phi.n_q_points);
       cached_second_scalar.reinit(n_cells, phi.n_q_points);
     }
   else if (caching == "tensor4_ns")
     {
-      mf_caching = MFCaching::tensor4_ns;
+      mf_caching  = MFCaching::tensor4_ns;
+      mf_frame    = MFFrame::referential;
+      data_in_use = data_reference_;
       cached_tensor4_ns.reinit(n_cells, phi.n_q_points);
     }
   else
     {
       mf_caching = MFCaching::none;
+      mf_frame   = MFFrame::none;
       AssertThrow(false, ExcMessage("Unknown caching"));
     }
 }
@@ -622,6 +641,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_apply_cell(
   const VectorType &                           src,
   const std::pair<unsigned int, unsigned int> &cell_range) const
 {
+  Assert(data_in_use.get() != nullptr, ExcInternalError());
   FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi(*data_in_use);
 
   for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
