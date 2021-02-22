@@ -133,14 +133,7 @@ namespace FSI
     const double delta_t;
   };
 
-  // @sect3{Compressible neo-Hookean material within a one-field formulation}
-
-  // @sect3{Quasi-static compressible finite-strain solid}
-
-  // The Solid class is the central class in that it represents the problem at
-  // hand. It follows the usual scheme in that all it really has is a
-  // constructor, destructor and a <code>run()</code> function that dispatches
-  // all the work to private functions of this class:
+  // The Solid class is the central class.
   template <int dim, int degree, int n_q_points_1d, typename Number>
   class Solid
   {
@@ -219,12 +212,14 @@ namespace FSI
     void
     reinit_matrix_free(const AdditionalData &data,
                        const bool            reinit_mf_current,
+                       const bool            update_mapping_current,
                        const bool            reinit_mf_reference);
 
     template <typename AdditionalData>
     void
     reinit_multi_grid_matrix_free(const AdditionalData &data,
                                   const bool            reinit_mf_current,
+                                  const bool            update_mapping_current,
                                   const bool            reinit_mf_reference,
                                   const unsigned int    level);
 
@@ -853,7 +848,10 @@ namespace FSI
       std::make_shared<MappingQEulerian<dim, VectorType>>(degree,
                                                           dof_handler,
                                                           total_displacement);
-    reinit_matrix_free(data, true /*current*/, true /*reference*/);
+    reinit_matrix_free(data,
+                       true /*current*/,
+                       false /*mapping*/,
+                       true /*reference*/);
 
     adjust_ghost_range(numbers::invalid_unsigned_int);
     setup_operator_cache(mf_nh_operator, numbers::invalid_unsigned_int);
@@ -901,6 +899,7 @@ namespace FSI
         // Reinit
         reinit_multi_grid_matrix_free(mg_additional_data[level],
                                       true /*current*/,
+                                      false /*mapping*/,
                                       true /*reference*/,
                                       level);
 
@@ -926,10 +925,10 @@ namespace FSI
     // and then they are the same so we only need to re-init the data
     // according to the updated displacement/mapping
 
-    // TODO: Check if we really need update_values here.
     data.tasks_parallel_scheme = AdditionalData::none;
-    data.mapping_update_flags  = update_gradients | update_JxW_values;
-    data.initialize_indices    = initialize_indices;
+    data.mapping_update_flags =
+      update_values | update_gradients | update_JxW_values;
+    data.initialize_indices = initialize_indices;
     // make sure materials with different ID end up in different SIMD blocks:
     data.cell_vectorization_categories_strict = true;
 
@@ -1013,9 +1012,10 @@ namespace FSI
   Solid<dim, degree, n_q_points_1d, Number>::reinit_matrix_free(
     const AdditionalData &data,
     const bool            reinit_mf_current,
+    const bool            update_mapping_current,
     const bool            reinit_mf_reference)
   {
-    if (!reinit_mf_current && !reinit_mf_reference)
+    if (!reinit_mf_current && !reinit_mf_reference && !update_mapping_current)
       return;
 
     timer.enter_subsection("Setup MF: Reinit matrix-free");
@@ -1027,6 +1027,9 @@ namespace FSI
     if (reinit_mf_current)
       mf_data_current->reinit(
         *eulerian_mapping, dof_handler, constraints, quad, data);
+
+    if (update_mapping_current)
+      mf_data_current->update_mapping(*eulerian_mapping);
 
     // TODO: Parametrize mapping
     if (reinit_mf_reference)
@@ -1070,12 +1073,14 @@ namespace FSI
   Solid<dim, degree, n_q_points_1d, Number>::reinit_multi_grid_matrix_free(
     const AdditionalData &data,
     const bool            reinit_mf_current,
+    const bool            update_mf_current_mapping,
     const bool            reinit_mf_reference,
     const unsigned int    level)
   {
     // Assumption: only zero boundary conditions are used. Otheriwse, we
     // (probably) have to rebuild the level constraints
-    if (!reinit_mf_current && !reinit_mf_reference)
+    if (!reinit_mf_current && !reinit_mf_reference &&
+        !update_mf_current_mapping)
       return;
 
     timer.enter_subsection("Setup MF: Reinit multi-grid MF");
@@ -1104,6 +1109,8 @@ namespace FSI
                                         level_constraints,
                                         quad,
                                         data);
+    if (update_mf_current_mapping)
+      mg_mf_data_current[level]->update_mapping(*mg_eulerian_mapping[level]);
 
     if (reinit_mf_reference)
       {
@@ -1362,10 +1369,15 @@ namespace FSI
   void
   Solid<dim, degree, n_q_points_1d, Number>::update_matrix_free(const int &)
   {
-    // Depends on selected caching strategy
-    const bool update_current_mf =
+    // We need to update the mapping in case we use a current dof handler, which
+    // depends on selected caching strategy
+    const bool update_mf_mapping =
       !(parameters.mf_caching == "scalar_referential" ||
         parameters.mf_caching == "tensor4_ns");
+    // Currently hard-coded since the boundary conditions are static and we
+    // don't need to reinit. Needs to be adjusted for time-dependent boundary
+    // conditions or AMR.
+    const bool reinit_mf = false;
     // For MF additional data
     const bool initialize_indices = false;
 
@@ -1373,14 +1385,15 @@ namespace FSI
     // Setup MF dditional data
     // Use invalid unsigned int for the 'usual' non gmg MF level
     typename MatrixFree<dim, double>::AdditionalData data;
-    if (update_current_mf)
+    if (reinit_mf)
       setup_mf_additional_data(data,
                                numbers::invalid_unsigned_int,
                                initialize_indices);
     // Recompute Eulerian mapping if necessary
     reinit_matrix_free(data,
-                       update_current_mf /*current*/,
-                       false /*reference*/);
+                       reinit_mf /*current*/,
+                       update_mf_mapping /*mapping*/,
+                       reinit_mf /*reference*/);
 
     adjust_ghost_range(numbers::invalid_unsigned_int);
     setup_operator_cache(mf_nh_operator, numbers::invalid_unsigned_int);
@@ -1401,15 +1414,16 @@ namespace FSI
     for (unsigned int level = 0; level <= max_level; ++level)
       {
         // Additional data
-        if (update_current_mf)
+        if (reinit_mf)
           setup_mf_additional_data(mg_additional_data[level],
                                    level,
                                    initialize_indices);
 
         // Reinit
         reinit_multi_grid_matrix_free(mg_additional_data[level],
-                                      update_current_mf,
-                                      false /*reference*/,
+                                      reinit_mf /*current*/,
+                                      update_mf_mapping /*mapping*/,
+                                      reinit_mf /*reference*/,
                                       level);
         adjust_ghost_range(level);
         setup_operator_cache(mg_mf_nh_operator[level], level);

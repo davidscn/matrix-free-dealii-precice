@@ -991,8 +991,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
             // \mathfrak{c}_\textrm{vol}$. Again, note the difference in its
             // definition when compared to step-44. The extra terms result
             // from two quantities in $\boldsymbol{\tau}_{\textrm{vol}}$
-            // being dependent on
-            // $\boldsymbol{F}$.
+            // being dependent on $\boldsymbol{F}$.
             // See Holzapfel p265
 
             // the term with the 4-th order symmetric tensor which gives
