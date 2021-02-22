@@ -9,6 +9,7 @@
 
 #include <deal.II/matrix_free/fe_evaluation.h>
 #include <deal.II/matrix_free/matrix_free.h>
+#include <deal.II/matrix_free/tools.h>
 
 #include <deal.II/multigrid/mg_constrained_dofs.h>
 
@@ -195,8 +196,7 @@ private:
    */
   void
   do_operation_on_cell(
-    FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> &phi,
-    const unsigned int                                        cell) const;
+    FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> &phi) const;
 
   std::shared_ptr<const MatrixFree<dim, Number>> data_current;
   std::shared_ptr<const MatrixFree<dim, Number>> data_reference;
@@ -648,7 +648,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_apply_cell(
     {
       phi.reinit(cell);
       phi.read_dof_values(src);
-      do_operation_on_cell(phi, cell);
+      do_operation_on_cell(phi);
       phi.distribute_local_to_global(dst);
     }
 }
@@ -695,7 +695,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_diagonal_cell(
 
                 phi.begin_dof_values()[ind_i] = one;
 
-                do_operation_on_cell(phi, cell);
+                do_operation_on_cell(phi);
 
                 local_diagonal_vector[ind_i] = phi.begin_dof_values()[ind_i];
               }
@@ -748,7 +748,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_diagonal_cell(
 
             phi.begin_dof_values()[ind_i] = one;
 
-            do_operation_on_cell(phi, cell);
+            do_operation_on_cell(phi);
 
             local_diagonal_vector[ind_i] = phi.begin_dof_values()[ind_i];
           }
@@ -775,39 +775,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_diagonal_cell(
 
 template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::apply_cell_local_t4_ns(
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> &phi_reference) const
-{
-  const unsigned int cell = phi_reference.get_current_cell_index();
-  const unsigned int material_id =
-    data_current->get_cell_iterator(cell, 0)->material_id();
-  const auto &cell_mat = (material_id == 0 ? material : material_inclusion);
-
-  phi_reference.evaluate(true, true, false);
-
-  for (unsigned int q = 0; q < phi_reference.n_q_points; ++q)
-    {
-      const Tensor<2, dim, VectorizedArrayType> &grad_Nx_v =
-        phi_reference.get_gradient(q);
-
-      phi_reference.submit_gradient(
-        double_contract<2, 0, 3, 1>(cached_tensor4_ns(cell, q), grad_Nx_v), q);
-      phi_reference.submit_value(phi_reference.get_value(q) *
-                                   cell_mat->rho_alpha,
-                                 q);
-    }
-
-  phi_reference.integrate(true, true);
-}
-
-
-
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
-void
 NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> &phi,
-  const unsigned int                                        cell) const
+  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> &phi) const
 {
+  const unsigned int cell = phi.get_current_cell_index();
   const unsigned int material_id =
     data_in_use->get_cell_iterator(cell, 0)->material_id();
   const auto &cell_mat = (material_id == 0 ? material : material_inclusion);
@@ -1204,21 +1175,12 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::compute_diagonal()
   VectorType &inverse_diagonal_vector = inverse_diagonal_entries->get_vector();
   VectorType &diagonal_vector         = diagonal_entries->get_vector();
 
-  data_current->initialize_dof_vector(inverse_diagonal_vector);
-  data_current->initialize_dof_vector(diagonal_vector);
+  MatrixFreeTools::compute_diagonal(*data_in_use,
+                                    diagonal_vector,
+                                    &NeoHookOperator::do_operation_on_cell,
+                                    this);
 
-  unsigned int dummy = 0;
-  diagonal_vector    = 0.;
-  local_diagonal_cell(*data_current,
-                      diagonal_vector,
-                      dummy,
-                      std::make_pair<unsigned int, unsigned int>(
-                        0, data_current->n_cell_batches()));
-  diagonal_vector.compress(VectorOperation::add);
-
-  // data_current->cell_loop (&NeoHookOperator::local_diagonal_cell,
-  //                          this, diagonal_vector, dummy);
-
+  data_in_use->initialize_dof_vector(inverse_diagonal_vector);
   // set_constrained_entries_to_one
   Assert(data_current->get_constrained_dofs().size() ==
            data_reference->get_constrained_dofs().size(),
@@ -1226,8 +1188,6 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::compute_diagonal()
   for (const auto dof : data_current->get_constrained_dofs())
     diagonal_vector.local_element(dof) = 1.;
 
-  // calculate inverse:
-  inverse_diagonal_vector = diagonal_vector;
 
   for (unsigned int i = 0; i < inverse_diagonal_vector.local_size(); ++i)
     {
