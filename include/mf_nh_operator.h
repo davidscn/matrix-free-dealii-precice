@@ -326,9 +326,14 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::clear()
 {
   data_current.reset();
   data_reference.reset();
+  data_in_use.reset();
+
   diagonal_is_available = false;
   diagonal_entries.reset();
   inverse_diagonal_entries.reset();
+
+  mf_caching = MFCaching::none;
+  mf_frame   = MFFrame::none;
 }
 
 
@@ -1191,7 +1196,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::compute_diagonal()
 
   for (unsigned int i = 0; i < inverse_diagonal_vector.local_size(); ++i)
     {
-      Assert(inverse_diagonal_vector.local_element(i) > 0.,
+      Assert(diagonal_vector.local_element(i) > 0.,
              ExcMessage("No diagonal entry in a positive definite operator "
                         "should be zero or negative"));
       inverse_diagonal_vector.local_element(i) =
