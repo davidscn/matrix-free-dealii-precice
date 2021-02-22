@@ -133,14 +133,7 @@ namespace FSI
     const double delta_t;
   };
 
-  // @sect3{Compressible neo-Hookean material within a one-field formulation}
-
-  // @sect3{Quasi-static compressible finite-strain solid}
-
-  // The Solid class is the central class in that it represents the problem at
-  // hand. It follows the usual scheme in that all it really has is a
-  // constructor, destructor and a <code>run()</code> function that dispatches
-  // all the work to private functions of this class:
+  // The Solid class is the central class.
   template <int dim, int degree, int n_q_points_1d, typename Number>
   class Solid
   {
@@ -1384,7 +1377,7 @@ namespace FSI
     // Currently hard-coded since the boundary conditions are static and we
     // don't need to reinit. Needs to be adjusted for time-dependent boundary
     // conditions or AMR.
-    const bool reinit_matrix_free = false;
+    const bool reinit_mf = false;
     // For MF additional data
     const bool initialize_indices = false;
 
@@ -1392,15 +1385,15 @@ namespace FSI
     // Setup MF dditional data
     // Use invalid unsigned int for the 'usual' non gmg MF level
     typename MatrixFree<dim, double>::AdditionalData data;
-    if (reinit_matrix_free)
+    if (reinit_mf)
       setup_mf_additional_data(data,
                                numbers::invalid_unsigned_int,
                                initialize_indices);
     // Recompute Eulerian mapping if necessary
     reinit_matrix_free(data,
-                       reinit_matrix_free /*current*/,
+                       reinit_mf /*current*/,
                        update_mf_mapping /*mapping*/,
-                       reinit_matrix_free /*reference*/);
+                       reinit_mf /*reference*/);
 
     adjust_ghost_range(numbers::invalid_unsigned_int);
     setup_operator_cache(mf_nh_operator, numbers::invalid_unsigned_int);
@@ -1421,16 +1414,16 @@ namespace FSI
     for (unsigned int level = 0; level <= max_level; ++level)
       {
         // Additional data
-        if (reinit_matrix_free)
+        if (reinit_mf)
           setup_mf_additional_data(mg_additional_data[level],
                                    level,
                                    initialize_indices);
 
         // Reinit
         reinit_multi_grid_matrix_free(mg_additional_data[level],
-                                      reinit_matrix_free /*current*/,
+                                      reinit_mf /*current*/,
                                       update_mf_mapping /*mapping*/,
-                                      reinit_matrix_free /*reference*/,
+                                      reinit_mf /*reference*/,
                                       level);
         adjust_ghost_range(level);
         setup_operator_cache(mg_mf_nh_operator[level], level);
