@@ -855,7 +855,10 @@ namespace FSI
       std::make_shared<MappingQEulerian<dim, VectorType>>(degree,
                                                           dof_handler,
                                                           total_displacement);
-    reinit_matrix_free(data, true /*current*/, false, true /*reference*/);
+    reinit_matrix_free(data,
+                       true /*current*/,
+                       false /*mapping*/,
+                       true /*reference*/);
 
     adjust_ghost_range(numbers::invalid_unsigned_int);
     setup_operator_cache(mf_nh_operator, numbers::invalid_unsigned_int);
@@ -903,7 +906,7 @@ namespace FSI
         // Reinit
         reinit_multi_grid_matrix_free(mg_additional_data[level],
                                       true /*current*/,
-                                      false,
+                                      false /*mapping*/,
                                       true /*reference*/,
                                       level);
 
@@ -929,10 +932,10 @@ namespace FSI
     // and then they are the same so we only need to re-init the data
     // according to the updated displacement/mapping
 
-    // TODO: Check if we really need update_values here.
     data.tasks_parallel_scheme = AdditionalData::none;
-    data.mapping_update_flags  = update_gradients | update_JxW_values;
-    data.initialize_indices    = initialize_indices;
+    data.mapping_update_flags =
+      update_values | update_gradients | update_JxW_values;
+    data.initialize_indices = initialize_indices;
     // make sure materials with different ID end up in different SIMD blocks:
     data.cell_vectorization_categories_strict = true;
 
@@ -1373,10 +1376,15 @@ namespace FSI
   void
   Solid<dim, degree, n_q_points_1d, Number>::update_matrix_free(const int &)
   {
-    // Depends on selected caching strategy
-    const bool update_current_mf =
+    // We need to update the mapping in case we use a current dof handler, which
+    // depends on selected caching strategy
+    const bool update_mf_mapping =
       !(parameters.mf_caching == "scalar_referential" ||
         parameters.mf_caching == "tensor4_ns");
+    // Currently hard-coded since the boundary conditions are static and we
+    // don't need to reinit. Needs to be adjusted for time-dependent boundary
+    // conditions or AMR.
+    const bool reinit_matrix_free = false;
     // For MF additional data
     const bool initialize_indices = false;
 
@@ -1384,15 +1392,15 @@ namespace FSI
     // Setup MF dditional data
     // Use invalid unsigned int for the 'usual' non gmg MF level
     typename MatrixFree<dim, double>::AdditionalData data;
-    if (update_current_mf)
+    if (reinit_matrix_free)
       setup_mf_additional_data(data,
                                numbers::invalid_unsigned_int,
                                initialize_indices);
     // Recompute Eulerian mapping if necessary
     reinit_matrix_free(data,
-                       false /*current*/,
-                       update_current_mf /*mapping*/,
-                       false /*reference*/);
+                       reinit_matrix_free /*current*/,
+                       update_mf_mapping /*mapping*/,
+                       reinit_matrix_free /*reference*/);
 
     adjust_ghost_range(numbers::invalid_unsigned_int);
     setup_operator_cache(mf_nh_operator, numbers::invalid_unsigned_int);
@@ -1413,16 +1421,16 @@ namespace FSI
     for (unsigned int level = 0; level <= max_level; ++level)
       {
         // Additional data
-        if (update_current_mf)
+        if (reinit_matrix_free)
           setup_mf_additional_data(mg_additional_data[level],
                                    level,
                                    initialize_indices);
 
         // Reinit
         reinit_multi_grid_matrix_free(mg_additional_data[level],
-                                      false,
-                                      update_current_mf,
-                                      false /*reference*/,
+                                      reinit_matrix_free /*current*/,
+                                      update_mf_mapping /*mapping*/,
+                                      reinit_matrix_free /*reference*/,
                                       level);
         adjust_ghost_range(level);
         setup_operator_cache(mg_mf_nh_operator[level], level);
