@@ -1009,9 +1009,13 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
               &cached_second_scalar(cell, 0);
             constexpr unsigned int n_q_points =
               Utilities::pow(n_q_points_1d, dim);
-            VectorizedArrayType *ref_grads = phi_current.begin_gradients();
-            VectorizedArrayType *x_grads   = phi_reference.begin_gradients();
 
+            VectorizedArrayType *x_grads = phi_reference.begin_gradients();
+            // TODO: Only a data storage for the gradients is required, not a
+            // complete copy of an FEEvaluation object
+            FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi_grad(
+              phi_reference);
+            VectorizedArrayType *ref_grads = phi_grad.begin_gradients();
 #if DEAL_II_VERSION_GTE(9, 3, 0)
             dealii::internal::FEEvaluationImplCollocation<
               dim,
