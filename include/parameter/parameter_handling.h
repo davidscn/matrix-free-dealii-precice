@@ -185,7 +185,7 @@ namespace FSI
       double       preconditioner_relaxation             = 0.65;
       bool         estimate_condition                    = true;
       unsigned int cond_number_cg_iterations             = 20;
-      std::string  mf_caching                            = "scalar";
+      std::string  mf_caching                            = "scalar_referential";
       bool         mf_coarse_chebyshev                   = true;
       bool         mf_coarse_chebyshev_accurate_eigenval = true;
       unsigned int mf_chebyshev_n_cg_iterations          = 30;
@@ -231,12 +231,11 @@ namespace FSI
                           "estimate condition number",
                           Patterns::Integer(1));
 
-        prm.add_parameter(
-          "MF caching",
-          mf_caching,
-          "Type of caching for matrix-free operator",
-          Patterns::Selection(
-            "scalar|scalar_referential|tensor2|tensor4|tensor4_ns"));
+        prm.add_parameter("MF caching",
+                          mf_caching,
+                          "Type of caching for matrix-free operator",
+                          Patterns::Selection(
+                            "scalar_referential|tensor2|tensor4|tensor4_ns"));
 
         prm.add_parameter(
           "MF Chebyshev number CG iterations",
@@ -373,7 +372,7 @@ namespace FSI
 
       prm.parse_input(input_file);
 
-      AssertThrow((material_formulation == 0 && mf_caching == "scalar") ||
+      AssertThrow((material_formulation == 0 && mf_caching == "tensor2") ||
                     material_formulation == 1,
                   ExcInternalError());
       AssertDimension(dim, this->dim);
