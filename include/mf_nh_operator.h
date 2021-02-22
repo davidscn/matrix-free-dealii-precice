@@ -918,62 +918,61 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
 
           tau += tau_bar;
         }
-      
-          // material part of the action of tangent:
-          // The action of the fourth-order material elasticity tensor in
-          // the spatial setting on symmetric tensor.
-          // $\mathfrak{c}$ is calculated from the SEF $\Psi$ as $ J
-          // \mathfrak{c}_{ijkl} = F_{iA} F_{jB} \mathfrak{C}_{ABCD} F_{kC}
-          // F_{lD}$ where $ \mathfrak{C} = 4 \frac{\partial^2
-          // \Psi(\mathbf{C})}{\partial \mathbf{C} \partial \mathbf{C}}$
-          SymmetricTensor<2, dim, VectorizedArrayType> jc_part;
-          {
-            const VectorizedArrayType tr = trace(symm_grad_Nx_v);
 
-            SymmetricTensor<2, dim, VectorizedArrayType> dev_src(
-              symm_grad_Nx_v);
-            for (unsigned int i = 0; i < dim; ++i)
-              dev_src[i][i] -= tr * inv_dim_f;
+        // material part of the action of tangent:
+        // The action of the fourth-order material elasticity tensor in
+        // the spatial setting on symmetric tensor.
+        // $\mathfrak{c}$ is calculated from the SEF $\Psi$ as $ J
+        // \mathfrak{c}_{ijkl} = F_{iA} F_{jB} \mathfrak{C}_{ABCD} F_{kC}
+        // F_{lD}$ where $ \mathfrak{C} = 4 \frac{\partial^2
+        // \Psi(\mathbf{C})}{\partial \mathbf{C} \partial \mathbf{C}}$
+        SymmetricTensor<2, dim, VectorizedArrayType> jc_part;
+        {
+          const VectorizedArrayType tr = trace(symm_grad_Nx_v);
 
-            // 1) The volumetric part of the tangent $J
-            // \mathfrak{c}_\textrm{vol}$. Again, note the difference in its
-            // definition when compared to step-44. The extra terms result
-            // from two quantities in $\boldsymbol{\tau}_{\textrm{vol}}$
-            // being dependent on $\boldsymbol{F}$.
-            // See Holzapfel p265
+          SymmetricTensor<2, dim, VectorizedArrayType> dev_src(symm_grad_Nx_v);
+          for (unsigned int i = 0; i < dim; ++i)
+            dev_src[i][i] -= tr * inv_dim_f;
 
-            // the term with the 4-th order symmetric tensor which gives
-            // symmetric part of the tensor it acts on
-            jc_part = symm_grad_Nx_v;
-            jc_part *= -dPsi_vol_dJ_J * 2.0;
+          // 1) The volumetric part of the tangent $J
+          // \mathfrak{c}_\textrm{vol}$. Again, note the difference in its
+          // definition when compared to step-44. The extra terms result
+          // from two quantities in $\boldsymbol{\tau}_{\textrm{vol}}$
+          // being dependent on $\boldsymbol{F}$.
+          // See Holzapfel p265
 
-            // term with IxI results in trace of the tensor times I
-            const VectorizedArrayType tmp =
-              det_F * (dPsi_vol_dJ + det_F * d2Psi_vol_dJ2) * tr;
-            for (unsigned int i = 0; i < dim; ++i)
-              jc_part[i][i] += tmp;
+          // the term with the 4-th order symmetric tensor which gives
+          // symmetric part of the tensor it acts on
+          jc_part = symm_grad_Nx_v;
+          jc_part *= -dPsi_vol_dJ_J * 2.0;
 
-            // 2) the isochoric part of the tangent $J
-            // \mathfrak{c}_\textrm{iso}$:
+          // term with IxI results in trace of the tensor times I
+          const VectorizedArrayType tmp =
+            det_F * (dPsi_vol_dJ + det_F * d2Psi_vol_dJ2) * tr;
+          for (unsigned int i = 0; i < dim; ++i)
+            jc_part[i][i] += tmp;
 
-            // The isochoric Kirchhoff stress
-            // $\boldsymbol{\tau}_{\textrm{iso}} =
-            // \mathcal{P}:\overline{\boldsymbol{\tau}}$:
-            SymmetricTensor<2, dim, VectorizedArrayType> tau_iso(tau_bar);
-            for (unsigned int i = 0; i < dim; ++i)
-              tau_iso[i][i] -= tr_tau_bar_dim;
+          // 2) the isochoric part of the tangent $J
+          // \mathfrak{c}_\textrm{iso}$:
 
-            // term with deviatoric part of the tensor
-            jc_part += (two_over_dim * tr_tau_bar) * dev_src;
+          // The isochoric Kirchhoff stress
+          // $\boldsymbol{\tau}_{\textrm{iso}} =
+          // \mathcal{P}:\overline{\boldsymbol{\tau}}$:
+          SymmetricTensor<2, dim, VectorizedArrayType> tau_iso(tau_bar);
+          for (unsigned int i = 0; i < dim; ++i)
+            tau_iso[i][i] -= tr_tau_bar_dim;
 
-            // term with tau_iso_x_I + I_x_tau_iso
-            jc_part -= (two_over_dim * tr) * tau_iso;
-            const VectorizedArrayType tau_iso_src = tau_iso * symm_grad_Nx_v;
-            for (unsigned int i = 0; i < dim; ++i)
-              jc_part[i][i] -= two_over_dim * tau_iso_src;
+          // term with deviatoric part of the tensor
+          jc_part += (two_over_dim * tr_tau_bar) * dev_src;
 
-            // c_bar==0 so we don't have a term with it.
-          }
+          // term with tau_iso_x_I + I_x_tau_iso
+          jc_part -= (two_over_dim * tr) * tau_iso;
+          const VectorizedArrayType tau_iso_src = tau_iso * symm_grad_Nx_v;
+          for (unsigned int i = 0; i < dim; ++i)
+            jc_part[i][i] -= two_over_dim * tau_iso_src;
+
+          // c_bar==0 so we don't have a term with it.
+        }
 
         // material part of the action of tangent: The action of the
         // fourth-order material elasticity tensor in the spatial setting on
