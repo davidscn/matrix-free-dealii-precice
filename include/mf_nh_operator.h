@@ -673,72 +673,15 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_diagonal_cell(
 
   FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi(*data_in_use);
 
-  // keep fully referntial here and bail out if needed
-  if (mf_frame == MFFrame::referential)
-    {
-      for (unsigned int cell = cell_range.first; cell < cell_range.second;
-           ++cell)
-        {
-          phi.reinit(cell);
-          AlignedVector<VectorizedArrayType> local_diagonal_vector(
-            phi.dofs_per_component * phi.n_components);
-
-          // Loop over all DoFs and set dof values to zero everywhere but i-th
-          // DoF. With this input (instead of read_dof_values()) we do the
-          // action and store the result in a diagonal vector
-          for (unsigned int i = 0; i < phi.dofs_per_component; ++i)
-            for (unsigned int ic = 0; ic < phi.n_components; ++ic)
-              {
-                for (unsigned int j = 0; j < phi.dofs_per_component; ++j)
-                  for (unsigned int jc = 0; jc < phi.n_components; ++jc)
-                    {
-                      const auto ind_j = j + jc * phi.dofs_per_component;
-                      phi.begin_dof_values()[ind_j] = zero;
-                    }
-
-                const auto ind_i = i + ic * phi.dofs_per_component;
-
-                phi.begin_dof_values()[ind_i] = one;
-
-                do_operation_on_cell(phi);
-
-                local_diagonal_vector[ind_i] = phi.begin_dof_values()[ind_i];
-              }
-
-          // Finally, in order to distribute diagonal, write it again into one
-          // of FEEvaluations and do the standard distribute_local_to_global.
-          // Note that here non-diagonal matrix elements are ignored and so the
-          // result is not equivalent to matrix-based case when hanging nodes
-          // are present. see Section 5.3 in Korman 2016, A time-space adaptive
-          // method for the Schrodinger equation,
-          // doi: 10.4208/cicp.101214.021015a for a discussion.
-          for (unsigned int i = 0; i < phi.dofs_per_component; ++i)
-            for (unsigned int ic = 0; ic < phi.n_components; ++ic)
-              {
-                const auto ind_i              = i + ic * phi.dofs_per_component;
-                phi.begin_dof_values()[ind_i] = local_diagonal_vector[ind_i];
-              }
-
-          phi.distribute_local_to_global(dst);
-        } // end of cell loop
-      return;
-    }
-
   for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
     {
-      // initialize on this cell
       phi.reinit(cell);
-
-      // FIXME: although we override DoFs manually later, somehow
-      // we still need to read some dummy here
-      phi.read_dof_values(*displacement);
-
       AlignedVector<VectorizedArrayType> local_diagonal_vector(
         phi.dofs_per_component * phi.n_components);
 
-      // Loop over all DoFs and set dof values to zero everywhere but i-th DoF.
-      // With this input (instead of read_dof_values()) we do the action and
-      // store the result in a diagonal vector
+      // Loop over all DoFs and set dof values to zero everywhere but i-th
+      // DoF. With this input (instead of read_dof_values()) we do the
+      // action and store the result in a diagonal vector
       for (unsigned int i = 0; i < phi.dofs_per_component; ++i)
         for (unsigned int ic = 0; ic < phi.n_components; ++ic)
           {
@@ -758,13 +701,13 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_diagonal_cell(
             local_diagonal_vector[ind_i] = phi.begin_dof_values()[ind_i];
           }
 
-      // Finally, in order to distribute diagonal, write it again into one of
-      // FEEvaluations and do the standard distribute_local_to_global.
+      // Finally, in order to distribute diagonal, write it again into one
+      // of FEEvaluations and do the standard distribute_local_to_global.
       // Note that here non-diagonal matrix elements are ignored and so the
-      // result is not equivalent to matrix-based case when hanging nodes are
-      // present. see Section 5.3 in Korman 2016, A time-space adaptive method
-      // for the Schrodinger equation, doi: 10.4208/cicp.101214.021015a for a
-      // discussion.
+      // result is not equivalent to matrix-based case when hanging nodes
+      // are present. see Section 5.3 in Korman 2016, A time-space adaptive
+      // method for the Schrodinger equation,
+      // doi: 10.4208/cicp.101214.021015a for a discussion.
       for (unsigned int i = 0; i < phi.dofs_per_component; ++i)
         for (unsigned int ic = 0; ic < phi.n_components; ++ic)
           {
