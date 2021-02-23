@@ -1123,17 +1123,29 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::compute_diagonal()
   VectorType &inverse_diagonal_vector = inverse_diagonal_entries->get_vector();
   VectorType &diagonal_vector         = diagonal_entries->get_vector();
 
+#if DEAL_II_VERSION_GTE(9, 3, 0)
   MatrixFreeTools::compute_diagonal(*data_in_use,
                                     diagonal_vector,
                                     &NeoHookOperator::do_operation_on_cell,
                                     this);
+#else
+  data_in_use->initialize_dof_vector(diagonal_vector);
+  unsigned int dummy = 0;
+  diagonal_vector = 0.;
+  local_diagonal_cell(*data_in_use,
+                      diagonal_vector,
+                      dummy,
+                      std::make_pair<unsigned int, unsigned int>(
+                        0, data_in_use->n_cell_batches()));
+  diagonal_vector.compress(VectorOperation::add);
+#endif
 
   data_in_use->initialize_dof_vector(inverse_diagonal_vector);
   // set_constrained_entries_to_one
   Assert(data_current->get_constrained_dofs().size() ==
            data_reference->get_constrained_dofs().size(),
          ExcInternalError());
-  for (const auto dof : data_current->get_constrained_dofs())
+  for (const auto dof : data_in_use->get_constrained_dofs())
     diagonal_vector.local_element(dof) = 1.;
 
 
