@@ -703,7 +703,10 @@ namespace FSI
         delta_displacement = 0.0;
         solve_nonlinear_timestep();
 
-        precice_adapter->advance(total_displacement, time.get_delta_t());
+        {
+          TimerOutput::Scope t(timer, "Advance preCICE");
+          precice_adapter->advance(total_displacement, time.get_delta_t());
+        }
 
         precice_adapter->reload_old_state_if_required([&]() {
           acceleration       = acceleration_old;
