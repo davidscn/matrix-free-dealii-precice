@@ -364,10 +364,11 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::initialize(
     }
   else if (caching == "tensor2")
     {
+      // The second scalar is only used for formulation one and not for
+      // formulation 0
       mf_caching  = MFCaching::tensor2;
       mf_frame    = MFFrame::deformed;
       data_in_use = data_current_;
-      // TODO: Check second scalar for formulation 0
       cached_scalar.reinit(n_cells, phi.n_q_points);
       cached_second_scalar.reinit(n_cells, phi.n_q_points);
       cached_tensor2.reinit(n_cells, phi.n_q_points);
@@ -929,8 +930,9 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
               Utilities::pow(n_q_points_1d, dim);
 
             VectorizedArrayType *x_grads = phi.begin_gradients();
-            // TODO: Only a data storage for the gradients is required, not a
-            // complete copy of an FEEvaluation object
+            // Only a data storage for the gradients is required, not a complete
+            // copy of an FEEvaluation object. However, the copy constructor is
+            // way faster than allocating an AlignedVector here.
             FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi_grad(
               phi);
             VectorizedArrayType *ref_grads = phi_grad.begin_gradients();
