@@ -703,7 +703,10 @@ namespace FSI
         delta_displacement = 0.0;
         solve_nonlinear_timestep();
 
-        precice_adapter->advance(total_displacement, time.get_delta_t());
+        {
+          TimerOutput::Scope t(timer, "Advance preCICE");
+          precice_adapter->advance(total_displacement, time.get_delta_t());
+        }
 
         precice_adapter->reload_old_state_if_required([&]() {
           acceleration       = acceleration_old;
@@ -801,20 +804,20 @@ namespace FSI
     system_rhs.reinit(locally_owned_dofs,
                       locally_relevant_dofs,
                       mpi_communicator);
-    // TODO: Switch to vectors without ghosts
-    old_displacement.reinit(system_rhs);
-    delta_displacement.reinit(system_rhs);
     total_displacement.reinit(system_rhs);
     newton_update.reinit(system_rhs);
+    // Otherwise, MF will complain about an incompatible vector
     acceleration.reinit(system_rhs);
-    velocity.reinit(system_rhs);
-    acceleration_old.reinit(system_rhs);
-    velocity_old.reinit(system_rhs);
 
-    // switch to ghost mode:
-    delta_displacement.update_ghost_values();
+    // Vectors without ghost data
+    old_displacement.reinit(locally_owned_dofs, mpi_communicator);
+    delta_displacement.reinit(old_displacement);
+    velocity.reinit(old_displacement);
+    acceleration_old.reinit(old_displacement);
+    velocity_old.reinit(old_displacement);
+
+    // Needed in order to write out the results of the first time step
     total_displacement.update_ghost_values();
-    acceleration.update_ghost_values();
 
     timer.leave_subsection();
 
@@ -1691,10 +1694,8 @@ namespace FSI
     velocity.equ(alpha_4, displacement_delta);
     velocity.add(alpha_5, velocity_old, alpha_6, acceleration_old);
 
-    //      total_displacement_old = total_displacement;
-    // TODO: maybe copy_locally_owned_data_from is sufficient here
-    velocity_old     = velocity;
-    acceleration_old = acceleration;
+    velocity_old.copy_locally_owned_data_from(velocity);
+    acceleration_old.copy_locally_owned_data_from(acceleration);
   }
 
 
