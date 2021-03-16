@@ -166,6 +166,8 @@ namespace Adapter
     const bool        read_write_on_same;
     const int         write_sampling;
 
+    // In order to evaluate the average distance between coupling nodes
+    double write_mesh_stats = 0;
 
     // These IDs are given by preCICE during initialization
     int read_mesh_id;
@@ -508,9 +510,10 @@ namespace Adapter
     interface_nodes_ids.reserve(mf_data_reference->n_boundary_face_batches() *
                                 0.5);
     // TODO: n_qpoints_1D is hard coded
+    static constexpr unsigned int n_qpoints_1d = fe_degree + 1;
     FEFaceEvaluation<dim,
                      fe_degree,
-                     fe_degree + 1 /*n_qpoints_1D*/,
+                     n_qpoints_1d,
                      dim,
                      double,
                      VectorizedArrayType>
@@ -518,7 +521,8 @@ namespace Adapter
 
     std::array<double, dim * VectorizedArrayType::size()> unrolled_vertices;
     std::array<int, VectorizedArrayType::size()>          node_ids;
-    unsigned int                                          size = 0;
+    unsigned int                                          size              = 0;
+    unsigned int                                          active_faces_size = 0;
 
     for (unsigned int face = mf_data_reference->n_inner_face_batches();
          face < mf_data_reference->n_boundary_face_batches() +
@@ -534,6 +538,18 @@ namespace Adapter
         phi.reinit(face);
         const int active_faces =
           mf_data_reference->n_active_entries_per_face_batch(face);
+
+        // Only relevant for write meshes
+        if (!is_read_mesh)
+          for (int i = 0; i < active_faces; ++i)
+            {
+              const auto &f_pair =
+                mf_data_reference->get_face_iterator(face, i);
+              write_mesh_stats +=
+                f_pair.first->face(f_pair.second)->diameter() / n_qpoints_1d;
+              active_faces_size += active_faces;
+            }
+
 
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           {
@@ -554,9 +570,11 @@ namespace Adapter
             interface_nodes_ids.emplace_back(node_ids);
             ++size;
           }
-        // resize the IDs in case the initial guess was too large
-        interface_nodes_ids.resize(size);
       }
+    // resize the IDs in case the initial guess was too large
+    interface_nodes_ids.resize(size);
+    if (active_faces_size != 0)
+      write_mesh_stats /= active_faces_size;
   }
 
 
@@ -635,6 +653,8 @@ namespace Adapter
       << "--     . Read node location: Gauss-Legendre\n"
       << "--     . Write node location:"
       << (read_write_on_same ? "Gauss-Legendre" : "equidistant") << "\n"
+      << "--     . Average radial write node distance: " << write_mesh_stats
+      << "\n"
       << std::endl;
   }
 } // namespace Adapter
