@@ -73,13 +73,13 @@ subsection Material properties
   set Poisson's ratio = 0.35
 
   # Shear modulus
-  set Shear modulus   = 92.59e-8
+  set Shear modulus   = 7.41e-7
 
   # Formulation of the energy function
   set Formulation     = 1
 
   # Density
-  set Density         = 0.1
+  set Density         = 2.0
 end
 
 
