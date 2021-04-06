@@ -2,21 +2,21 @@
 # ---------------------
 subsection Finite element system
   # Displacement system polynomial order
-  set Polynomial degree = 2
+  set Polynomial degree = 3
 
   # Gauss quadrature order
-  set Quadrature order  = 3
+  set Quadrature order  = 4
 end
 
 subsection Output
    # At which time to write a vtu output file
-   set Output tick     = 0.2
+   set Output tick     = 0.1
 
    # Output solution watchpoint
-   set Output solution = false
+   set Output solution = true
 
    # Watchpoint in undeformed configuration to output unknown fields
-   set Output points   = 0.6, 0.2, 0
+   set Output points   = 4.0, 0.0
 
    # Output folder
    set Output folder   = dealii-output
@@ -25,7 +25,7 @@ end
 
 subsection Geometry
   # Dimension of the problem
-  set Dimension          = 3
+  set Dimension          = 2
 
   # Number of global refinements
   set Global refinement  = 3
@@ -103,10 +103,10 @@ end
 
 subsection Time
   # End time
-  set End time       = 30
+  set End time       = 5
 
   # Time step size
-  set Time step size = 0.01
+  set Time step size = 0.001
 end
 
 subsection precice configuration
