@@ -59,7 +59,7 @@
     <coupling-scheme:parallel-implicit>
       <participants first="Fluid" second="Solid" />
       <max-time value="5" />
-      <time-window-size value="1e-3" />
+      <time-window-size value="5e-3" />
       <exchange data="Stress" mesh="Fluid-Mesh-Faces" from="Fluid" to="Solid" />
       <exchange data="Displacement" mesh="Solid-write" from="Solid" to="Fluid" />
       <max-iterations value="50" />
@@ -67,6 +67,7 @@
       <relative-convergence-measure limit="1e-3" data="Displacement" mesh="Solid-write" />
       <acceleration:IQN-ILS>
         <data name="Displacement" mesh="Solid-write" />
+        <data name="Stress" mesh="Fluid-Mesh-Faces" />
         <preconditioner type="residual-sum" />
         <filter type="QR2" limit="1e-2" />
         <initial-relaxation value="0.5" />

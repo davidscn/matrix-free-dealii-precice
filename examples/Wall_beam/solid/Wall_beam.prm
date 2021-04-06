@@ -2,15 +2,15 @@
 # ---------------------
 subsection Finite element system
   # Displacement system polynomial order
-  set Polynomial degree = 3
+  set Polynomial degree = 2
 
   # Gauss quadrature order
-  set Quadrature order  = 4
+  set Quadrature order  = 3
 end
 
 subsection Output
    # At which time to write a vtu output file
-   set Output tick     = 0.1
+   set Output tick     = 0.005
 
    # Output solution watchpoint
    set Output solution = true
@@ -73,13 +73,13 @@ subsection Material properties
   set Poisson's ratio = 0.35
 
   # Shear modulus
-  set Shear modulus   = 7.41e-7
+  set Shear modulus   = 9.2593e5
 
   # Formulation of the energy function
   set Formulation     = 1
 
   # Density
-  set Density         = 2.0
+  set Density         = 0.1
 end
 
 
@@ -106,7 +106,7 @@ subsection Time
   set End time       = 5
 
   # Time step size
-  set Time step size = 0.001
+  set Time step size = 0.005
 end
 
 subsection precice configuration
