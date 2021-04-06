@@ -127,7 +127,7 @@ namespace FSI
                           testcase,
                           "Testcase to compute",
                           Patterns::Selection(
-                            "turek_hron|cook|tube3d|bending_flap"));
+                            "turek_hron|cook|tube3d|bending_flap|Wall_beam"));
       }
       prm.leave_subsection();
     }
