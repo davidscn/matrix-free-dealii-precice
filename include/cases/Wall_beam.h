@@ -29,58 +29,70 @@ namespace FSI
     WallBeam<dim>::make_coarse_grid_and_bcs(Triangulation<dim> &triangulation)
     {
       AssertDimension(dim, 2);
-      // tria1 contains the beam, tria2 and tria3 contain the square
-      Triangulation<dim> tria1, tria2, tria3;
+      // Create the mesh consisting of the square and the flap or only the
+      // square
+      static constexpr bool include_square = false;
+
 
       // We need five subdivisions in x-direction
       const std::vector<unsigned int> repetitions =
-        dim == 2 ? std::vector<unsigned int>({5, 1}) :
-                   std::vector<unsigned int>({5, 1, 1});
+        dim == 2 ? std::vector<unsigned int>({4*5, 1}) :
+                   std::vector<unsigned int>({2*5, 1, 1});
+
+      const double x_coord = include_square ? -1.0 : 0.0;
 
       // Create a beam through the square
       const Point<dim> bottom_left =
-        (dim == 3 ? Point<dim>(-1.0, -0.03, -0.005) : Point<dim>(-1.0, -0.03));
+        (dim == 3 ? Point<dim>(x_coord, -0.03, -0.005) :
+                    Point<dim>(x_coord, -0.03));
       const Point<dim> top_right =
         dim == 3 ? Point<dim>(4.0, 0.03, 0.005) : Point<dim>(4.0, 0.03);
 
       // Boundary indicators are lost during the subsequent merge
-      GridGenerator::subdivided_hyper_rectangle(tria1,
+      GridGenerator::subdivided_hyper_rectangle(triangulation,
                                                 repetitions,
                                                 bottom_left,
                                                 top_right,
                                                 /*colorize*/ false);
 
-      {
-        // Create the bottom part of the square
-        const Point<dim> bottom_square =
-          (dim == 3 ? Point<dim>(-1.0, -0.5, -0.005) : Point<dim>(-1.0, -0.5));
-        const Point<dim> top_square =
-          dim == 3 ? Point<dim>(0.0, -0.03, 0.005) : Point<dim>(0.0, -0.03);
+      // upper and lower half of the square contain the square
+      if (include_square)
+        {
+          Triangulation<dim> tria1, tria2;
+          {
+            // Create the bottom part of the square
+            const Point<dim> bottom_square =
+              (dim == 3 ? Point<dim>(-1.0, -0.5, -0.005) :
+                          Point<dim>(-1.0, -0.5));
+            const Point<dim> top_square =
+              dim == 3 ? Point<dim>(0.0, -0.03, 0.005) : Point<dim>(0.0, -0.03);
 
-        GridGenerator::hyper_rectangle(tria2, bottom_square, top_square);
-      }
-      {
-        // Create the top part of the square
-        const Point<dim> bottom_square =
-          (dim == 3 ? Point<dim>(-1.0, 0.03, -0.005) : Point<dim>(-1.0, 0.03));
-        const Point<dim> top_square =
-          dim == 3 ? Point<dim>(0.0, 0.5, 0.005) : Point<dim>(0.0, 0.5);
+            GridGenerator::hyper_rectangle(tria1, bottom_square, top_square);
+          }
+          {
+            // Create the top part of the square
+            const Point<dim> bottom_square =
+              (dim == 3 ? Point<dim>(-1.0, 0.03, -0.005) :
+                          Point<dim>(-1.0, 0.03));
+            const Point<dim> top_square =
+              dim == 3 ? Point<dim>(0.0, 0.5, 0.005) : Point<dim>(0.0, 0.5);
 
-        GridGenerator::hyper_rectangle(tria3, bottom_square, top_square);
-      }
+            GridGenerator::hyper_rectangle(tria2, bottom_square, top_square);
+          }
 
-      // Merge everything together
-      GridGenerator::merge_triangulations({&tria1, &tria2, &tria3},
-                                          triangulation);
-
-      const types::boundary_id clamped_mesh_id = 1;
+          // Merge everything together
+          GridGenerator::merge_triangulations({&triangulation, &tria1, &tria2},
+                                              triangulation);
+        }
 
       // Set boundary conditions
+      const types::boundary_id clamped_mesh_id = 1;
       // Fix all boundary components
       this->dirichlet_mask[clamped_mesh_id] = ComponentMask(dim, true);
       this->dirichlet[clamped_mesh_id] =
         std::make_unique<Functions::ZeroFunction<dim>>(dim);
 
+      const double tolerance = 1e-8;
       // Iterate over all cells and set the IDs
       for (const auto &cell : triangulation.active_cell_iterators())
         {
@@ -89,7 +101,7 @@ namespace FSI
               {
                 const auto center = face->center();
                 // Boundaries for the interface
-                if (center[0] > 0.0)
+                if (center[0] > (0.0 + tolerance))
                   face->set_boundary_id(this->interface_id);
                 // Boundaries clamped in all directions
                 else
