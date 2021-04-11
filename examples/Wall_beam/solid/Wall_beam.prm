@@ -55,7 +55,7 @@ subsection Linear solver
   set Condition number CG iterations = 20
 
   # Type of caching for matrix-free operator
-  set MF caching = scalar_referential
+  set MF caching = tensor2
 
   # Use Chebyshev smoother as coarse level solver
   set MF Chebyshev coarse = true
@@ -76,7 +76,7 @@ subsection Material properties
   set Shear modulus   = 9.2593e5
 
   # Formulation of the energy function
-  set Formulation     = 1
+  set Formulation     = 0
 
   # Density
   set Density         = 0.1
@@ -106,7 +106,7 @@ subsection Time
   set End time       = 5
 
   # Time step size
-  set Time step size = 0.005
+  set Time step size = 0.001
 end
 
 subsection precice configuration

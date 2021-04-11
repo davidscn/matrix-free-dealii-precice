@@ -24,22 +24,24 @@ y1   6;   // top
 
 // Grid refinement parameters
 X1 17;	// Nx of 0th block,0.5
-X2 22;	// Nx of 3rd block,0.06
-X3 12;	// Nx of 8th block,0.06
-X4 24;	// Nx of 10th block,0.06
-X5 40;	// Nx of 14th block,0.194
+X2 32;	// Nx of 3rd block,0.06
+X3 30;	// Nx of 8th block,0.06
+X4 44;	// Nx of 10th block,0.06
+X5 60;	// Nx of 14th block,0.194
 
-GX1 0.5; // Grading X1
-GX3 2;   // Grading X3 (pillar)
-IGX3 0.5;// Inverse Grading of GX3 (pillar)
-GX5 3.5; // Grading X5
+GX1 0.3; // Grading X1
+GX3 4;   // Grading X3 (pillar)
+IGX3 0.25;// Inverse Grading of GX3 (pillar)
+GX5 5.5; // Grading X5
 
 Y1 20;	// Ny of 0th block,0.5
-Y2 10;  // Ny of 8th block,0.06
-Y3 1;		// Ny of 18th block,0.06
+Y2 20;  // Ny of 8th block,0.06
+Y3 2;		// Ny of 18th block,0.06
 
-GY1 2;  // Grading of Y1
-IGY1 0.5; // Inverse grading of Y1
+GY1 4;  // Grading of Y1
+IGY1 0.25; // Inverse grading of Y1
+GY2 2.5;  // Grading of Y2
+IGY2 0.4; // Inverse grading of Y2
 
 vertices
 (
@@ -140,22 +142,22 @@ blocks
     hex ( 2 24 27 10  6 28 31 14) ($X3 $X2 1) simpleGrading ($IGX3 1 1)
 
     // Block 8 9
-    hex (25 17 33 32 29 19 37 36) ($X3 $Y2 1) simpleGrading ($GX3 1 1)
-    hex (35 34 21 26 39 38 23 30) ($X3 $Y2 1) simpleGrading ($GX3 1 1)
+    hex (25 17 33 32 29 19 37 36) ($X3 $Y2 1) simpleGrading ($GX3 $IGY2 1)
+    hex (35 34 21 26 39 38 23 30) ($X3 $Y2 1) simpleGrading ($GX3 $GY2 1)
 
     // Block 10 11
     hex (16 40 41 17 18 42 43 19) ($X4 $Y1 1) simpleGrading (1 $IGY1 1)
     hex (21 45 44 20 23 47 46 22) ($X4 $Y1 1) simpleGrading (1 $GY1 1)
 
     // Block 12 13
-    hex (17 41 48 33 19 43 50 37) ($X4 $Y2 1) simpleGrading (1 1 1)
-    hex (34 49 45 21 38 51 47 23) ($X4 $Y2 1) simpleGrading (1 1 1)
+    hex (17 41 48 33 19 43 50 37) ($X4 $Y2 1) simpleGrading (1 $IGY2 1)
+    hex (34 49 45 21 38 51 47 23) ($X4 $Y2 1) simpleGrading (1 $GY2 1)
 
     // Block 14 15 16 17 18
     hex (40 52 53 41 42 58 59 43) ($X5 $Y1 1) simpleGrading ($GX5 $IGY1 1)
     hex (45 56 57 44 47 62 63 46) ($X5 $Y1 1) simpleGrading ($GX5 $GY1 1)
-    hex (41 53 54 48 43 59 60 50) ($X5 $Y2 1) simpleGrading ($GX5 1 1)
-    hex (49 55 56 45 51 61 62 47) ($X5 $Y2 1) simpleGrading ($GX5 1 1)
+    hex (41 53 54 48 43 59 60 50) ($X5 $Y2 1) simpleGrading ($GX5 $IGY2 1)
+    hex (49 55 56 45 51 61 62 47) ($X5 $Y2 1) simpleGrading ($GX5 $GY2 1)
     hex (48 54 55 49 50 60 61 51) ($X5 $Y3 1) simpleGrading ($GX5 1 1)
 );
 

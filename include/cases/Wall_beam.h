@@ -34,10 +34,10 @@ namespace FSI
       static constexpr bool include_square = false;
 
 
-      // We need five subdivisions in x-direction
+      // We need (multiples of) five subdivisions in x-direction
       const std::vector<unsigned int> repetitions =
-        dim == 2 ? std::vector<unsigned int>({4*5, 1}) :
-                   std::vector<unsigned int>({2*5, 1, 1});
+        dim == 2 ? std::vector<unsigned int>({4 * 5, 1}) :
+                   std::vector<unsigned int>({4 * 5, 1, 1});
 
       const double x_coord = include_square ? -1.0 : 0.0;
 

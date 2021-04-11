@@ -59,7 +59,7 @@
     <coupling-scheme:parallel-implicit>
       <participants first="Fluid" second="Solid" />
       <max-time value="5" />
-      <time-window-size value="5e-3" />
+      <time-window-size value="1e-3" />
       <exchange data="Stress" mesh="Fluid-Mesh-Faces" from="Fluid" to="Solid" />
       <exchange data="Displacement" mesh="Solid-write" from="Solid" to="Fluid" />
       <max-iterations value="50" />
