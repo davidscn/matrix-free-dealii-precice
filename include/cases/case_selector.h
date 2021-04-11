@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cases/Wall_beam.h>
 #include <cases/bending_flap.h>
 #include <cases/case_base.h>
 #include <cases/cook_membrane.h>
@@ -25,6 +26,8 @@ namespace FSI
           return std::make_shared<Tube3D<dim>>();
         else if (testcase_name == "bending_flap")
           return std::make_shared<BendingFlap<dim>>();
+        else if (testcase_name == "Wall_beam")
+          return std::make_shared<WallBeam<dim>>();
         // Add your case here
         else
           AssertThrow(false,
