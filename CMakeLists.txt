@@ -1,6 +1,5 @@
 # Set the name of the project and target:
 SET(TARGET "solid")
-SET(TARGETLIB "mf_elasticity")
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.1.0)
 
@@ -13,12 +12,6 @@ ENDIF()
 
 INCLUDE_DIRECTORIES(
  ${CMAKE_SOURCE_DIR}/include
-)
-
-# Declare all source files the target consists of:
-SET(TARGETLIB_SRC
-  src/mf_elasticity.cc
-  ${CMAKE_CURRENT_BINARY_DIR}/version.cc
 )
 
 SET(CLEAN_UP_FILES
@@ -83,54 +76,16 @@ ENDIF()
 FIND_PACKAGE(precice REQUIRED
   HINTS ${PRECICE_DIR} $ENV{precice_DIR}
   )
-MESSAGE(STATUS "Using the preCICE version found at ${precice_CONFIG}")
-
-#
-# RPATHS: https://cmake.org/Wiki/CMake_RPATH_handling#Mac_OS_X_and_the_RPATH
-#
-IF(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-  ## cmake  --help-policy CMP0042
-  set(CMAKE_MACOSX_RPATH ON)
-ENDIF()
-
-# use, i.e. don't skip the full RPATH for the build tree
-SET(CMAKE_SKIP_BUILD_RPATH  FALSE)
-
-# when building, don't use the install RPATH already
-# (but later on when installing)
-SET(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
-
-SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
-
-# add the automatically determined parts of the RPATH
-# which point to directories outside the build tree to the install RPATH
-SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-
-# the RPATH to be used when installing, but only if it's not a system directory
-LIST(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_PREFIX}/lib" isSystemDir)
-IF("${isSystemDir}" STREQUAL "-1")
-   SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
-ENDIF("${isSystemDir}" STREQUAL "-1")
-
-# make sure RPATHs are used on macOS
-SET(CMAKE_INSTALL_NAME_DIR "${CMAKE_INSTALL_PREFIX}/lib")
-
-ADD_LIBRARY(${TARGETLIB} SHARED
-    ${TARGETLIB_SRC}
-  )
+MESSAGE(STATUS "Using the preCICE version found at ${precice_DIR}")
 
 ADD_EXECUTABLE(${TARGET}
     src/${TARGET}.cc
+    ${CMAKE_CURRENT_BINARY_DIR}/version.cc
   )
 
-DEAL_II_SETUP_TARGET(${TARGETLIB})
 DEAL_II_SETUP_TARGET(${TARGET})
 
-TARGET_LINK_LIBRARIES(${TARGETLIB} precice::precice)
-
-TARGET_LINK_LIBRARIES(${TARGET}
-    ${TARGETLIB}
-  )
+TARGET_LINK_LIBRARIES(${TARGET} precice::precice)
 
 INCLUDE_DIRECTORIES (${CMAKE_CURRENT_BINARY_DIR}/include)
 
