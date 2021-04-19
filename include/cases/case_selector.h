@@ -4,6 +4,7 @@
 #include <cases/bending_flap.h>
 #include <cases/case_base.h>
 #include <cases/cook_membrane.h>
+#include <cases/perpendicular_flap.h>
 #include <cases/tube_3d.h>
 #include <cases/turek_hron.h>
 
@@ -28,6 +29,8 @@ namespace FSI
           return std::make_shared<BendingFlap<dim>>();
         else if (testcase_name == "Wall_beam")
           return std::make_shared<WallBeam<dim>>();
+        else if (testcase_name == "perpendicular_flap")
+          return std::make_shared<PerpendicularFlap<dim>>();
         // Add your case here
         else
           AssertThrow(false,
