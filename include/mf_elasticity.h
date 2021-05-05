@@ -576,6 +576,11 @@ namespace FSI
   {
     if (Utilities::MPI::this_mpi_process(mpi_communicator) == 0)
       {
+        // Assert that we are in the stability region of the Newmark scheme
+        AssertThrow(beta <= 0.5 && beta >= 0, ExcInternalError());
+        AssertThrow(gamma <= 1 && gamma >= 0, ExcInternalError());
+        AssertThrow(2 * beta >= gamma, ExcInternalError());
+        AssertThrow(gamma == 0 || gamma >= 0.5, ExcInternalError());
         const int ierr =
           create_directory(parameters.output_folder,
                            S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
