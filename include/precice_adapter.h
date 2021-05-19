@@ -37,9 +37,10 @@ namespace Adapter
      *
      * @param[in]  parameters Parameter class, which hold the data specified
      *             in the parameters.prm file
-     * @param[in]  deal_boundary_interface_id Boundary ID of the triangulation,
-     *             which is associated with the coupling interface.
-     * @param[in]
+     * @param[in]  dealii_boundary_interface_id Boundary ID of the
+     *             triangulation, which is associated with the coupling
+     *             interface.
+     * @param[in]  data The applied matrix-free object
      */
     template <typename ParameterClass>
     Adapter(const ParameterClass &parameters,
@@ -51,13 +52,17 @@ namespace Adapter
      * @brief      Initializes preCICE and passes all relevant data to preCICE
      *
      * @param[in]  dof_handler Initialized dof_handler
-     * @param[in]  deal_to_precice Data, which should be given to preCICE and
+     * @param[in]  dealii_to_precice Data, which should be given to preCICE and
      *             exchanged with other participants. Wether this data is
      *             required already in the beginning depends on your
      *             individual configuration and preCICE determines it
      *             automatically. In many cases, this data will just represent
      *             your initial condition.
-     * TODO
+     * @param[in]  read_quad_index Index of the quadrature formula which should
+     *             be used for data reading
+     * @param[in]  write_quad_index Index of the quadrature formula which should
+     *             be used for data writing
+     *
      */
     void
     initialize(const VectorType &dealii_to_precice,
@@ -114,16 +119,19 @@ namespace Adapter
     /**
      * @brief read_on_quadrature_point Returns the dim dimensional read data
      *        given the ID of the interface node we want to access. The ID
-     * needs to be associated to the 'read' mesh. The function is in practice
-     *        used together with @p begin_interface_IDs() (see below), so that
-     *        we can iterate over all IDs consecutively. The function is not
-     *        thread safe since the used preCICE function is not thread safe.
-     *        Also, the functionality assumes that we iterate during the
-     *        initialization in the same way over the interface than during
-     * the assembly step.
+     *        needs to be associated to the 'read' mesh. The function is in
+     *        practice used together with @p begin_interface_IDs() (see below),
+     *        so that we can iterate over all IDs consecutively. The function is
+     *        not thread safe since the used preCICE function is not thread
+     *        safe. Also, the functionality assumes that we iterate during the
+     *        initialization in the same way over the interface than during the
+     *        assembly step.
      *
-     * @param[out] data dim dimensional data associated to the interface node
      * @param[in]  vertex_id preCICE related index of the read_data vertex
+     * @param[in]  active_faces Number of active faces the matrix-free object
+     *             works on
+     *
+     * @return dim dimensional data associated to the interface node
      */
     Tensor<1, dim, VectorizedArrayType>
     read_on_quadrature_point(
@@ -137,9 +145,20 @@ namespace Adapter
     auto
     begin_interface_IDs() const;
 
+    /**
+     * @brief is_coupling_ongoing Calls the preCICE API function isCouplingOnGoing
+     *
+     * @return returns true if the coupling has not yet been finished
+     */
     bool
     is_coupling_ongoing() const;
 
+    /**
+     * @brief is_time_window_complete Calls the preCICE API function isTimeWindowComplete
+     *
+     * @return returns true if the coupling time window has been completed in the current
+     *         iteration
+     */
     bool
     is_time_window_complete() const;
 
