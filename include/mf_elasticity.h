@@ -1650,30 +1650,24 @@ namespace FSI
           displacement[d] = std::numeric_limits<double>::max();
         unsigned int found = 0;
 
-        try
-          {
-            const MappingQ<dim> mapping(degree);
-            const auto          cell_point =
-              GridTools::find_active_cell_around_point(mapping,
-                                                       dof_handler,
-                                                       soln_pt);
-            // we may find artifical cells here:
-            if (cell_point.first->is_locally_owned())
-              {
-                found = 1;
-                const Quadrature<dim> soln_qrule(cell_point.second);
-                AssertThrow(soln_qrule.size() == 1, ExcInternalError());
-                FEValues<dim> fe_values_soln(fe, soln_qrule, update_values);
-                fe_values_soln.reinit(cell_point.first);
+        // TODO: One could use the new version using a cache here
+        const auto cell_point = GridTools::find_active_cell_around_point(
+          StaticMappingQ1<dim>::mapping, dof_handler, soln_pt);
 
-                std::vector<Tensor<1, dim>> soln_values(soln_qrule.size());
-                fe_values_soln[u_fe].get_function_values(total_displacement,
-                                                         soln_values);
-                displacement = soln_values[0];
-              }
+        if (cell_point.first != dof_handler.end() &&
+            cell_point.first->is_locally_owned())
+          {
+            found = 1;
+            const Quadrature<dim> soln_qrule(cell_point.second);
+            AssertThrow(soln_qrule.size() == 1, ExcInternalError());
+            FEValues<dim> fe_values_soln(fe, soln_qrule, update_values);
+            fe_values_soln.reinit(cell_point.first);
+
+            std::vector<Tensor<1, dim>> soln_values(soln_qrule.size());
+            fe_values_soln[u_fe].get_function_values(total_displacement,
+                                                     soln_values);
+            displacement = soln_values[0];
           }
-        catch (const GridTools::ExcPointNotFound<dim> &)
-          {}
 
         for (unsigned int d = 0; d < dim; ++d)
           displacement[d] =
