@@ -201,16 +201,13 @@ namespace Adapter
     // The IDs are only required for preCICE
     std::vector<std::array<int, VectorizedArrayType::size()>> read_nodes_ids;
     std::vector<std::array<int, VectorizedArrayType::size()>> write_nodes_ids;
-    // Only required for shared parallelism
-    std::map<unsigned int, unsigned int> read_id_map;
-    std::vector<double>                  read_data;
 
     // Container to store time dependent data in case of an implicit coupling
     std::vector<VectorType> old_state_data;
     double                  old_time_value;
 
-    int write_quad_index;
-    int read_quad_index;
+    int write_quad_index = -1;
+    int read_quad_index  = -1;
 
     // preCICE can only handle double precision
     std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>>
@@ -240,6 +237,10 @@ namespace Adapter
     void
     write_all_quadrature_nodes(const VectorType &data);
 
+
+    /**
+     * @brief print_info Print some initial information regarding the computational setup
+     */
     void
     print_info() const;
   };
@@ -271,6 +272,15 @@ namespace Adapter
       parameters.config_file,
       Utilities::MPI::this_mpi_process(MPI_COMM_WORLD),
       Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD));
+
+    AssertThrow(
+      dim == precice->getDimensions(),
+      ExcMessage("The dimension of your solver needs to be consistent with the "
+                 "dimension specified in your precice-config file. In case you "
+                 "run one of the tutorials, the dimension can be specified via "
+                 "cmake -D DIM=dim ."));
+
+    AssertThrow(dim > 1, ExcNotImplemented());
   }
 
 
@@ -286,15 +296,6 @@ namespace Adapter
     const int         read_quad_index_,
     const int         write_quad_index_)
   {
-    AssertThrow(
-      dim == precice->getDimensions(),
-      ExcMessage("The dimension of your solver needs to be consistent with the "
-                 "dimension specified in your precice-config file. In case you "
-                 "run one of the tutorials, the dimension can be specified via "
-                 "cmake -D DIM=dim ."));
-
-    AssertThrow(dim > 1, ExcNotImplemented());
-
     // Check if the value has been set or if we choose a default one
     //    const int selected_sampling =
     //      write_sampling == std::numeric_limits<int>::max() ? fe_degree + 1 :
@@ -317,9 +318,6 @@ namespace Adapter
     else // TODO: Replace copy by some smart pointer
       write_nodes_ids = read_nodes_ids;
     print_info();
-
-    //    if (shared_memory_parallel)
-    //      read_data.resize(read_nodes_ids.size() * dim);
 
     // Initialize preCICE internally
     precice->initialize();
@@ -366,13 +364,6 @@ namespace Adapter
     //                                   read_nodes_ids.size(),
     //                                   read_nodes_ids.data(),
     //                                   read_data.data());
-
-    // Alternative, if you don't want to store the indices
-    //    const int rsize = (1 / dim) * read_data.size();
-    //    if (precice->isReadDataAvailable())
-    //      for (const auto i : std_cxx20::ranges::iota_view<int, int>{0,
-    //      rsize})
-    //        precice->readVectorData(read_data_id, i, &read_data[i * dim]);
   }
 
 
