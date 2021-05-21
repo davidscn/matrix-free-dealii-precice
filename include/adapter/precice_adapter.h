@@ -1,6 +1,5 @@
 #pragma once
 
-#include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/exceptions.h>
 #include <deal.II/base/mpi.h>
 #include <deal.II/base/utilities.h>
@@ -8,9 +7,9 @@
 #include <deal.II/fe/fe.h>
 #include <deal.II/fe/mapping_q_generic.h>
 
-#include <deal.II/matrix_free/fe_evaluation.h>
 #include <deal.II/matrix_free/matrix_free.h>
 
+#include <adapter/dealii_interface.h>
 #include <precice/SolverInterface.hpp>
 #include <q_equidistant.h>
 
@@ -21,9 +20,9 @@ namespace Adapter
   using namespace dealii;
 
   /**
-   * The Adapter class keeps all functionalities to couple deal.II to other
-   * solvers with preCICE i.e. data structures are set up, necessary information
-   * is passed to preCICE etc.
+   * The Adapter class keeps together with the CouplingInterfaes all
+   * functionalities to couple deal.II to other solvers with preCICE i.e. data
+   * structures are set up, necessary information is passed to preCICE etc.
    */
   template <int dim,
             int fe_degree,
@@ -41,34 +40,35 @@ namespace Adapter
      *             triangulation, which is associated with the coupling
      *             interface.
      * @param[in]  data The applied matrix-free object
+     * @param[in]  dof_index Index of the relevant dof_handler in the
+     *             corresponding MatrixFree object
+     * @param[in]  read_quad_index Index of the quadrature formula in the
+     *             corresponding MatrixFree object which should be used for data
+     *             reading
+     * @param[in]  write_quad_index Index of the quadrature formula in the
+     *             corresponding MatrixFree object which should be used for data
+     *             writing
      */
     template <typename ParameterClass>
     Adapter(const ParameterClass &parameters,
             const unsigned int    dealii_boundary_interface_id,
-            const bool            shared_memory_parallel,
-            std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>> data);
+            std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>> data,
+            const unsigned int dof_index        = 0,
+            const unsigned int read_quad_index  = 0,
+            const unsigned int write_quad_index = 1);
 
     /**
      * @brief      Initializes preCICE and passes all relevant data to preCICE
      *
-     * @param[in]  dof_handler Initialized dof_handler
      * @param[in]  dealii_to_precice Data, which should be given to preCICE and
      *             exchanged with other participants. Wether this data is
      *             required already in the beginning depends on your
      *             individual configuration and preCICE determines it
      *             automatically. In many cases, this data will just represent
      *             your initial condition.
-     * @param[in]  read_quad_index Index of the quadrature formula which should
-     *             be used for data reading
-     * @param[in]  write_quad_index Index of the quadrature formula which should
-     *             be used for data writing
-     *
      */
     void
-    initialize(const VectorType &dealii_to_precice,
-               const int         dof_index         = 0,
-               const int         read_quad_index_  = 0,
-               const int         write_quad_index_ = 1);
+    initialize(const VectorType &dealii_to_precice);
 
     /**
      * @brief      Advances preCICE after every timestep, converts data formats
@@ -117,33 +117,13 @@ namespace Adapter
     reload_old_state_if_required(const std::function<void()> &reload_old_state);
 
     /**
-     * @brief read_on_quadrature_point Returns the dim dimensional read data
-     *        given the ID of the interface node we want to access. The ID
-     *        needs to be associated to the 'read' mesh. The function is in
-     *        practice used together with @p begin_interface_IDs() (see below),
-     *        so that we can iterate over all IDs consecutively. The function is
-     *        not thread safe since the used preCICE function is not thread
-     *        safe. Also, the functionality assumes that we iterate during the
-     *        initialization in the same way over the interface than during the
-     *        assembly step.
-     *
-     * @param[in]  vertex_id preCICE related index of the read_data vertex
-     * @param[in]  active_faces Number of active faces the matrix-free object
-     *             works on
-     *
-     * @return dim dimensional data associated to the interface node
+     * @brief Public API adapter method, which calls the respective implementation
+     *        in derived classes of the CouplingInterface. Have a look at the
+     *        documentation there.
      */
     Tensor<1, dim, VectorizedArrayType>
-    read_on_quadrature_point(
-      const std::array<int, VectorizedArrayType::size()> &vertex_ids,
-      const unsigned int                                  active_faces) const;
-
-    /**
-     * @brief begin_interface_IDs Returns an iterator of the interface node IDs
-     *        of the 'read' mesh´. Allows to iterate over the read node IDs.
-     */
-    auto
-    begin_interface_IDs() const;
+    read_on_quadrature_point(const unsigned int id_number,
+                             const unsigned int active_faces) const;
 
     /**
      * @brief is_coupling_ongoing Calls the preCICE API function isCouplingOnGoing
@@ -163,86 +143,25 @@ namespace Adapter
     is_time_window_complete() const;
 
 
-    // public precice solverinterface, needed in order to steer the time loop
-    // inside the solver.
-    std::shared_ptr<precice::SolverInterface> precice;
-
-    // Boundary ID of the deal.II mesh, associated with the coupling
-    // interface. The variable is public and should be used during grid
-    // generation, but is also involved during system assembly. The only thing,
-    // one needs to make sure is, that this ID is not given to another part of
-    // the boundary e.g. clamped one.
+    /// Boundary ID of the deal.II mesh, associated with the coupling
+    /// interface. The variable is public and should be used during grid
+    /// generation, but is also involved during system assembly. The only thing,
+    /// one needs to make sure is, that this ID is not given to another part of
+    /// the boundary e.g. clamped one.
     const unsigned int dealii_boundary_interface_id;
 
 
   private:
-    // preCICE related initializations
-    // These variables are specified and read from the parameter file
-    const std::string read_mesh_name;
-    const std::string write_mesh_name;
-    const std::string read_data_name;
-    const std::string write_data_name;
-    const bool        read_write_on_same;
-    const int         write_sampling;
-
-    // In order to evaluate the average distance between coupling nodes
-    double write_mesh_stats = 0;
-
-    // These IDs are given by preCICE during initialization
-    int read_mesh_id;
-    int read_data_id;
-    int write_mesh_id;
-    int write_data_id;
-
-    const bool shared_memory_parallel;
-    // Data containers which are passed to preCICE in an appropriate preCICE
-    // specific format
-    // The format cannot be used with vectorization, but this is not required.
-    // The IDs are only required for preCICE
-    std::vector<std::array<int, VectorizedArrayType::size()>> read_nodes_ids;
-    std::vector<std::array<int, VectorizedArrayType::size()>> write_nodes_ids;
+    // public precice solverinterface, needed in order to steer the time loop
+    // inside the solver.
+    std::shared_ptr<precice::SolverInterface> precice;
+    /// The objects handling reading and writing data
+    std::shared_ptr<CouplingInterface<dim, VectorizedArrayType>> writer;
+    std::shared_ptr<CouplingInterface<dim, VectorizedArrayType>> reader;
 
     // Container to store time dependent data in case of an implicit coupling
     std::vector<VectorType> old_state_data;
-    double                  old_time_value;
-
-    int write_quad_index = -1;
-    int read_quad_index  = -1;
-
-    // preCICE can only handle double precision
-    std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>>
-      mf_data_reference;
-
-    /**
-     * @brief set_mesh_vertices Define a vertex coupling mesh for preCICE coupling
-     *
-     * @param[in] is_read_mesh Defines whether the mesh is associated to a aread
-     *            or a write mesh
-     * @param[in] dof_index index of the dof_handler in MatrixFree
-     * @param[in] quad_index index of the dof_handler in MatrixFree
-     */
-    void
-    set_mesh_vertices(const bool         is_read_mesh,
-                      const unsigned int dof_index  = 0,
-                      const unsigned int quad_index = 0);
-
-    /**
-     * @brief write_all_quadrature_nodes Evaluates the given @param data at the
-     *        quadrature_points of the given @param write_quadrature formula and
-     *        passes it to preCICE
-     *
-     * @param[in] data The data to be passed to preCICE (absolute displacement
-     *            for FSI)
-     */
-    void
-    write_all_quadrature_nodes(const VectorType &data);
-
-
-    /**
-     * @brief print_info Print some initial information regarding the computational setup
-     */
-    void
-    print_info() const;
+    double                  old_time_value = 0;
   };
 
 
