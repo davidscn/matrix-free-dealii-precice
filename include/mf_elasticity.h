@@ -61,11 +61,11 @@ static const unsigned int debug_level = 0;
 #include <deal.II/physics/elasticity/standard_tensors.h>
 #include <deal.II/physics/transformations.h>
 
+#include <adapter/precice_adapter.h>
 #include <cases/case_base.h>
 #include <material.h>
 #include <mf_nh_operator.h>
 #include <parameter/parameter_handling.h>
-#include <precice_adapter.h>
 #include <q_equidistant.h>
 #include <sys/stat.h>
 #include <version.h>
@@ -695,7 +695,6 @@ namespace FSI
       Adapter::Adapter<dim, degree, VectorType, VectorizedArrayType>>(
       parameters,
       int(TestCases::TestCaseBase<dim>::interface_id),
-      false,
       mf_data_reference);
     precice_adapter->initialize(total_displacement);
 
@@ -1901,7 +1900,7 @@ namespace FSI
 
     FEFaceEvaluation<dim, degree, n_q_points_1d, dim, Number> phi(
       *mf_data_reference);
-    auto q_index = precice_adapter->begin_interface_IDs();
+    unsigned int q_index = 0;
 
     for (unsigned int face = mf_data_reference->n_inner_face_batches();
          face < mf_data_reference->n_boundary_face_batches() +
@@ -1928,7 +1927,7 @@ namespace FSI
               Physics::Elasticity::Kinematics::F(phi.get_gradient(q));
             // Get the value from preCICE
             const auto traction =
-              precice_adapter->read_on_quadrature_point(*q_index, active_faces);
+              precice_adapter->read_on_quadrature_point(q_index, active_faces);
             // Perform pull-back operation and submit value
             phi.submit_value(
               Physics::Transformations::Covariant::pull_back(traction, F), q);
