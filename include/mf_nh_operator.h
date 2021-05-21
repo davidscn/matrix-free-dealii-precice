@@ -105,7 +105,12 @@ public:
     typename LinearAlgebra::distributed::Vector<Number>::size_type;
   using VectorType          = LinearAlgebra::distributed::Vector<Number>;
   using VectorizedArrayType = VectorizedArray<Number>;
-
+  using FECellIntegrator    = FEEvaluation<dim,
+                                        fe_degree,
+                                        n_q_points_1d,
+                                        dim,
+                                        Number,
+                                        VectorizedArrayType>;
   void
   clear();
 
@@ -195,8 +200,7 @@ private:
    * where @p phi_reference is for the initial configuration.
    */
   void
-  do_operation_on_cell(
-    FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> &phi) const;
+  do_operation_on_cell(FECellIntegrator &phi) const;
 
   std::shared_ptr<const MatrixFree<dim, Number>> data_current;
   std::shared_ptr<const MatrixFree<dim, Number>> data_reference;
@@ -351,8 +355,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::initialize(
   displacement   = &displacement_;
 
   const unsigned int n_cells = data_reference_->n_cell_batches();
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi(
-    *data_reference_);
+  FECellIntegrator   phi(*data_reference_);
 
   if (caching == "scalar_referential")
     {
@@ -405,8 +408,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::cache()
 {
   const unsigned int n_cells = data_reference->n_cell_batches();
 
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi_reference(
-    *data_reference);
+  FECellIntegrator phi_reference(*data_reference);
 
   for (unsigned int cell = 0; cell < n_cells; ++cell)
     {
@@ -649,7 +651,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_apply_cell(
   const std::pair<unsigned int, unsigned int> &cell_range) const
 {
   Assert(data_in_use.get() != nullptr, ExcInternalError());
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi(*data_in_use);
+  FECellIntegrator phi(*data_in_use);
 
   for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
     {
@@ -673,7 +675,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_diagonal_cell(
   const VectorizedArrayType one  = make_vectorized_array<Number>(1.);
   const VectorizedArrayType zero = make_vectorized_array<Number>(0.);
 
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi(*data_in_use);
+  FECellIntegrator phi(*data_in_use);
 
   for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
     {
@@ -726,7 +728,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_diagonal_cell(
 template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 void
 NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> &phi) const
+  FECellIntegrator &phi) const
 {
   const unsigned int cell = phi.get_current_cell_index();
   const unsigned int material_id =
@@ -934,8 +936,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
             // Only a data storage for the gradients is required, not a complete
             // copy of an FEEvaluation object. However, the copy constructor is
             // way faster than allocating an AlignedVector here.
-            FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi_grad(
-              phi);
+            FECellIntegrator     phi_grad(phi);
             VectorizedArrayType *ref_grads = phi_grad.begin_gradients();
 
             dealii::internal::FEEvaluationImplCollocation<
