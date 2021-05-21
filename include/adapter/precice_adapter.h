@@ -174,17 +174,11 @@ namespace Adapter
   Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::Adapter(
     const ParameterClass &parameters,
     const unsigned int    dealii_boundary_interface_id,
-    const bool            shared_memory_parallel,
-    std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>> data)
+    std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>> data,
+    const unsigned int                                            dof_index,
+    const unsigned int read_quad_index,
+    const unsigned int write_quad_index)
     : dealii_boundary_interface_id(dealii_boundary_interface_id)
-    , read_mesh_name(parameters.read_mesh_name)
-    , write_mesh_name(parameters.write_mesh_name)
-    , read_data_name(parameters.read_data_name)
-    , write_data_name(parameters.write_data_name)
-    , read_write_on_same(read_mesh_name == write_mesh_name)
-    , write_sampling(parameters.write_sampling)
-    , shared_memory_parallel(shared_memory_parallel)
-    , mf_data_reference(data)
   {
     precice = std::make_shared<precice::SolverInterface>(
       parameters.participant_name,
@@ -192,14 +186,39 @@ namespace Adapter
       Utilities::MPI::this_mpi_process(MPI_COMM_WORLD),
       Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD));
 
-    AssertThrow(
-      dim == precice->getDimensions(),
-      ExcMessage("The dimension of your solver needs to be consistent with the "
-                 "dimension specified in your precice-config file. In case you "
-                 "run one of the tutorials, the dimension can be specified via "
-                 "cmake -D DIM=dim ."));
-
+    AssertThrow(dim == precice->getDimensions(), ExcInternalError());
     AssertThrow(dim > 1, ExcNotImplemented());
+
+    // The read interface is always the same
+    reader = std::make_shared<
+      dealiiInterface<dim, fe_degree, fe_degree + 1, VectorizedArrayType>>(
+      data,
+      precice,
+      parameters.read_mesh_name,
+      dealii_boundary_interface_id,
+      dof_index,
+      read_quad_index);
+
+    if (parameters.write_mesh_name == parameters.read_mesh_name)
+      {
+        writer = reader;
+      }
+    else
+      {
+        writer = std::make_shared<
+          dealiiInterface<dim, fe_degree, fe_degree + 1, VectorizedArrayType>>(
+          data,
+          precice,
+          parameters.write_mesh_name,
+          dealii_boundary_interface_id,
+          dof_index,
+          write_quad_index);
+      }
+    reader->add_read_data(parameters.read_data_name);
+    writer->add_write_data(parameters.write_data_name);
+
+    Assert(reader.get() != nullptr, ExcInternalError());
+    Assert(writer.get() != nullptr, ExcInternalError());
   }
 
 
@@ -210,33 +229,13 @@ namespace Adapter
             typename VectorizedArrayType>
   void
   Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::initialize(
-    const VectorType &dealii_to_precice,
-    const int         dof_index,
-    const int         read_quad_index_,
-    const int         write_quad_index_)
+    const VectorType &dealii_to_precice)
   {
-    // Check if the value has been set or if we choose a default one
-    //    const int selected_sampling =
-    //      write_sampling == std::numeric_limits<int>::max() ? fe_degree + 1 :
-    //    write_sampling;
-    read_quad_index  = read_quad_index_;
-    write_quad_index = read_write_on_same ?
-                         read_quad_index_ :
-                         write_quad_index_ /*TODO: Implement sampling variant*/;
+    writer->define_coupling_mesh();
+    reader->define_coupling_mesh();
 
-    // get precice specific IDs from precice and store them in
-    // the class they are later needed for data transfer
-    read_mesh_id  = precice->getMeshID(read_mesh_name);
-    read_data_id  = precice->getDataID(read_data_name, read_mesh_id);
-    write_mesh_id = precice->getMeshID(write_mesh_name);
-    write_data_id = precice->getDataID(write_data_name, write_mesh_id);
-
-    set_mesh_vertices(true, dof_index, read_quad_index);
-    if (!read_write_on_same)
-      set_mesh_vertices(false, dof_index, write_quad_index);
-    else // TODO: Replace copy by some smart pointer
-      write_nodes_ids = read_nodes_ids;
-    print_info();
+    reader->print_info(true);
+    writer->print_info(false);
 
     // Initialize preCICE internally
     precice->initialize();
@@ -244,7 +243,7 @@ namespace Adapter
     // write initial writeData to preCICE if required
     if (precice->isActionRequired(precice::constants::actionWriteInitialData()))
       {
-        write_all_quadrature_nodes(dealii_to_precice);
+        writer->write_data(dealii_to_precice);
 
         precice->markActionFulfilled(
           precice::constants::actionWriteInitialData());
@@ -272,8 +271,7 @@ namespace Adapter
     const double      computed_timestep_length)
   {
     if (precice->isWriteDataRequired(computed_timestep_length))
-      write_all_quadrature_nodes(dealii_to_precice);
-
+      writer->write_data(dealii_to_precice);
     // Here, we need to specify the computed time step length and pass it to
     // preCICE
     precice->advance(computed_timestep_length);
@@ -283,6 +281,19 @@ namespace Adapter
     //                                   read_nodes_ids.size(),
     //                                   read_nodes_ids.data(),
     //                                   read_data.data());
+  }
+
+
+  template <int dim,
+            int fe_degree,
+            typename VectorType,
+            typename VectorizedArrayType>
+  inline Tensor<1, dim, VectorizedArrayType>
+  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::
+    read_on_quadrature_point(const unsigned int id_number,
+                             const unsigned int active_faces) const
+  {
+    return reader->read_on_quadrature_point(id_number, active_faces);
   }
 
 
@@ -333,198 +344,6 @@ namespace Adapter
             int fe_degree,
             typename VectorType,
             typename VectorizedArrayType>
-  void
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::
-    write_all_quadrature_nodes(const VectorType &data)
-  {
-    // TODO: n_qpoints_1D is hard coded
-    FEFaceEvaluation<dim,
-                     fe_degree,
-                     fe_degree + 1 /*n_qpoints_1D*/,
-                     dim,
-                     double,
-                     VectorizedArrayType>
-      // TODO: Parametrize dof_index
-      phi(*mf_data_reference, true, 0, write_quad_index);
-
-    // In order to unroll the vectorization
-    std::array<double, dim * VectorizedArrayType::size()> unrolled_local_data;
-    auto index = write_nodes_ids.begin();
-
-    for (unsigned int face = mf_data_reference->n_inner_face_batches();
-         face < mf_data_reference->n_boundary_face_batches() +
-                  mf_data_reference->n_inner_face_batches();
-         ++face)
-      {
-        const auto boundary_id = mf_data_reference->get_boundary_id(face);
-
-        // Only for interface nodes
-        if (boundary_id != dealii_boundary_interface_id)
-          continue;
-
-        // Read and interpolate
-        phi.reinit(face);
-        phi.gather_evaluate(data, true, false);
-        const int active_faces =
-          mf_data_reference->n_active_entries_per_face_batch(face);
-
-        for (unsigned int q = 0; q < phi.n_q_points; ++q)
-          {
-            const auto local_data = phi.get_value(q);
-            Assert(index != write_nodes_ids.end(), ExcInternalError());
-
-            // Transform Tensor<1,dim,VectorizedArrayType> into preCICE conform
-            // format
-            // Alternatively: Loop directly over active_faces instead of size()
-            // and use writeVectorData
-            for (int d = 0; d < dim; ++d)
-              for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
-                unrolled_local_data[d + dim * v] = local_data[d][v];
-
-            precice->writeBlockVectorData(write_data_id,
-                                          active_faces,
-                                          index->data(),
-                                          unrolled_local_data.data());
-            ++index;
-          }
-      }
-  }
-
-
-
-  template <int dim,
-            int fe_degree,
-            typename VectorType,
-            typename VectorizedArrayType>
-  inline Tensor<1, dim, VectorizedArrayType>
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::
-    read_on_quadrature_point(
-      const std::array<int, VectorizedArrayType::size()> &vertex_ids,
-      const unsigned int                                  active_faces) const
-  {
-    Tensor<1, dim, VectorizedArrayType>                   dealii_data;
-    std::array<double, dim * VectorizedArrayType::size()> precice_data;
-    // Assertion is exclusive at the boundaries
-    AssertIndexRange(active_faces, VectorizedArrayType::size() + 1);
-    // TODO: Check if the if statement still makes sense
-    //      if (precice->isReadDataAvailable())
-    precice->readBlockVectorData(read_data_id,
-                                 active_faces,
-                                 vertex_ids.begin(),
-                                 precice_data.data());
-    // Transform back to Tensor format
-    for (int d = 0; d < dim; ++d)
-      for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
-        dealii_data[d][v] = precice_data[d + dim * v];
-
-    return dealii_data;
-  }
-
-
-
-  template <int dim,
-            int fe_degree,
-            typename VectorType,
-            typename VectorizedArrayType>
-  void
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::set_mesh_vertices(
-    const bool         is_read_mesh,
-    const unsigned int dof_index,
-    const unsigned int quad_index)
-  {
-    const unsigned int mesh_id = is_read_mesh ? read_mesh_id : write_mesh_id;
-    auto &interface_nodes_ids = is_read_mesh ? read_nodes_ids : write_nodes_ids;
-
-    // Initial guess: half of the boundary is part of the coupling interface
-    interface_nodes_ids.reserve(mf_data_reference->n_boundary_face_batches() *
-                                0.5);
-    // TODO: n_qpoints_1D is hard coded
-    static constexpr unsigned int n_qpoints_1d = fe_degree + 1;
-    FEFaceEvaluation<dim,
-                     fe_degree,
-                     n_qpoints_1d,
-                     dim,
-                     double,
-                     VectorizedArrayType>
-      phi(*mf_data_reference, true, dof_index, quad_index);
-
-    std::array<double, dim * VectorizedArrayType::size()> unrolled_vertices;
-    std::array<int, VectorizedArrayType::size()>          node_ids;
-    unsigned int                                          size              = 0;
-    unsigned int                                          active_faces_size = 0;
-
-    for (unsigned int face = mf_data_reference->n_inner_face_batches();
-         face < mf_data_reference->n_boundary_face_batches() +
-                  mf_data_reference->n_inner_face_batches();
-         ++face)
-      {
-        const auto boundary_id = mf_data_reference->get_boundary_id(face);
-
-        // Only for interface nodes
-        if (boundary_id != dealii_boundary_interface_id)
-          continue;
-
-        phi.reinit(face);
-        const int active_faces =
-          mf_data_reference->n_active_entries_per_face_batch(face);
-
-        // Only relevant for write meshes
-        if (!is_read_mesh)
-          for (int i = 0; i < active_faces; ++i)
-            {
-              const auto &f_pair =
-                mf_data_reference->get_face_iterator(face, i);
-              write_mesh_stats +=
-                f_pair.first->face(f_pair.second)->diameter() / n_qpoints_1d;
-              active_faces_size += active_faces;
-            }
-
-
-        for (unsigned int q = 0; q < phi.n_q_points; ++q)
-          {
-            const auto local_vertex = phi.quadrature_point(q);
-
-            // Transform Point<Vectorized> into preCICE conform format
-            // We store here also the potential 'dummy'/empty lanes (not only
-            // active_faces), but it allows us to use a static loop as well as a
-            // static array for the indices
-            for (int d = 0; d < dim; ++d)
-              for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
-                unrolled_vertices[d + dim * v] = local_vertex[d][v];
-
-            precice->setMeshVertices(mesh_id,
-                                     active_faces,
-                                     unrolled_vertices.data(),
-                                     node_ids.data());
-            interface_nodes_ids.emplace_back(node_ids);
-            ++size;
-          }
-      }
-    // resize the IDs in case the initial guess was too large
-    interface_nodes_ids.resize(size);
-    if (active_faces_size != 0)
-      write_mesh_stats /= active_faces_size;
-  }
-
-
-
-  template <int dim,
-            int fe_degree,
-            typename VectorType,
-            typename VectorizedArrayType>
-  inline auto
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::
-    begin_interface_IDs() const
-  {
-    return read_nodes_ids.begin();
-  }
-
-
-
-  template <int dim,
-            int fe_degree,
-            typename VectorType,
-            typename VectorizedArrayType>
   inline bool
   Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::
     is_coupling_ongoing() const
@@ -543,47 +362,5 @@ namespace Adapter
     is_time_window_complete() const
   {
     return precice->isTimeWindowComplete();
-  }
-
-
-
-  template <int dim,
-            int fe_degree,
-            typename VectorType,
-            typename VectorizedArrayType>
-  void
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::print_info() const
-  {
-    const unsigned int r_size =
-      Utilities::MPI::sum(static_cast<unsigned int>(read_nodes_ids.size()),
-                          MPI_COMM_WORLD);
-
-    const bool warn_unused_write_option =
-      (write_sampling != std::numeric_limits<int>::max());
-    const std::string write_message =
-      ("--     . (a write sampling different from default is not yet supported)");
-    ConditionalOStream pcout(std::cout,
-                             Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
-                               0);
-    pcout << "\n--     . Read and write on same location: "
-          << (read_write_on_same ? "true" : "false") << "\n"
-          << (warn_unused_write_option ?
-                "--     . Ignoring specified write sampling." :
-                write_message)
-          << std::endl;
-    pcout
-      << "--     . Number of interface nodes (upper bound due to potential empty "
-      << "lanes):\n--     . " << std::setw(5)
-      << r_size * VectorizedArrayType::size()
-      << " ( = " << (r_size / Utilities::pow(fe_degree + 1, dim - 1))
-      << " [face-batches] x " << Utilities::pow(fe_degree + 1, dim - 1)
-      << " [nodes/face] x " << VectorizedArrayType::size()
-      << " [faces/face-batch]) \n"
-      << "--     . Read node location: Gauss-Legendre\n"
-      << "--     . Write node location:"
-      << (read_write_on_same ? "Gauss-Legendre" : "equidistant") << "\n"
-      << "--     . Average radial write node distance: " << write_mesh_stats
-      << "\n"
-      << std::endl;
   }
 } // namespace Adapter
