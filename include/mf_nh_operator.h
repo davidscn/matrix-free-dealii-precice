@@ -419,9 +419,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::cache()
 
       phi_reference.reinit(cell);
       phi_reference.read_dof_values_plain(*displacement);
-      phi_reference.evaluate(mf_caching == MFCaching::scalar_referential,
-                             true,
-                             false);
+      phi_reference.evaluate(((mf_caching == MFCaching::scalar_referential) ?
+                                EvaluationFlags::values :
+                                EvaluationFlags::nothing) |
+                             EvaluationFlags::gradients);
 
       if (cell_mat->formulation == 0)
         {
@@ -467,7 +468,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::cache()
                   case MFCaching::scalar_referential: {
                     cached_scalar(cell, q) = scalar;
                     // In order to avoid the phi_reference.read_dof_values()
-                    // call and the full phi_reference.evaluate(false, true)
+                    // call and the full phi_reference.evaluate(...)
                     // calls. Only call a cheap "collocation gradient" function,
                     // which is likely the best compromise in terms of caching
                     // some data versus computing
@@ -769,7 +770,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
   const Number            lambda       = cell_mat->lambda;
 
   // VMult sum factorization
-  phi.evaluate(true, true, false);
+  phi.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
 
   // VMult quadrature loop
   // volumetric/deviatoric formulation (like step-44)
@@ -936,7 +937,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
             FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi_grad(
               phi);
             VectorizedArrayType *ref_grads = phi_grad.begin_gradients();
-#if DEAL_II_VERSION_GTE(9, 3, 0)
+
             dealii::internal::FEEvaluationImplCollocation<
               dim,
               n_q_points_1d - 1,
@@ -948,21 +949,6 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
                                              ref_grads,
                                              nullptr,
                                              nullptr);
-#else
-            dealii::internal::FEEvaluationImplCollocation<
-              dim,
-              n_q_points_1d - 1,
-              dim,
-              VectorizedArrayType>::evaluate(data_reference->get_shape_info(),
-                                             cached_position,
-                                             nullptr,
-                                             ref_grads,
-                                             nullptr,
-                                             nullptr,
-                                             false,
-                                             true,
-                                             false);
-#endif
 
             for (unsigned int q = 0; q < phi.n_q_points; ++q)
               {
@@ -1111,7 +1097,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
       }
 
   // VMult sum factorization
-  phi.integrate(true, true);
+  phi.integrate(EvaluationFlags::values | EvaluationFlags::gradients);
 }
 
 
@@ -1133,7 +1119,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::compute_diagonal()
 #else
   data_in_use->initialize_dof_vector(diagonal_vector);
   unsigned int dummy = 0;
-  diagonal_vector = 0.;
+  diagonal_vector    = 0.;
   local_diagonal_cell(*data_in_use,
                       diagonal_vector,
                       dummy,

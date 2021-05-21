@@ -1838,11 +1838,11 @@ namespace FSI
 
             phi_reference.reinit(cell);
             phi_reference.read_dof_values_plain(total_displacement);
-            phi_reference.evaluate(false, true, false);
+            phi_reference.evaluate(EvaluationFlags::gradients);
 
             phi_acc.reinit(cell);
             phi_acc.read_dof_values_plain(acceleration);
-            phi_acc.evaluate(true, false);
+            phi_acc.evaluate(EvaluationFlags::values);
 
 
             // Now we build the residual. In doing so, we first extract some
@@ -1916,7 +1916,7 @@ namespace FSI
 
         // Read out the total displacment
         phi.reinit(face);
-        phi.gather_evaluate(total_displacement, false, true);
+        phi.gather_evaluate(total_displacement, EvaluationFlags::gradients);
         // Number of active faces
         const auto active_faces =
           mf_data_reference->n_active_entries_per_face_batch(face);
@@ -1935,7 +1935,7 @@ namespace FSI
             ++q_index;
           }
         // Integrate the result and write into the rhs vector
-        phi.integrate_scatter(true, false, system_rhs);
+        phi.integrate_scatter(EvaluationFlags::values, system_rhs);
       }
 
     system_rhs.compress(VectorOperation::add);
