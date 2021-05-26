@@ -105,7 +105,12 @@ public:
     typename LinearAlgebra::distributed::Vector<Number>::size_type;
   using VectorType          = LinearAlgebra::distributed::Vector<Number>;
   using VectorizedArrayType = VectorizedArray<Number>;
-
+  using FECellIntegrator    = FEEvaluation<dim,
+                                        fe_degree,
+                                        n_q_points_1d,
+                                        dim,
+                                        Number,
+                                        VectorizedArrayType>;
   void
   clear();
 
@@ -181,22 +186,11 @@ private:
     const std::pair<unsigned int, unsigned int> &cell_range) const;
 
   /**
-   * Apply diagonal part of the operator on a cell range.
-   */
-  void
-  local_diagonal_cell(
-    const MatrixFree<dim, Number> &data,
-    VectorType &                   dst,
-    const unsigned int &,
-    const std::pair<unsigned int, unsigned int> &cell_range) const;
-
-  /**
    * Perform operation on a cell. @p phi_current corresponds to the deformed configuration
    * where @p phi_reference is for the initial configuration.
    */
   void
-  do_operation_on_cell(
-    FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> &phi) const;
+  do_operation_on_cell(FECellIntegrator &phi) const;
 
   std::shared_ptr<const MatrixFree<dim, Number>> data_current;
   std::shared_ptr<const MatrixFree<dim, Number>> data_reference;
@@ -351,8 +345,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::initialize(
   displacement   = &displacement_;
 
   const unsigned int n_cells = data_reference_->n_cell_batches();
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi(
-    *data_reference_);
+  FECellIntegrator   phi(*data_reference_);
 
   if (caching == "scalar_referential")
     {
@@ -405,8 +398,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::cache()
 {
   const unsigned int n_cells = data_reference->n_cell_batches();
 
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi_reference(
-    *data_reference);
+  FECellIntegrator phi_reference(*data_reference);
 
   for (unsigned int cell = 0; cell < n_cells; ++cell)
     {
@@ -419,9 +411,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::cache()
 
       phi_reference.reinit(cell);
       phi_reference.read_dof_values_plain(*displacement);
-      phi_reference.evaluate(mf_caching == MFCaching::scalar_referential,
-                             true,
-                             false);
+      phi_reference.evaluate(((mf_caching == MFCaching::scalar_referential) ?
+                                EvaluationFlags::values :
+                                EvaluationFlags::nothing) |
+                             EvaluationFlags::gradients);
 
       if (cell_mat->formulation == 0)
         {
@@ -467,7 +460,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::cache()
                   case MFCaching::scalar_referential: {
                     cached_scalar(cell, q) = scalar;
                     // In order to avoid the phi_reference.read_dof_values()
-                    // call and the full phi_reference.evaluate(false, true)
+                    // call and the full phi_reference.evaluate(...)
                     // calls. Only call a cheap "collocation gradient" function,
                     // which is likely the best compromise in terms of caching
                     // some data versus computing
@@ -648,7 +641,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_apply_cell(
   const std::pair<unsigned int, unsigned int> &cell_range) const
 {
   Assert(data_in_use.get() != nullptr, ExcInternalError());
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi(*data_in_use);
+  FECellIntegrator phi(*data_in_use);
 
   for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
     {
@@ -663,69 +656,8 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_apply_cell(
 
 template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_diagonal_cell(
-  const MatrixFree<dim, Number> & /*data*/,
-  VectorType &dst,
-  const unsigned int &,
-  const std::pair<unsigned int, unsigned int> &cell_range) const
-{
-  const VectorizedArrayType one  = make_vectorized_array<Number>(1.);
-  const VectorizedArrayType zero = make_vectorized_array<Number>(0.);
-
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi(*data_in_use);
-
-  for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
-    {
-      phi.reinit(cell);
-      AlignedVector<VectorizedArrayType> local_diagonal_vector(
-        phi.dofs_per_component * phi.n_components);
-
-      // Loop over all DoFs and set dof values to zero everywhere but i-th
-      // DoF. With this input (instead of read_dof_values()) we do the
-      // action and store the result in a diagonal vector
-      for (unsigned int i = 0; i < phi.dofs_per_component; ++i)
-        for (unsigned int ic = 0; ic < phi.n_components; ++ic)
-          {
-            for (unsigned int j = 0; j < phi.dofs_per_component; ++j)
-              for (unsigned int jc = 0; jc < phi.n_components; ++jc)
-                {
-                  const auto ind_j = j + jc * phi.dofs_per_component;
-                  phi.begin_dof_values()[ind_j] = zero;
-                }
-
-            const auto ind_i = i + ic * phi.dofs_per_component;
-
-            phi.begin_dof_values()[ind_i] = one;
-
-            do_operation_on_cell(phi);
-
-            local_diagonal_vector[ind_i] = phi.begin_dof_values()[ind_i];
-          }
-
-      // Finally, in order to distribute diagonal, write it again into one
-      // of FEEvaluations and do the standard distribute_local_to_global.
-      // Note that here non-diagonal matrix elements are ignored and so the
-      // result is not equivalent to matrix-based case when hanging nodes
-      // are present. see Section 5.3 in Korman 2016, A time-space adaptive
-      // method for the Schrodinger equation,
-      // doi: 10.4208/cicp.101214.021015a for a discussion.
-      for (unsigned int i = 0; i < phi.dofs_per_component; ++i)
-        for (unsigned int ic = 0; ic < phi.n_components; ++ic)
-          {
-            const auto ind_i              = i + ic * phi.dofs_per_component;
-            phi.begin_dof_values()[ind_i] = local_diagonal_vector[ind_i];
-          }
-
-      phi.distribute_local_to_global(dst);
-    } // end of cell loop
-}
-
-
-
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
-void
 NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
-  FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> &phi) const
+  FECellIntegrator &phi) const
 {
   const unsigned int cell = phi.get_current_cell_index();
   const unsigned int material_id =
@@ -769,7 +701,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
   const Number            lambda       = cell_mat->lambda;
 
   // VMult sum factorization
-  phi.evaluate(true, true, false);
+  phi.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
 
   // VMult quadrature loop
   // volumetric/deviatoric formulation (like step-44)
@@ -933,10 +865,9 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
             // Only a data storage for the gradients is required, not a complete
             // copy of an FEEvaluation object. However, the copy constructor is
             // way faster than allocating an AlignedVector here.
-            FEEvaluation<dim, fe_degree, n_q_points_1d, dim, Number> phi_grad(
-              phi);
+            FECellIntegrator     phi_grad(phi);
             VectorizedArrayType *ref_grads = phi_grad.begin_gradients();
-#if DEAL_II_VERSION_GTE(9, 3, 0)
+
             dealii::internal::FEEvaluationImplCollocation<
               dim,
               n_q_points_1d - 1,
@@ -948,21 +879,6 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
                                              ref_grads,
                                              nullptr,
                                              nullptr);
-#else
-            dealii::internal::FEEvaluationImplCollocation<
-              dim,
-              n_q_points_1d - 1,
-              dim,
-              VectorizedArrayType>::evaluate(data_reference->get_shape_info(),
-                                             cached_position,
-                                             nullptr,
-                                             ref_grads,
-                                             nullptr,
-                                             nullptr,
-                                             false,
-                                             true,
-                                             false);
-#endif
 
             for (unsigned int q = 0; q < phi.n_q_points; ++q)
               {
@@ -1111,7 +1027,7 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
       }
 
   // VMult sum factorization
-  phi.integrate(true, true);
+  phi.integrate(EvaluationFlags::values | EvaluationFlags::gradients);
 }
 
 
@@ -1125,22 +1041,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::compute_diagonal()
   VectorType &inverse_diagonal_vector = inverse_diagonal_entries->get_vector();
   VectorType &diagonal_vector         = diagonal_entries->get_vector();
 
-#if DEAL_II_VERSION_GTE(9, 3, 0)
   MatrixFreeTools::compute_diagonal(*data_in_use,
                                     diagonal_vector,
                                     &NeoHookOperator::do_operation_on_cell,
                                     this);
-#else
-  data_in_use->initialize_dof_vector(diagonal_vector);
-  unsigned int dummy = 0;
-  diagonal_vector = 0.;
-  local_diagonal_cell(*data_in_use,
-                      diagonal_vector,
-                      dummy,
-                      std::make_pair<unsigned int, unsigned int>(
-                        0, data_in_use->n_cell_batches()));
-  diagonal_vector.compress(VectorOperation::add);
-#endif
 
   data_in_use->initialize_dof_vector(inverse_diagonal_vector);
   // set_constrained_entries_to_one
@@ -1150,8 +1054,8 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::compute_diagonal()
   for (const auto dof : data_in_use->get_constrained_dofs())
     diagonal_vector.local_element(dof) = 1.;
 
-
-  for (unsigned int i = 0; i < inverse_diagonal_vector.local_size(); ++i)
+  for (unsigned int i = 0; i < inverse_diagonal_vector.locally_owned_size();
+       ++i)
     {
       Assert(diagonal_vector.local_element(i) > 0.,
              ExcMessage("No diagonal entry in a positive definite operator "

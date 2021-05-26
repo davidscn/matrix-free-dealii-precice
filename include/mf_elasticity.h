@@ -143,6 +143,18 @@ namespace FSI
     using VectorType          = LinearAlgebra::distributed::Vector<Number>;
     using VectorizedArrayType = VectorizedArray<Number>;
     using LevelVectorizedArrayType = VectorizedArray<LevelNumber>;
+    using FECellIntegrator         = FEEvaluation<dim,
+                                          degree,
+                                          n_q_points_1d,
+                                          dim,
+                                          Number,
+                                          VectorizedArrayType>;
+    using FEFaceIntegrator         = FEFaceEvaluation<dim,
+                                              degree,
+                                              n_q_points_1d,
+                                              dim,
+                                              Number,
+                                              VectorizedArrayType>;
 
     Solid(const Parameters::AllParameters<dim> &parameters);
 
@@ -1821,11 +1833,9 @@ namespace FSI
       }
     else
       {
-        FEEvaluation<dim, degree, n_q_points_1d, dim, Number> phi_reference(
-          *mf_data_reference);
-        // Copy constructor
-        FEEvaluation<dim, degree, n_q_points_1d, dim, Number> phi_acc(
-          phi_reference);
+        // The FEEvaluation objects
+        FECellIntegrator   phi_reference(*mf_data_reference);
+        FECellIntegrator   phi_acc(phi_reference);
         const unsigned int n_cells = mf_data_reference->n_cell_batches();
 
         for (unsigned int cell = 0; cell < n_cells; ++cell)
@@ -1837,11 +1847,11 @@ namespace FSI
 
             phi_reference.reinit(cell);
             phi_reference.read_dof_values_plain(total_displacement);
-            phi_reference.evaluate(false, true, false);
+            phi_reference.evaluate(EvaluationFlags::gradients);
 
             phi_acc.reinit(cell);
             phi_acc.read_dof_values_plain(acceleration);
-            phi_acc.evaluate(true, false);
+            phi_acc.evaluate(EvaluationFlags::values);
 
 
             // Now we build the residual. In doing so, we first extract some
@@ -1850,16 +1860,16 @@ namespace FSI
             for (unsigned int q_point = 0; q_point < phi_reference.n_q_points;
                  ++q_point)
               {
-                const Tensor<2, dim, VectorizedArray<Number>> grad_u =
+                const Tensor<2, dim, VectorizedArrayType> grad_u =
                   phi_reference.get_gradient(q_point);
 
-                const Tensor<2, dim, VectorizedArray<Number>> F =
+                const Tensor<2, dim, VectorizedArrayType> F =
                   Physics::Elasticity::Kinematics::F(grad_u);
 
-                const SymmetricTensor<2, dim, VectorizedArray<Number>> b =
+                const SymmetricTensor<2, dim, VectorizedArrayType> b =
                   Physics::Elasticity::Kinematics::b(F);
 
-                const VectorizedArray<Number> det_F = determinant(F);
+                const VectorizedArrayType det_F = determinant(F);
 
                 Assert(*std::min_element(
                          det_F.begin(),
@@ -1868,20 +1878,20 @@ namespace FSI
                              cell)) > Number(0.0),
                        ExcInternalError());
 
-                const Tensor<2, dim, VectorizedArray<Number>> F_inv = invert(F);
+                const Tensor<2, dim, VectorizedArrayType> F_inv = invert(F);
 
                 // don't calculate b_bar if we don't need to:
-                const SymmetricTensor<2, dim, VectorizedArray<Number>> b_bar =
+                const SymmetricTensor<2, dim, VectorizedArrayType> b_bar =
                   cell_mat->formulation == 0 ?
                     Physics::Elasticity::Kinematics::b(
                       Physics::Elasticity::Kinematics::F_iso(F)) :
-                    SymmetricTensor<2, dim, VectorizedArray<Number>>();
+                    SymmetricTensor<2, dim, VectorizedArrayType>();
 
-                SymmetricTensor<2, dim, VectorizedArray<Number>> tau;
+                SymmetricTensor<2, dim, VectorizedArrayType> tau;
                 cell_mat->get_tau(tau, det_F, b_bar, b);
 
-                const Tensor<2, dim, VectorizedArray<Number>> res =
-                  Tensor<2, dim, VectorizedArray<Number>>(tau);
+                const Tensor<2, dim, VectorizedArrayType> res =
+                  Tensor<2, dim, VectorizedArrayType>(tau);
 
                 phi_reference.submit_gradient(-res * transpose(F_inv), q_point);
                 phi_acc.submit_value(-phi_acc.get_value(q_point) *
@@ -1889,18 +1899,16 @@ namespace FSI
                                      q_point);
               } // end loop over quadrature points
 
-            phi_reference.integrate(false, true);
+            phi_reference.integrate(EvaluationFlags::gradients);
             phi_reference.distribute_local_to_global(system_rhs);
-            phi_acc.integrate(true, false);
+            phi_acc.integrate(EvaluationFlags::values);
             phi_acc.distribute_local_to_global(system_rhs);
           }
       }
 
 
-
-    FEFaceEvaluation<dim, degree, n_q_points_1d, dim, Number> phi(
-      *mf_data_reference);
-    unsigned int q_index = 0;
+    FEFaceIntegrator phi(*mf_data_reference);
+    unsigned int     q_index = 0;
 
     for (unsigned int face = mf_data_reference->n_inner_face_batches();
          face < mf_data_reference->n_boundary_face_batches() +
@@ -1915,7 +1923,7 @@ namespace FSI
 
         // Read out the total displacment
         phi.reinit(face);
-        phi.gather_evaluate(total_displacement, false, true);
+        phi.gather_evaluate(total_displacement, EvaluationFlags::gradients);
         // Number of active faces
         const auto active_faces =
           mf_data_reference->n_active_entries_per_face_batch(face);
@@ -1934,7 +1942,7 @@ namespace FSI
             ++q_index;
           }
         // Integrate the result and write into the rhs vector
-        phi.integrate_scatter(true, false, system_rhs);
+        phi.integrate_scatter(EvaluationFlags::values, system_rhs);
       }
 
     system_rhs.compress(VectorOperation::add);
