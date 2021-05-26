@@ -31,11 +31,17 @@ namespace Adapter
     /**
      * @brief define_coupling_mesh Define the coupling mesh associated to the
      *        data points
-     *
-     * @param dealii_boundary_interface_id boundary ID of the deal.II mesh
      */
     virtual void
     define_coupling_mesh() = 0;
+
+    /**
+     * @brief process_coupling_mesh (optional) Handle post-preCICE-initialization
+     *        steps, e.g. do computations on recieved partitions or create
+     *        communication patterns.
+     */
+    virtual void
+    process_coupling_mesh() = 0;
 
     /**
      * @brief write_data Write the data associated to the defined vertice
@@ -78,16 +84,15 @@ namespace Adapter
     void
     add_write_data(const std::string &write_data_name);
 
+  protected:
     /**
      * @brief print_info
-     * @param stream
      * @param reader Boolean in order to decide if we want read or write
      *        data information
      */
     void
     print_info(const bool reader) const;
 
-  protected:
     /// The MatrixFree object (preCICE can only handle double precision)
     std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>> mf_data;
 

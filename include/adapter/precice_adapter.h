@@ -9,6 +9,7 @@
 
 #include <deal.II/matrix_free/matrix_free.h>
 
+#include <adapter/arbitrary_interface.h>
 #include <adapter/dealii_interface.h>
 #include <precice/SolverInterface.hpp>
 #include <q_equidistant.h>
@@ -199,7 +200,16 @@ namespace Adapter
       dof_index,
       read_quad_index);
 
-    if (parameters.write_mesh_name == parameters.read_mesh_name)
+    const bool use_solver_mapping = true;
+    if (use_solver_mapping == true)
+      {
+        writer = std::make_shared<ArbitraryInterface<dim, VectorizedArrayType>>(
+          data,
+          precice,
+          parameters.write_mesh_name,
+          dealii_boundary_interface_id);
+      }
+    else if (parameters.write_mesh_name == parameters.read_mesh_name)
       {
         writer = reader;
       }
@@ -234,11 +244,12 @@ namespace Adapter
     writer->define_coupling_mesh();
     reader->define_coupling_mesh();
 
-    reader->print_info(true);
-    writer->print_info(false);
-
     // Initialize preCICE internally
     precice->initialize();
+
+    // Only the writer needs potentially to process the coupling mesh, if the
+    // mapping is carried out in the solver
+    writer->process_coupling_mesh();
 
     // write initial writeData to preCICE if required
     if (precice->isActionRequired(precice::constants::actionWriteInitialData()))
