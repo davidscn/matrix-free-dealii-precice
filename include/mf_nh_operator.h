@@ -186,16 +186,6 @@ private:
     const std::pair<unsigned int, unsigned int> &cell_range) const;
 
   /**
-   * Apply diagonal part of the operator on a cell range.
-   */
-  void
-  local_diagonal_cell(
-    const MatrixFree<dim, Number> &data,
-    VectorType &                   dst,
-    const unsigned int &,
-    const std::pair<unsigned int, unsigned int> &cell_range) const;
-
-  /**
    * Perform operation on a cell. @p phi_current corresponds to the deformed configuration
    * where @p phi_reference is for the initial configuration.
    */
@@ -666,67 +656,6 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_apply_cell(
 
 template <int dim, int fe_degree, int n_q_points_1d, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_diagonal_cell(
-  const MatrixFree<dim, Number> & /*data*/,
-  VectorType &dst,
-  const unsigned int &,
-  const std::pair<unsigned int, unsigned int> &cell_range) const
-{
-  const VectorizedArrayType one  = make_vectorized_array<Number>(1.);
-  const VectorizedArrayType zero = make_vectorized_array<Number>(0.);
-
-  FECellIntegrator phi(*data_in_use);
-
-  for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
-    {
-      phi.reinit(cell);
-      AlignedVector<VectorizedArrayType> local_diagonal_vector(
-        phi.dofs_per_component * phi.n_components);
-
-      // Loop over all DoFs and set dof values to zero everywhere but i-th
-      // DoF. With this input (instead of read_dof_values()) we do the
-      // action and store the result in a diagonal vector
-      for (unsigned int i = 0; i < phi.dofs_per_component; ++i)
-        for (unsigned int ic = 0; ic < phi.n_components; ++ic)
-          {
-            for (unsigned int j = 0; j < phi.dofs_per_component; ++j)
-              for (unsigned int jc = 0; jc < phi.n_components; ++jc)
-                {
-                  const auto ind_j = j + jc * phi.dofs_per_component;
-                  phi.begin_dof_values()[ind_j] = zero;
-                }
-
-            const auto ind_i = i + ic * phi.dofs_per_component;
-
-            phi.begin_dof_values()[ind_i] = one;
-
-            do_operation_on_cell(phi);
-
-            local_diagonal_vector[ind_i] = phi.begin_dof_values()[ind_i];
-          }
-
-      // Finally, in order to distribute diagonal, write it again into one
-      // of FEEvaluations and do the standard distribute_local_to_global.
-      // Note that here non-diagonal matrix elements are ignored and so the
-      // result is not equivalent to matrix-based case when hanging nodes
-      // are present. see Section 5.3 in Korman 2016, A time-space adaptive
-      // method for the Schrodinger equation,
-      // doi: 10.4208/cicp.101214.021015a for a discussion.
-      for (unsigned int i = 0; i < phi.dofs_per_component; ++i)
-        for (unsigned int ic = 0; ic < phi.n_components; ++ic)
-          {
-            const auto ind_i              = i + ic * phi.dofs_per_component;
-            phi.begin_dof_values()[ind_i] = local_diagonal_vector[ind_i];
-          }
-
-      phi.distribute_local_to_global(dst);
-    } // end of cell loop
-}
-
-
-
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
-void
 NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
   FECellIntegrator &phi) const
 {
@@ -1112,22 +1041,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::compute_diagonal()
   VectorType &inverse_diagonal_vector = inverse_diagonal_entries->get_vector();
   VectorType &diagonal_vector         = diagonal_entries->get_vector();
 
-#if DEAL_II_VERSION_GTE(9, 3, 0)
   MatrixFreeTools::compute_diagonal(*data_in_use,
                                     diagonal_vector,
                                     &NeoHookOperator::do_operation_on_cell,
                                     this);
-#else
-  data_in_use->initialize_dof_vector(diagonal_vector);
-  unsigned int dummy = 0;
-  diagonal_vector    = 0.;
-  local_diagonal_cell(*data_in_use,
-                      diagonal_vector,
-                      dummy,
-                      std::make_pair<unsigned int, unsigned int>(
-                        0, data_in_use->n_cell_batches()));
-  diagonal_vector.compress(VectorOperation::add);
-#endif
 
   data_in_use->initialize_dof_vector(inverse_diagonal_vector);
   // set_constrained_entries_to_one
@@ -1137,8 +1054,8 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::compute_diagonal()
   for (const auto dof : data_in_use->get_constrained_dofs())
     diagonal_vector.local_element(dof) = 1.;
 
-
-  for (unsigned int i = 0; i < inverse_diagonal_vector.local_size(); ++i)
+  for (unsigned int i = 0; i < inverse_diagonal_vector.locally_owned_size();
+       ++i)
     {
       Assert(diagonal_vector.local_element(i) > 0.,
              ExcMessage("No diagonal entry in a positive definite operator "
