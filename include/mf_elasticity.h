@@ -1908,7 +1908,7 @@ namespace FSI
 
 
     FEFaceIntegrator phi(*mf_data_reference);
-    unsigned int q_index = 0;
+    unsigned int     q_index = 0;
 
     for (unsigned int face = mf_data_reference->n_inner_face_batches();
          face < mf_data_reference->n_boundary_face_batches() +
