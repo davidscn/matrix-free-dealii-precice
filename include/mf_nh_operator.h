@@ -353,7 +353,8 @@ NeoHookOperator<dim, Number>::initialize(
       mf_frame    = MFFrame::referential;
       data_in_use = data_reference_;
       cached_scalar.reinit(n_cells, phi.n_q_points);
-      cached_second_scalar.reinit(n_cells, phi.n_q_points * dim);
+      // Store plain valus obtained from 'read_dof_values'
+      cached_second_scalar.reinit(n_cells, phi.dofs_per_cell);
     }
   else if (caching == "tensor2")
     {
@@ -416,6 +417,12 @@ NeoHookOperator<dim, Number>::cache()
                                 EvaluationFlags::nothing) |
                              EvaluationFlags::gradients);
 
+      // In order to avoid the phi_reference.read_dof_values() using
+      // indirect addressing
+      if (mf_caching == MFCaching::scalar_referential)
+        for (unsigned int i = 0; i < phi_reference.dofs_per_cell; ++i)
+          cached_second_scalar(cell, i) = phi_reference.begin_dof_values()[i];
+
       if (cell_mat->formulation == 0)
         {
           Assert(mf_caching == MFCaching::tensor2, ExcNotImplemented());
@@ -459,16 +466,6 @@ NeoHookOperator<dim, Number>::cache()
               {
                   case MFCaching::scalar_referential: {
                     cached_scalar(cell, q) = scalar;
-                    // In order to avoid the phi_reference.read_dof_values()
-                    // call and the full phi_reference.evaluate(...)
-                    // calls. Only call a cheap "collocation gradient" function,
-                    // which is likely the best compromise in terms of caching
-                    // some data versus computing
-                    for (unsigned int d = 0; d < dim; ++d)
-                      cached_second_scalar(cell,
-                                           q + d * phi_reference.n_q_points) =
-                        phi_reference
-                          .begin_values()[q + d * phi_reference.n_q_points];
                     break;
                   }
                   case MFCaching::tensor2: {
@@ -527,9 +524,9 @@ NeoHookOperator<dim, Number>::cache()
                     AssertThrow(false, ExcMessage("Unknown caching"));
                     break;
                   }
-              }
-          }
-    }
+              } // End MFCaching
+          }     // End n_q_points_loop
+    }           // End cell loop
 }
 
 
@@ -853,27 +850,15 @@ NeoHookOperator<dim, Number>::do_operation_on_cell(FECellIntegrator &phi) const
             const VectorizedArrayType  one = make_vectorized_array<Number>(1.);
             const VectorizedArrayType *cached_position =
               &cached_second_scalar(cell, 0);
-            constexpr unsigned int n_q_points =
-              Utilities::pow(n_q_points_1d, dim);
+            const unsigned int n_q_points = phi.n_q_points;
 
             VectorizedArrayType *x_grads = phi.begin_gradients();
             // Only a data storage for the gradients is required, not a complete
             // copy of an FEEvaluation object. However, the copy constructor is
             // way faster than allocating an AlignedVector here.
-            FECellIntegrator     phi_grad(phi);
+            FECellIntegrator phi_grad(phi);
+            phi_grad.evaluate(cached_position, EvaluationFlags::gradients);
             VectorizedArrayType *ref_grads = phi_grad.begin_gradients();
-
-            dealii::internal::FEEvaluationImplCollocation<
-              dim,
-              n_q_points_1d - 1,
-              VectorizedArrayType>::evaluate(dim,
-                                             EvaluationFlags::gradients,
-                                             data_reference->get_shape_info(),
-                                             cached_position,
-                                             nullptr,
-                                             ref_grads,
-                                             nullptr,
-                                             nullptr);
 
             for (unsigned int q = 0; q < phi.n_q_points; ++q)
               {
