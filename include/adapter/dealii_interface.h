@@ -3,6 +3,7 @@
 #include <deal.II/matrix_free/fe_evaluation.h>
 
 #include <adapter/coupling_interface.h>
+#include <utilities/fe_integrator.h>
 
 namespace Adapter
 {
@@ -36,12 +37,8 @@ namespace Adapter
     {}
 
     /// Alias for the face integrator
-    using FEFaceIntegrator = FEFaceEvaluation<dim,
-                                              fe_degree,
-                                              n_qpoints_1d,
-                                              dim,
-                                              double,
-                                              VectorizedArrayType>;
+    using FEFaceIntegrator =
+      FEFaceIntegrators<dim, dim, double, VectorizedArrayType>;
     /**
      * @brief define_mesh_vertices Define a vertex coupling mesh for preCICE
      *        coupling the classical preCICE way

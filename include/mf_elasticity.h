@@ -68,6 +68,7 @@ static const unsigned int debug_level = 0;
 #include <parameter/parameter_handling.h>
 #include <q_equidistant.h>
 #include <sys/stat.h>
+#include <utilities/fe_integrator.h>
 #include <version.h>
 
 #include <fstream>
@@ -143,18 +144,10 @@ namespace FSI
     using VectorType          = LinearAlgebra::distributed::Vector<Number>;
     using VectorizedArrayType = VectorizedArray<Number>;
     using LevelVectorizedArrayType = VectorizedArray<LevelNumber>;
-    using FECellIntegrator         = FEEvaluation<dim,
-                                          degree,
-                                          n_q_points_1d,
-                                          dim,
-                                          Number,
-                                          VectorizedArrayType>;
-    using FEFaceIntegrator         = FEFaceEvaluation<dim,
-                                              degree,
-                                              n_q_points_1d,
-                                              dim,
-                                              Number,
-                                              VectorizedArrayType>;
+    using FECellIntegrator =
+      FECellIntegrators<dim, dim, Number, VectorizedArrayType>;
+    using FEFaceIntegrator =
+      FEFaceIntegrators<dim, dim, Number, VectorizedArrayType>;
 
     Solid(const Parameters::AllParameters<dim> &parameters);
 

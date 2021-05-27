@@ -14,6 +14,7 @@
 #include <deal.II/multigrid/mg_constrained_dofs.h>
 
 #include <material.h>
+#include <utilities/fe_integrator.h>
 
 // Define an operation that takes two tensors $ \mathbf{A} $ and
 // $ \mathbf{B} $ such that their outer-product
@@ -105,12 +106,9 @@ public:
     typename LinearAlgebra::distributed::Vector<Number>::size_type;
   using VectorType          = LinearAlgebra::distributed::Vector<Number>;
   using VectorizedArrayType = VectorizedArray<Number>;
-  using FECellIntegrator    = FEEvaluation<dim,
-                                        fe_degree,
-                                        n_q_points_1d,
-                                        dim,
-                                        Number,
-                                        VectorizedArrayType>;
+  using FECellIntegrator =
+    FECellIntegrators<dim, dim, Number, VectorizedArrayType>;
+
   void
   clear();
 
@@ -346,6 +344,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::initialize(
 
   const unsigned int n_cells = data_reference_->n_cell_batches();
   FECellIntegrator   phi(*data_reference_);
+
+  Assert(phi.fast_evaluation_supported(fe_degree, n_q_points_1d),
+         ExcMessage(
+           "The given degree/n_qpoints combination is not supported."));
 
   if (caching == "scalar_referential")
     {
