@@ -20,6 +20,15 @@ namespace Adapter
   class CouplingInterface
   {
   public:
+    /**
+     * @brief Constructor of the abstract base class
+     *
+     * @param[in] data Underlying MatrixFree object
+     * @param[in] precice The preCICE SolverInterface object
+     * @param[in] mesh_name Name of the coupling mesh in the preCICE
+     *            configuration associated to this interface
+     * @param[in] interface_id boundary ID of the deal.II mesh
+     */
     CouplingInterface(
       std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>> data,
       std::shared_ptr<precice::SolverInterface>                     precice,
