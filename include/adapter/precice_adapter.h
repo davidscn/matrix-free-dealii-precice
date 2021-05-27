@@ -25,7 +25,6 @@ namespace Adapter
    * structures are set up, necessary information is passed to preCICE etc.
    */
   template <int dim,
-            int fe_degree,
             typename VectorType,
             typename VectorizedArrayType = VectorizedArray<double>>
   class Adapter
@@ -166,12 +165,9 @@ namespace Adapter
 
 
 
-  template <int dim,
-            int fe_degree,
-            typename VectorType,
-            typename VectorizedArrayType>
+  template <int dim, typename VectorType, typename VectorizedArrayType>
   template <typename ParameterClass>
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::Adapter(
+  Adapter<dim, VectorType, VectorizedArrayType>::Adapter(
     const ParameterClass &parameters,
     const unsigned int    dealii_boundary_interface_id,
     std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>> data,
@@ -190,8 +186,7 @@ namespace Adapter
     AssertThrow(dim > 1, ExcNotImplemented());
 
     // The read interface is always the same
-    reader = std::make_shared<
-      dealiiInterface<dim, fe_degree, fe_degree + 1, VectorizedArrayType>>(
+    reader = std::make_shared<dealiiInterface<dim, VectorizedArrayType>>(
       data,
       precice,
       parameters.read_mesh_name,
@@ -205,8 +200,7 @@ namespace Adapter
       }
     else
       {
-        writer = std::make_shared<
-          dealiiInterface<dim, fe_degree, fe_degree + 1, VectorizedArrayType>>(
+        writer = std::make_shared<dealiiInterface<dim, VectorizedArrayType>>(
           data,
           precice,
           parameters.write_mesh_name,
@@ -223,12 +217,9 @@ namespace Adapter
 
 
 
-  template <int dim,
-            int fe_degree,
-            typename VectorType,
-            typename VectorizedArrayType>
+  template <int dim, typename VectorType, typename VectorizedArrayType>
   void
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::initialize(
+  Adapter<dim, VectorType, VectorizedArrayType>::initialize(
     const VectorType &dealii_to_precice)
   {
     writer->define_coupling_mesh();
@@ -261,12 +252,9 @@ namespace Adapter
 
 
 
-  template <int dim,
-            int fe_degree,
-            typename VectorType,
-            typename VectorizedArrayType>
+  template <int dim, typename VectorType, typename VectorizedArrayType>
   void
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::advance(
+  Adapter<dim, VectorType, VectorizedArrayType>::advance(
     const VectorType &dealii_to_precice,
     const double      computed_timestep_length)
   {
@@ -284,27 +272,21 @@ namespace Adapter
   }
 
 
-  template <int dim,
-            int fe_degree,
-            typename VectorType,
-            typename VectorizedArrayType>
+  template <int dim, typename VectorType, typename VectorizedArrayType>
   inline Tensor<1, dim, VectorizedArrayType>
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::
-    read_on_quadrature_point(const unsigned int id_number,
-                             const unsigned int active_faces) const
+  Adapter<dim, VectorType, VectorizedArrayType>::read_on_quadrature_point(
+    const unsigned int id_number,
+    const unsigned int active_faces) const
   {
     return reader->read_on_quadrature_point(id_number, active_faces);
   }
 
 
 
-  template <int dim,
-            int fe_degree,
-            typename VectorType,
-            typename VectorizedArrayType>
+  template <int dim, typename VectorType, typename VectorizedArrayType>
   inline void
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::
-    save_current_state_if_required(const std::function<void()> &save_state)
+  Adapter<dim, VectorType, VectorizedArrayType>::save_current_state_if_required(
+    const std::function<void()> &save_state)
   {
     // First, we let preCICE check, whether we need to store the variables.
     // Then, the data is stored in the class
@@ -319,13 +301,10 @@ namespace Adapter
 
 
 
-  template <int dim,
-            int fe_degree,
-            typename VectorType,
-            typename VectorizedArrayType>
+  template <int dim, typename VectorType, typename VectorizedArrayType>
   inline void
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::
-    reload_old_state_if_required(const std::function<void()> &reload_old_state)
+  Adapter<dim, VectorType, VectorizedArrayType>::reload_old_state_if_required(
+    const std::function<void()> &reload_old_state)
   {
     // In case we need to reload a state, we just take the internally stored
     // data vectors and write then in to the input data
@@ -340,26 +319,18 @@ namespace Adapter
 
 
 
-  template <int dim,
-            int fe_degree,
-            typename VectorType,
-            typename VectorizedArrayType>
+  template <int dim, typename VectorType, typename VectorizedArrayType>
   inline bool
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::
-    is_coupling_ongoing() const
+  Adapter<dim, VectorType, VectorizedArrayType>::is_coupling_ongoing() const
   {
     return precice->isCouplingOngoing();
   }
 
 
 
-  template <int dim,
-            int fe_degree,
-            typename VectorType,
-            typename VectorizedArrayType>
+  template <int dim, typename VectorType, typename VectorizedArrayType>
   inline bool
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::
-    is_time_window_complete() const
+  Adapter<dim, VectorType, VectorizedArrayType>::is_time_window_complete() const
   {
     return precice->isTimeWindowComplete();
   }

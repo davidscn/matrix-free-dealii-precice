@@ -96,7 +96,7 @@ adjust_ghost_range_if_necessary(
  * Follow
  * https://github.com/dealii/dealii/blob/master/tests/matrix_free/step-37.cc
  */
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+template <int dim, typename Number>
 class NeoHookOperator : public Subscriptor
 {
 public:
@@ -238,10 +238,9 @@ private:
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+template <int dim, typename Number>
 std::size_t
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::memory_consumption()
-  const
+NeoHookOperator<dim, Number>::memory_consumption() const
 {
   auto res = cached_scalar.memory_consumption() +
              cached_second_scalar.memory_consumption() +
@@ -262,8 +261,8 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::memory_consumption()
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::NeoHookOperator()
+template <int dim, typename Number>
+NeoHookOperator<dim, Number>::NeoHookOperator()
   : Subscriptor()
   , diagonal_is_available(false)
   , mf_caching(MFCaching::none)
@@ -279,12 +278,11 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::NeoHookOperator()
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+template <int dim, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::precondition_Jacobi(
-  VectorType &      dst,
-  const VectorType &src,
-  const Number      omega) const
+NeoHookOperator<dim, Number>::precondition_Jacobi(VectorType &      dst,
+                                                  const VectorType &src,
+                                                  const Number      omega) const
 {
   Assert(inverse_diagonal_entries.get() && inverse_diagonal_entries->m() > 0,
          ExcNotInitialized());
@@ -294,27 +292,27 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::precondition_Jacobi(
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+template <int dim, typename Number>
 unsigned int
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::m() const
+NeoHookOperator<dim, Number>::m() const
 {
   return data_current->get_vector_partitioner()->size();
 }
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+template <int dim, typename Number>
 unsigned int
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::n() const
+NeoHookOperator<dim, Number>::n() const
 {
   return data_current->get_vector_partitioner()->size();
 }
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+template <int dim, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::clear()
+NeoHookOperator<dim, Number>::clear()
 {
   data_current.reset();
   data_reference.reset();
@@ -330,9 +328,9 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::clear()
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+template <int dim, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::initialize(
+NeoHookOperator<dim, Number>::initialize(
   std::shared_ptr<const MatrixFree<dim, Number>> data_current_,
   std::shared_ptr<const MatrixFree<dim, Number>> data_reference_,
   const VectorType &                             displacement_,
@@ -394,9 +392,9 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::initialize(
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+template <int dim, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::cache()
+NeoHookOperator<dim, Number>::cache()
 {
   const unsigned int n_cells = data_reference->n_cell_batches();
 
@@ -536,9 +534,9 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::cache()
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+template <int dim, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::set_material(
+NeoHookOperator<dim, Number>::set_material(
   std::shared_ptr<
     Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArrayType>>
     material_,
@@ -552,11 +550,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::set_material(
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+template <int dim, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::vmult(
-  VectorType &      dst,
-  const VectorType &src) const
+NeoHookOperator<dim, Number>::vmult(VectorType &      dst,
+                                    const VectorType &src) const
 {
   dst = 0;
   vmult_add(dst, src);
@@ -564,11 +561,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::vmult(
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+template <int dim, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::Tvmult(
-  VectorType &      dst,
-  const VectorType &src) const
+NeoHookOperator<dim, Number>::Tvmult(VectorType &      dst,
+                                     const VectorType &src) const
 {
   dst = 0;
   vmult_add(dst, src);
@@ -576,22 +572,20 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::Tvmult(
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+template <int dim, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::Tvmult_add(
-  VectorType &      dst,
-  const VectorType &src) const
+NeoHookOperator<dim, Number>::Tvmult_add(VectorType &      dst,
+                                         const VectorType &src) const
 {
   vmult_add(dst, src);
 }
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+template <int dim, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::vmult_add(
-  VectorType &      dst,
-  const VectorType &src) const
+NeoHookOperator<dim, Number>::vmult_add(VectorType &      dst,
+                                        const VectorType &src) const
 {
   const std::shared_ptr<const Utilities::MPI::Partitioner> &partitioner =
     data_current->get_vector_partitioner();
@@ -634,9 +628,9 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::vmult_add(
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+template <int dim, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_apply_cell(
+NeoHookOperator<dim, Number>::local_apply_cell(
   const MatrixFree<dim, Number> & /*data*/,
   VectorType &                                 dst,
   const VectorType &                           src,
@@ -656,10 +650,9 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::local_apply_cell(
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+template <int dim, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
-  FECellIntegrator &phi) const
+NeoHookOperator<dim, Number>::do_operation_on_cell(FECellIntegrator &phi) const
 {
   const unsigned int cell = phi.get_current_cell_index();
   const unsigned int material_id =
@@ -1034,9 +1027,9 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::do_operation_on_cell(
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+template <int dim, typename Number>
 void
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::compute_diagonal()
+NeoHookOperator<dim, Number>::compute_diagonal()
 {
   inverse_diagonal_entries.reset(new DiagonalMatrix<VectorType>());
   diagonal_entries.reset(new DiagonalMatrix<VectorType>());
@@ -1074,11 +1067,10 @@ NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::compute_diagonal()
 
 
 
-template <int dim, int fe_degree, int n_q_points_1d, typename Number>
+template <int dim, typename Number>
 Number
-NeoHookOperator<dim, fe_degree, n_q_points_1d, Number>::el(
-  const unsigned int row,
-  const unsigned int col) const
+NeoHookOperator<dim, Number>::el(const unsigned int row,
+                                 const unsigned int col) const
 {
   Assert(row == col, ExcNotImplemented());
   (void)col;

@@ -14,10 +14,7 @@ namespace Adapter
    * where each participant defines an interface based on the locally owned
    * triangulation. Here, quadrature points are used for reading and writing.
    */
-  template <int dim,
-            int fe_degree,
-            int n_qpoints_1d,
-            typename VectorizedArrayType>
+  template <int dim, typename VectorizedArrayType>
   class dealiiInterface : public CouplingInterface<dim, VectorizedArrayType>
   {
   public:
@@ -97,13 +94,9 @@ namespace Adapter
 
 
 
-  template <int dim,
-            int fe_degree,
-            int n_qpoints_1d,
-            typename VectorizedArrayType>
+  template <int dim, typename VectorizedArrayType>
   void
-  dealiiInterface<dim, fe_degree, n_qpoints_1d, VectorizedArrayType>::
-    define_coupling_mesh()
+  dealiiInterface<dim, VectorizedArrayType>::define_coupling_mesh()
   {
     Assert(this->mesh_id != -1, ExcNotInitialized());
 
@@ -173,13 +166,10 @@ namespace Adapter
 
 
 
-  template <int dim,
-            int fe_degree,
-            int n_qpoints_1d,
-            typename VectorizedArrayType>
+  template <int dim, typename VectorizedArrayType>
   void
-  dealiiInterface<dim, fe_degree, n_qpoints_1d, VectorizedArrayType>::
-    write_data(const LinearAlgebra::distributed::Vector<double> &data_vector)
+  dealiiInterface<dim, VectorizedArrayType>::write_data(
+    const LinearAlgebra::distributed::Vector<double> &data_vector)
   {
     Assert(this->write_data_id != -1, ExcNotInitialized());
     Assert(interface_is_defined, ExcNotInitialized());
@@ -230,14 +220,11 @@ namespace Adapter
 
 
 
-  template <int dim,
-            int fe_degree,
-            int n_qpoints_1d,
-            typename VectorizedArrayType>
+  template <int dim, typename VectorizedArrayType>
   inline Tensor<1, dim, VectorizedArrayType>
-  dealiiInterface<dim, fe_degree, n_qpoints_1d, VectorizedArrayType>::
-    read_on_quadrature_point(const unsigned int id_number,
-                             const unsigned int active_faces) const
+  dealiiInterface<dim, VectorizedArrayType>::read_on_quadrature_point(
+    const unsigned int id_number,
+    const unsigned int active_faces) const
   {
     // Assert input
     Assert(active_faces <= VectorizedArrayType::size(), ExcInternalError());
@@ -260,13 +247,9 @@ namespace Adapter
   }
 
 
-  template <int dim,
-            int fe_degree,
-            int n_qpoints_1d,
-            typename VectorizedArrayType>
+  template <int dim, typename VectorizedArrayType>
   std::string
-  dealiiInterface<dim, fe_degree, n_qpoints_1d, VectorizedArrayType>::
-    get_interface_type() const
+  dealiiInterface<dim, VectorizedArrayType>::get_interface_type() const
   {
     return "quadrature points using matrix-free index " +
            Utilities::to_string(mf_quad_index);
