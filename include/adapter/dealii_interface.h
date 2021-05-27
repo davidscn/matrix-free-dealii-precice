@@ -184,9 +184,9 @@ namespace Adapter
            ExcInternalError());
 
     if (this->read_data_id != -1)
-      this->print_info(true);
+      this->print_info(true, this->precice->getMeshVertexSize(this->mesh_id));
     if (this->write_data_id != -1)
-      this->print_info(false);
+      this->print_info(false, this->precice->getMeshVertexSize(this->mesh_id));
   }
 
 

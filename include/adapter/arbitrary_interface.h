@@ -105,9 +105,12 @@ namespace Adapter
     filter_vertices_to_local_partition(const Mapping<dim> &          mapping,
                                        const Triangulation<dim> &    tria,
                                        const std::vector<Point<dim>> points_in,
-                                       double tolerance = 1e-10) const;
+                                       double tolerance = 1e-10);
 
     std::vector<int> interface_nodes_ids;
+    std::vector<
+      std::pair<typename Triangulation<dim>::active_cell_iterator, Point<dim>>>
+      locally_relevant_points;
   };
 
 
@@ -154,25 +157,32 @@ namespace Adapter
       this->mf_data->get_dof_handler().get_fe(),
       UpdateFlags::update_values);
 
-    std::vector<
-      std::pair<typename DoFHandler<dim>::active_cell_iterator, Point<dim>>>
-      unique_points;
-
-
     Vector<double> local_values(
       this->mf_data->get_dof_handler().get_fe().n_dofs_per_cell());
-    for (const auto points : unique_points)
-      {
-        std::vector<Point<dim>> point_vec{points.second};
 
-        fe_evaluator.reinit(points.first, point_vec);
-        points.first->get_dof_values(data_vector, local_values);
+    // TODO: We should combine multiple points belonging to the same cell here
+    for (size_t i = 0; i < interface_nodes_ids.size(); ++i)
+      {
+        AssertIndexRange(i, locally_relevant_points.size());
+        const auto              point = locally_relevant_points[i];
+        std::vector<Point<dim>> point_vec{point.second};
+        fe_evaluator.reinit(point.first, point_vec);
+
+        // Convert TriaIterator to DoFCellAccessor
+        TriaIterator<DoFCellAccessor<dim, dim, false>> dof_cell(
+          &(this->mf_data->get_dof_handler().get_triangulation()),
+          point.first->level(),
+          point.first->index(),
+          &(this->mf_data->get_dof_handler()));
+
+        dof_cell->get_dof_values(data_vector, local_values);
         fe_evaluator.evaluate(make_array_view(local_values),
                               EvaluationFlags::values);
-        //    precice->writeVectorData(this->write_data_id,
-        //                                  interface_nodes_ids.size(),
-        //                                  interface_nodes_ids.data(),
-        //                                  precice_res.data());
+
+        const auto val = fe_evaluator.get_value(0);
+        this->precice->writeVectorData(this->write_data_id,
+                                       interface_nodes_ids[i],
+                                       val.begin_raw());
       }
   }
 
@@ -207,14 +217,15 @@ namespace Adapter
         }
 
     // TODO: Maybe perform some coarse pre-filtering here
-    filter_vertices_to_local_partition(
+    locally_relevant_points = filter_vertices_to_local_partition(
       *(this->mf_data->get_mapping_info().mapping),
       this->mf_data->get_dof_handler(0).get_triangulation(),
       received_points);
 
     Assert(this->read_data_id == -1, ExcInternalError());
     Assert(this->write_data_id != -1, ExcInternalError());
-    this->print_info(false);
+
+    this->print_info(false, interface_nodes_ids.size());
   }
 
 
@@ -234,7 +245,7 @@ namespace Adapter
     filter_vertices_to_local_partition(const Mapping<dim> &          mapping,
                                        const Triangulation<dim> &    tria,
                                        const std::vector<Point<dim>> points_in,
-                                       double tolerance) const
+                                       double                        tolerance)
   {
     std::vector<
       std::pair<typename Triangulation<dim>::active_cell_iterator, Point<dim>>>
@@ -246,10 +257,12 @@ namespace Adapter
 
     const unsigned int my_rank =
       Utilities::MPI::this_mpi_process(tria.get_communicator());
+    std::vector<int> relevant_interface_ids;
 
-    for (const auto &point : points_in)
+    for (size_t i = 0; i < points_in.size(); ++i)
       {
-        const auto first_cell = GridTools::find_active_cell_around_point(
+        const auto &point      = points_in[i];
+        const auto  first_cell = GridTools::find_active_cell_around_point(
           cache, point, cell_hint, marked_vertices, tolerance);
 
         cell_hint = first_cell.first;
@@ -277,9 +290,13 @@ namespace Adapter
           if (cell.first->is_locally_owned())
             {
               unique_points.emplace_back(cell);
+              relevant_interface_ids.emplace_back(interface_nodes_ids[i]);
               break;
             }
       }
+    interface_nodes_ids = std::move(relevant_interface_ids);
+    Assert(interface_nodes_ids.size() == unique_points.size(),
+           ExcInternalError());
     return unique_points;
   }
 

@@ -89,9 +89,11 @@ namespace Adapter
      * @brief print_info
      * @param reader Boolean in order to decide if we want read or write
      *        data information
+     * @param local_size Number of local interface noces this process is
+     *        working on
      */
     void
-    print_info(const bool reader) const;
+    print_info(const bool reader, const unsigned int local_size) const;
 
     /// The MatrixFree object (preCICE can only handle double precision)
     std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>> mf_data;
@@ -161,7 +163,8 @@ namespace Adapter
   template <int dim, typename VectorizedArrayType>
   void
   CouplingInterface<dim, VectorizedArrayType>::print_info(
-    const bool reader) const
+    const bool         reader,
+    const unsigned int local_size) const
   {
     ConditionalOStream pcout(std::cout,
                              Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
@@ -171,10 +174,8 @@ namespace Adapter
           << "--     . data name: "
           << (reader ? read_data_name : write_data_name) << "\n"
           << "--     . associated mesh: " << mesh_name << "\n"
-          << "--     . Number of interface nodes: "
-          << Utilities::MPI::sum(precice->getMeshVertexSize(mesh_id),
-                                 MPI_COMM_WORLD)
-          << "\n"
+          << "--     . Number of active interface nodes: "
+          << Utilities::MPI::sum(local_size, MPI_COMM_WORLD) << "\n"
           << "--     . Node location: " << get_interface_type() << "\n"
           << std::endl;
   }
