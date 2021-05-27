@@ -343,10 +343,6 @@ NeoHookOperator<dim, Number>::initialize(
   const unsigned int n_cells = data_reference_->n_cell_batches();
   FECellIntegrator   phi(*data_reference_);
 
-  Assert(phi.fast_evaluation_supported(fe_degree, n_q_points_1d),
-         ExcMessage(
-           "The given degree/n_qpoints combination is not supported."));
-
   if (caching == "scalar_referential")
     {
       mf_caching  = MFCaching::scalar_referential;
@@ -412,10 +408,7 @@ NeoHookOperator<dim, Number>::cache()
 
       phi_reference.reinit(cell);
       phi_reference.read_dof_values_plain(*displacement);
-      phi_reference.evaluate(((mf_caching == MFCaching::scalar_referential) ?
-                                EvaluationFlags::values :
-                                EvaluationFlags::nothing) |
-                             EvaluationFlags::gradients);
+      phi_reference.evaluate(EvaluationFlags::gradients);
 
       // In order to avoid the phi_reference.read_dof_values() using
       // indirect addressing
@@ -853,9 +846,14 @@ NeoHookOperator<dim, Number>::do_operation_on_cell(FECellIntegrator &phi) const
             const unsigned int n_q_points = phi.n_q_points;
 
             VectorizedArrayType *x_grads = phi.begin_gradients();
-            // Only a data storage for the gradients is required, not a complete
-            // copy of an FEEvaluation object. However, the copy constructor is
-            // way faster than allocating an AlignedVector here.
+
+            // FIXME: The implementation here relies on the cached dof values.
+            // However, it would be faster to cache the data on quadrature
+            // points and call here a cheaper Collocation gradient, since the
+            // evaluation to quadrature point is bypassed. For compatibility
+            // reasons with the new FECellIntegrator<-1,0> this is not possible,
+            // because the the collocation function requires explicit
+            // instantiations with degree and n_quadrature_points
             FECellIntegrator phi_grad(phi);
             phi_grad.evaluate(cached_position, EvaluationFlags::gradients);
             VectorizedArrayType *ref_grads = phi_grad.begin_gradients();

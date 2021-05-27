@@ -1825,6 +1825,10 @@ namespace FSI
         FECellIntegrator   phi_acc(phi_reference);
         const unsigned int n_cells = mf_data_reference->n_cell_batches();
 
+        Assert(phi_reference.fast_evaluation_supported(fe_degree, quad_order),
+               ExcMessage(
+                 "The given degree/n_qpoints combination is not supported."));
+
         for (unsigned int cell = 0; cell < n_cells; ++cell)
           {
             const unsigned int material_id =

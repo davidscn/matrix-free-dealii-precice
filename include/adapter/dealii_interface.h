@@ -110,9 +110,6 @@ namespace Adapter
 
     // Set up data structures
     FEFaceIntegrator phi(*this->mf_data, true, mf_dof_index, mf_quad_index);
-    Assert(phi.fast_evaluation_supported(fe_degree, n_qpoints_1d),
-           ExcMessage("Fast evaluation is not supported."));
-
     std::array<double, dim * VectorizedArrayType::size()> unrolled_vertices;
     std::array<int, VectorizedArrayType::size()>          node_ids;
     unsigned int                                          size = 0;
