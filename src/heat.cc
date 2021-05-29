@@ -376,6 +376,8 @@ namespace Heat_Transfer
     void
     assemble_rhs();
     void
+    apply_boundary_condition();
+    void
     solve();
     void
     output_results(const unsigned int cycle) const;
@@ -399,6 +401,9 @@ namespace Heat_Transfer
     using SystemMatrixType =
       LaplaceOperator<dim, degree_finite_element, double>;
     SystemMatrixType system_matrix;
+    // In order to operate with the non-homogenous Dirichlet BCs
+    // TODO: use one operator with different constraint objects instead
+    SystemMatrixType inhomogeneous_operator;
 
     MGConstrainedDoFs mg_constrained_dofs;
     using LevelMatrixType = LaplaceOperator<dim, degree_finite_element, float>;
@@ -429,7 +434,7 @@ namespace Heat_Transfer
     , dof_handler(triangulation)
     , dirichlet_boundary_id(2)
     , alpha(3)
-    , beta(8)
+    , beta(1.3)
     , analytic_solution(alpha, beta)
     , setup_time(0.)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
@@ -502,6 +507,8 @@ namespace Heat_Transfer
     timer.restart();
 
     {
+      // Set up two matrix-free objects: one for the homogenous part and one for
+      // the inhomogenous part (without any constraints)
       typename MatrixFree<dim, double>::AdditionalData additional_data;
       additional_data.tasks_parallel_scheme =
         MatrixFree<dim, double>::AdditionalData::none;
@@ -516,11 +523,24 @@ namespace Heat_Transfer
                                 QGauss<1>(fe.degree + 1),
                                 additional_data);
       system_matrix.initialize(system_mf_storage);
+      system_matrix.evaluate_coefficient(Coefficient<dim>());
+      system_matrix.set_delta_t(time.get_delta_t());
+
+      // ... the second matrix-free operator for inhomogenous BCs
+      AffineConstraints<double> no_constraints;
+      no_constraints.close();
+      std::shared_ptr<MatrixFree<dim, double>> matrix_free(
+        new MatrixFree<dim, double>());
+      matrix_free->reinit(dof_handler,
+                          no_constraints,
+                          QGauss<1>(fe.degree + 1),
+                          additional_data);
+      inhomogeneous_operator.initialize(matrix_free);
+
+
+      inhomogeneous_operator.evaluate_coefficient(Coefficient<dim>());
+      inhomogeneous_operator.set_delta_t(time.get_delta_t());
     }
-
-    system_matrix.evaluate_coefficient(Coefficient<dim>());
-    system_matrix.set_delta_t(time.get_delta_t());
-
     system_matrix.initialize_dof_vector(solution);
     system_matrix.initialize_dof_vector(solution_old);
     system_matrix.initialize_dof_vector(system_rhs);
@@ -585,43 +605,10 @@ namespace Heat_Transfer
   {
     Timer timer;
 
-    analytic_solution.set_time(time.current());
+    apply_boundary_condition();
 
-    constraints.clear();
-    IndexSet locally_relevant_dofs;
-    DoFTools::extract_locally_relevant_dofs(dof_handler, locally_relevant_dofs);
-    constraints.reinit(locally_relevant_dofs);
-    //    DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-    VectorTools::interpolate_boundary_values(mapping,
-                                             dof_handler,
-                                             dirichlet_boundary_id,
-                                             analytic_solution,
-                                             constraints);
-    constraints.close();
-    constraints.distribute(solution);
-    system_rhs = 0;
-    ////////////////////
-    AffineConstraints<double> no_constraints;
-    no_constraints.close();
-    LaplaceOperator<dim, degree_finite_element, double> inhomogeneous_operator;
-    typename MatrixFree<dim, double>::AdditionalData    additional_data;
-    additional_data.mapping_update_flags =
-      (update_values | update_gradients | update_JxW_values |
-       update_quadrature_points);
-    std::shared_ptr<MatrixFree<dim, double>> matrix_free(
-      new MatrixFree<dim, double>());
-    matrix_free->reinit(dof_handler,
-                        no_constraints,
-                        QGauss<1>(fe.degree + 1),
-                        additional_data);
-    inhomogeneous_operator.initialize(matrix_free);
-
-    inhomogeneous_operator.evaluate_coefficient(Coefficient<dim>());
-    inhomogeneous_operator.set_delta_t(time.get_delta_t());
-    inhomogeneous_operator.vmult(system_rhs, solution);
-    system_rhs *= -1.0;
-
-    ////////////////////
+    // Do not reset system_rhs here as it holds the non-homogenous boundary
+    // condition
     FECellIntegrator   phi(*inhomogeneous_operator.get_matrix_free());
     RightHandSide<dim> rhs_function(alpha, beta);
     const auto         dt = make_vectorized_array<double>(time.get_delta_t());
@@ -650,15 +637,46 @@ namespace Heat_Transfer
 
   template <int dim>
   void
+  LaplaceProblem<dim>::apply_boundary_condition()
+  {
+    // Set the time in the analytic solution
+    analytic_solution.set_time(time.current());
+
+    // Update the constraints object
+    constraints.clear();
+    IndexSet locally_relevant_dofs;
+    DoFTools::extract_locally_relevant_dofs(dof_handler, locally_relevant_dofs);
+    constraints.reinit(locally_relevant_dofs);
+    DoFTools::make_hanging_node_constraints(dof_handler, constraints);
+    VectorTools::interpolate_boundary_values(mapping,
+                                             dof_handler,
+                                             dirichlet_boundary_id,
+                                             analytic_solution,
+                                             constraints);
+    constraints.close();
+    //... and fill in the constraints into the solution vector (non-homogenous
+    // part)
+    constraints.distribute(solution);
+
+    // Compute effect of the non-homogenous boundary condition on the system_rhs
+    system_rhs = 0;
+    inhomogeneous_operator.vmult(system_rhs, solution);
+    system_rhs *= -1.0;
+  }
+
+
+
+  template <int dim>
+  void
   LaplaceProblem<dim>::solve()
   {
-    Timer                            time;
+    Timer                            timer;
     MGTransferMatrixFree<dim, float> mg_transfer(mg_constrained_dofs);
     mg_transfer.build(dof_handler);
-    setup_time += time.wall_time();
-    time_details << "MG build transfer time     (CPU/wall) " << time.cpu_time()
-                 << "s/" << time.wall_time() << "s\n";
-    time.restart();
+    setup_time += timer.wall_time();
+    time_details << "MG build transfer time     (CPU/wall) " << timer.cpu_time()
+                 << "s/" << timer.wall_time() << "s\n";
+    timer.restart();
 
     using SmootherType =
       PreconditionChebyshev<LevelMatrixType,
@@ -717,24 +735,26 @@ namespace Heat_Transfer
 
     SolverControl solver_control(100, 1e-12 * system_rhs.l2_norm());
     SolverCG<LinearAlgebra::distributed::Vector<double>> cg(solver_control);
-    setup_time += time.wall_time();
-    time_details << "MG build smoother time     (CPU/wall) " << time.cpu_time()
-                 << "s/" << time.wall_time() << "s\n";
+    setup_time += timer.wall_time();
+    time_details << "MG build smoother time     (CPU/wall) " << timer.cpu_time()
+                 << "s/" << timer.wall_time() << "s\n";
     pcout << "Total setup time               (wall) " << setup_time << "s\n";
 
-    time.reset();
-    time.start();
+    timer.reset();
+    timer.start();
 
-    solution_old = solution;
-    //        constraints.set_zero(solution_old);
+    // We misuse solution_old here for the solution update (the homogenous part)
+    // The non-homogenous part is already included in the solution
     cg.solve(system_matrix, solution_old, system_rhs, preconditioner);
-
+    // More or less a safety operation, as the constraints have already been
+    // enforced
     constraints.set_zero(solution_old);
+    // and update the complete solution = non-homogenous part + homogenous part
     solution += solution_old;
 
     pcout << "Time solve (" << solver_control.last_step() << " iterations)"
           << (solver_control.last_step() < 10 ? "  " : " ") << "(CPU/wall) "
-          << time.cpu_time() << "s/" << time.wall_time() << "s\n";
+          << timer.cpu_time() << "s/" << timer.wall_time() << "s\n";
   }
 
 

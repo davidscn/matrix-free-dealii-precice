@@ -83,6 +83,11 @@ ADD_EXECUTABLE(${TARGET}
     ${CMAKE_CURRENT_BINARY_DIR}/version.cc
   )
 
+ADD_EXECUTABLE(heat
+    src/heat.cc
+  )
+DEAL_II_SETUP_TARGET(heat)
+
 DEAL_II_SETUP_TARGET(${TARGET})
 
 TARGET_LINK_LIBRARIES(${TARGET} precice::precice)
