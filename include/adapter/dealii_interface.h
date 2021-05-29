@@ -3,6 +3,7 @@
 #include <deal.II/matrix_free/fe_evaluation.h>
 
 #include <adapter/coupling_interface.h>
+#include <utilities/fe_integrator.h>
 
 namespace Adapter
 {
@@ -13,10 +14,7 @@ namespace Adapter
    * where each participant defines an interface based on the locally owned
    * triangulation. Here, quadrature points are used for reading and writing.
    */
-  template <int dim,
-            int fe_degree,
-            int n_qpoints_1d,
-            typename VectorizedArrayType>
+  template <int dim, typename VectorizedArrayType>
   class dealiiInterface : public CouplingInterface<dim, VectorizedArrayType>
   {
   public:
@@ -36,12 +34,8 @@ namespace Adapter
     {}
 
     /// Alias for the face integrator
-    using FEFaceIntegrator = FEFaceEvaluation<dim,
-                                              fe_degree,
-                                              n_qpoints_1d,
-                                              dim,
-                                              double,
-                                              VectorizedArrayType>;
+    using FEFaceIntegrator =
+      FEFaceIntegrators<dim, dim, double, VectorizedArrayType>;
     /**
      * @brief define_mesh_vertices Define a vertex coupling mesh for preCICE
      *        coupling the classical preCICE way
@@ -100,13 +94,9 @@ namespace Adapter
 
 
 
-  template <int dim,
-            int fe_degree,
-            int n_qpoints_1d,
-            typename VectorizedArrayType>
+  template <int dim, typename VectorizedArrayType>
   void
-  dealiiInterface<dim, fe_degree, n_qpoints_1d, VectorizedArrayType>::
-    define_coupling_mesh()
+  dealiiInterface<dim, VectorizedArrayType>::define_coupling_mesh()
   {
     Assert(this->mesh_id != -1, ExcNotInitialized());
 
@@ -120,9 +110,6 @@ namespace Adapter
 
     // Set up data structures
     FEFaceIntegrator phi(*this->mf_data, true, mf_dof_index, mf_quad_index);
-    Assert(phi.fast_evaluation_supported(fe_degree, n_qpoints_1d),
-           ExcMessage("Fast evaluation is not supported."));
-
     std::array<double, dim * VectorizedArrayType::size()> unrolled_vertices;
     std::array<int, VectorizedArrayType::size()>          node_ids;
     unsigned int                                          size = 0;
@@ -176,13 +163,10 @@ namespace Adapter
 
 
 
-  template <int dim,
-            int fe_degree,
-            int n_qpoints_1d,
-            typename VectorizedArrayType>
+  template <int dim, typename VectorizedArrayType>
   void
-  dealiiInterface<dim, fe_degree, n_qpoints_1d, VectorizedArrayType>::
-    write_data(const LinearAlgebra::distributed::Vector<double> &data_vector)
+  dealiiInterface<dim, VectorizedArrayType>::write_data(
+    const LinearAlgebra::distributed::Vector<double> &data_vector)
   {
     Assert(this->write_data_id != -1, ExcNotInitialized());
     Assert(interface_is_defined, ExcNotInitialized());
@@ -233,14 +217,11 @@ namespace Adapter
 
 
 
-  template <int dim,
-            int fe_degree,
-            int n_qpoints_1d,
-            typename VectorizedArrayType>
+  template <int dim, typename VectorizedArrayType>
   inline Tensor<1, dim, VectorizedArrayType>
-  dealiiInterface<dim, fe_degree, n_qpoints_1d, VectorizedArrayType>::
-    read_on_quadrature_point(const unsigned int id_number,
-                             const unsigned int active_faces) const
+  dealiiInterface<dim, VectorizedArrayType>::read_on_quadrature_point(
+    const unsigned int id_number,
+    const unsigned int active_faces) const
   {
     // Assert input
     Assert(active_faces <= VectorizedArrayType::size(), ExcInternalError());
@@ -263,13 +244,9 @@ namespace Adapter
   }
 
 
-  template <int dim,
-            int fe_degree,
-            int n_qpoints_1d,
-            typename VectorizedArrayType>
+  template <int dim, typename VectorizedArrayType>
   std::string
-  dealiiInterface<dim, fe_degree, n_qpoints_1d, VectorizedArrayType>::
-    get_interface_type() const
+  dealiiInterface<dim, VectorizedArrayType>::get_interface_type() const
   {
     return "quadrature points using matrix-free index " +
            Utilities::to_string(mf_quad_index);
