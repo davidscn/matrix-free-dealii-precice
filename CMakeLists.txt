@@ -78,9 +78,10 @@ FIND_PACKAGE(precice REQUIRED
   )
 MESSAGE(STATUS "Using the preCICE version found at ${precice_DIR}")
 
+ADD_LIBRARY(version OBJECT ${CMAKE_CURRENT_BINARY_DIR}/version.cc)
+
 ADD_EXECUTABLE(${TARGET}
     src/${TARGET}.cc
-    ${CMAKE_CURRENT_BINARY_DIR}/version.cc
   )
 
 ADD_EXECUTABLE(heat
@@ -90,8 +91,8 @@ DEAL_II_SETUP_TARGET(heat)
 
 DEAL_II_SETUP_TARGET(${TARGET})
 
-TARGET_LINK_LIBRARIES(${TARGET} precice::precice)
-TARGET_LINK_LIBRARIES(heat precice::precice)
+TARGET_LINK_LIBRARIES(${TARGET} version precice::precice)
+TARGET_LINK_LIBRARIES(heat version precice::precice)
 
 INCLUDE_DIRECTORIES (${CMAKE_CURRENT_BINARY_DIR}/include)
 

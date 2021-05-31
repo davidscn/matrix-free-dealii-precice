@@ -414,6 +414,7 @@ namespace Heat_Transfer
     const int ierr = Utilities::create_directory(parameters.output_folder);
     (void)ierr;
     Assert(ierr == 0, ExcMessage("can't create: " + parameters.output_folder));
+    Utilities::print_configuration(pcout);
   }
 
 
@@ -766,16 +767,6 @@ namespace Heat_Transfer
   void
   LaplaceProblem<dim>::run()
   {
-    {
-      const unsigned int n_vect_doubles = VectorizedArray<double>::size();
-      const unsigned int n_vect_bits    = 8 * sizeof(double) * n_vect_doubles;
-
-      pcout << "Vectorization over " << n_vect_doubles
-            << " doubles = " << n_vect_bits << " bits ("
-            << Utilities::System::get_current_vectorization_level() << ")"
-            << std::endl;
-    }
-
     make_grid();
 
     analytic_solution.set_time(0);

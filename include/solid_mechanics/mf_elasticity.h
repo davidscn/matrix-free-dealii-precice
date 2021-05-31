@@ -18,7 +18,6 @@ static const unsigned int debug_level = 0;
 #include <deal.II/base/function.h>
 #include <deal.II/base/point.h>
 #include <deal.II/base/quadrature_lib.h>
-#include <deal.II/base/revision.h>
 #include <deal.II/base/symmetric_tensor.h>
 #include <deal.II/base/tensor.h>
 #include <deal.II/base/timer.h>
@@ -66,7 +65,6 @@ static const unsigned int debug_level = 0;
 #include <base/q_equidistant.h>
 #include <base/time_handler.h>
 #include <base/utilities.h>
-#include <base/version.h>
 #include <cases/case_base.h>
 #include <parameter/parameter_handling.h>
 #include <solid_mechanics/material.h>
@@ -520,56 +518,8 @@ namespace FSI
 
     mf_nh_operator.set_material(material_vec, material_inclusion_vec);
 
-    // print some data about how we run:
-    auto print = [&](ConditionalOStream &stream) {
-      const int n_tasks =
-        dealii::Utilities::MPI::n_mpi_processes(mpi_communicator);
-      const int          n_threads      = dealii::MultithreadInfo::n_threads();
-      const unsigned int n_vect_doubles = VectorizedArray<double>::size();
-      const unsigned int n_vect_bits    = 8 * sizeof(double) * n_vect_doubles;
-
-      stream
-        << "-----------------------------------------------------------------------------"
-        << std::endl
-#ifdef DEBUG
-        << "--     . running in DEBUG mode" << std::endl
-#else
-        << "--     . running in OPTIMIZED mode" << std::endl
-#endif
-        << "--     . running with " << n_tasks << " MPI process"
-        << (n_tasks == 1 ? "" : "es") << std::endl;
-
-      if (n_threads > 1)
-        stream << "--     . using " << n_threads << " threads "
-               << (n_tasks == 1 ? "" : "each") << std::endl;
-
-      stream << "--     . vectorization over " << n_vect_doubles
-             << " doubles = " << n_vect_bits << " bits (";
-
-      if (n_vect_bits == 64)
-        stream << "disabled";
-      else if (n_vect_bits == 128)
-        stream << "SSE2";
-      else if (n_vect_bits == 256)
-        stream << "AVX";
-      else if (n_vect_bits == 512)
-        stream << "AVX512";
-      else
-        AssertThrow(false, ExcNotImplemented());
-
-      stream << ")" << std::endl;
-      stream << "--     . version " << GIT_TAG << " (revision " << GIT_SHORTREV
-             << " on branch " << GIT_BRANCH << ")" << std::endl;
-      stream << "--     . deal.II " << DEAL_II_PACKAGE_VERSION << " (revision "
-             << DEAL_II_GIT_SHORTREV << " on branch " << DEAL_II_GIT_BRANCH
-             << ")" << std::endl;
-      stream
-        << "-----------------------------------------------------------------------------"
-        << std::endl
-        << std::endl;
-    };
-    print(timer_out);
-    print(pcout);
+    Utilities::print_configuration(timer_out);
+    Utilities::print_configuration(pcout);
   }
 
   // The class destructor simply clears the data held by the DOFHandler
