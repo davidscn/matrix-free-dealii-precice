@@ -66,9 +66,9 @@ static const unsigned int debug_level = 0;
 #include <base/q_equidistant.h>
 #include <base/version.h>
 #include <cases/case_base.h>
-#include <material.h>
-#include <mf_nh_operator.h>
 #include <parameter/parameter_handling.h>
+#include <solid_mechanics/material.h>
+#include <solid_mechanics/mf_nh_operator.h>
 #include <sys/stat.h>
 
 #include <fstream>

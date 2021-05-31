@@ -1,5 +1,5 @@
 #include <cases/case_selector.h>
-#include <mf_elasticity.h>
+#include <solid_mechanics/mf_elasticity.h>
 
 // @sect3{Main function}
 // Lastly we provide the main driver function which appears
