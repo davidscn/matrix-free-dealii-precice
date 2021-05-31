@@ -248,68 +248,22 @@ namespace Heat_Transfer
     phi.integrate(EvaluationFlags::values | EvaluationFlags::gradients);
   }
 
-
-
-  template <int dim>
-  class AnalyticSolution : public Function<dim>
+  // Helper function in order to evaluate the vectorized point
+  template <int dim, typename Number>
+  VectorizedArray<Number>
+  evaluate_function(const Function<dim> &                      function,
+                    const Point<dim, VectorizedArray<Number>> &p_vectorized,
+                    const unsigned int                         component = 0)
   {
-  public:
-    AnalyticSolution(const double alpha, const double beta)
-      : Function<dim>()
-      , alpha(alpha)
-      , beta(beta)
-    {}
-
-    virtual double
-    value(const Point<dim> &p, const unsigned int component = 0) const
-    {
-      (void)component;
-      AssertIndexRange(component, 1);
-      const double time = this->get_time();
-      return 1 + (p[0] * p[0]) + (alpha * p[1] * p[1]) + (beta * time);
-    }
-
-  private:
-    const double alpha;
-    const double beta;
-  };
-
-
-
-  template <int dim>
-  class RightHandSide : public Function<dim>
-  {
-  public:
-    RightHandSide(const double alpha, const double beta)
-      : Function<dim>()
-      , alpha(alpha)
-      , beta(beta)
-    {}
-
-
-    template <typename number>
-    number
-    value(const Point<dim, number> & /*p*/,
-          const unsigned int component = 0) const;
-    double
-    value(const Point<dim> &p, const unsigned int component) const override
-    {
-      return value<double>(p, component);
-    }
-
-  private:
-    const double alpha;
-    const double beta;
-  };
-
-
-  template <int dim>
-  template <typename number>
-  number
-  RightHandSide<dim>::value(const Point<dim, number> & /*p*/,
-                            const unsigned int /*component*/) const
-  {
-    return number(beta - 2 - (2 * alpha));
+    VectorizedArray<Number> result;
+    for (unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v)
+      {
+        Point<dim> p;
+        for (unsigned int d = 0; d < dim; ++d)
+          p[d] = p_vectorized[d][v];
+        result[v] = function.value(p, component);
+      }
+    return result;
   }
 
 
@@ -328,7 +282,7 @@ namespace Heat_Transfer
 
     LaplaceProblem(const FSI::Parameters::AllParameters<dim> &parameters);
     void
-    run();
+    run(std::shared_ptr<TestCases::TestCaseBase<dim>> testcase_);
 
   private:
     void
@@ -348,17 +302,14 @@ namespace Heat_Transfer
 
     parallel::distributed::Triangulation<dim> triangulation;
 
+    // In order to hold the copy
+    std::shared_ptr<TestCases::TestCaseBase<dim>> testcase;
+
     FE_Q<dim>       fe;
     const QGauss<1> quadrature_1d;
     DoFHandler<dim> dof_handler;
 
     MappingQ1<dim> mapping;
-
-    const types::boundary_id dirichlet_boundary_id;
-    const double             alpha;
-    const double             beta;
-
-    AnalyticSolution<dim> analytic_solution;
 
     AffineConstraints<double> constraints;
     using SystemMatrixType = LaplaceOperator<dim, double>;
@@ -400,10 +351,6 @@ namespace Heat_Transfer
     , fe(parameters.poly_degree)
     , quadrature_1d(parameters.quad_order)
     , dof_handler(triangulation)
-    , dirichlet_boundary_id(2)
-    , alpha(3)
-    , beta(1.3)
-    , analytic_solution(alpha, beta)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
     , timer(pcout, TimerOutput::never, TimerOutput::wall_times)
     , total_n_cg_iterations(0)
@@ -423,27 +370,9 @@ namespace Heat_Transfer
   void
   LaplaceProblem<dim>::make_grid()
   {
-    GridGenerator::hyper_rectangle(triangulation,
-                                   Point<dim>{1, 0},
-                                   Point<dim>{2, 1},
-                                   true);
-    for (const auto &cell : triangulation.active_cell_iterators())
-      for (const auto &face : cell->face_iterators())
-        if (face->at_boundary() == true)
-          {
-            // Boundaries for the dirichlet boundary
-            if (face->boundary_id() != 0)
-              face->set_boundary_id(dirichlet_boundary_id);
-            else
-              face->set_boundary_id(
-                TestCases::TestCaseBase<dim>::interface_id);
-          }
-
+    Assert(testcase.get() != nullptr, ExcInternalError());
+    testcase->make_coarse_grid_and_bcs(triangulation);
     triangulation.refine_global(parameters.n_global_refinement);
-    //    AssertThrow(interface_boundary_id ==
-    //    adapter.deal_boundary_interface_id,
-    //                ExcMessage("Wrong interface ID in the Adapter
-    //                specified"));
   }
 
 
@@ -470,19 +399,9 @@ namespace Heat_Transfer
           << std::endl;
     pcout.get_stream().imbue(s);
 
-    IndexSet locally_relevant_dofs;
-    DoFTools::extract_locally_relevant_dofs(dof_handler, locally_relevant_dofs);
-
-    constraints.clear();
-    constraints.reinit(locally_relevant_dofs);
-    DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-    VectorTools::interpolate_boundary_values(mapping,
-                                             dof_handler,
-                                             dirichlet_boundary_id,
-                                             analytic_solution,
-                                             constraints);
-    constraints.close();
-
+    // Fill the constraint object with the specified dirichlet boundary
+    // conditions
+    apply_boundary_condition();
     {
       // Set up two matrix-free objects: one for the homogenous part and one for
       // the inhomogenous part (without any constraints)
@@ -527,13 +446,20 @@ namespace Heat_Transfer
 
     const unsigned int nlevels = triangulation.n_global_levels();
     mg_matrices.resize(0, nlevels - 1);
-
-    std::set<types::boundary_id> dirichlet_boundary;
-    dirichlet_boundary.insert(dirichlet_boundary_id);
     mg_constrained_dofs.initialize(dof_handler);
 
-    mg_constrained_dofs.make_zero_boundary_constraints(dof_handler,
-                                                       dirichlet_boundary);
+    // Set constraints on Dirichlet boundaries
+    for (const auto &el : testcase->dirichlet)
+      {
+        const auto &mask = testcase->dirichlet_mask.find(el.first);
+        Assert(mask != testcase->dirichlet_mask.end(),
+               ExcMessage("Could not find component mask for ID " +
+                          std::to_string(el.first)));
+
+        mg_constrained_dofs.make_zero_boundary_constraints(dof_handler,
+                                                           {el.first},
+                                                           mask->second);
+      }
 
     for (unsigned int level = 0; level < nlevels; ++level)
       {
@@ -578,19 +504,31 @@ namespace Heat_Transfer
     TimerOutput::Scope t(timer, "assemble rhs");
     apply_boundary_condition();
 
+    //... and fill in the constraints into the solution vector (non-homogenous
+    // part)
+    constraints.distribute(solution);
+
+    // Compute effect of the non-homogenous boundary condition on the system_rhs
+    system_rhs = 0;
+    inhomogeneous_operator.vmult(system_rhs, solution);
+    system_rhs *= -1.0;
+
     const auto data = inhomogeneous_operator.get_matrix_free();
     // Do not reset system_rhs here as it holds the non-homogenous boundary
     // condition
-    FECellIntegrator   phi(*data);
-    RightHandSide<dim> rhs_function(alpha, beta);
-    const auto         dt = make_vectorized_array<double>(time.get_delta_t());
+    FECellIntegrator phi(*data);
+    Assert(testcase->heat_transfer_rhs.get() != nullptr, ExcNotInitialized());
+
+    const auto dt = make_vectorized_array<double>(time.get_delta_t());
     for (unsigned int cell = 0; cell < data->n_cell_batches(); ++cell)
       {
         phi.reinit(cell);
         phi.gather_evaluate(solution_old, EvaluationFlags::values);
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           phi.submit_value(phi.get_value(q) +
-                             (dt * rhs_function.value(phi.quadrature_point(q))),
+                             (dt * evaluate_function<dim, double>(
+                                     *(testcase->heat_transfer_rhs),
+                                     phi.quadrature_point(q))),
                            q);
         phi.integrate_scatter(EvaluationFlags::values, system_rhs);
       }
@@ -639,29 +577,29 @@ namespace Heat_Transfer
   void
   LaplaceProblem<dim>::apply_boundary_condition()
   {
-    // Set the time in the analytic solution
-    analytic_solution.set_time(time.current());
-
     // Update the constraints object
     constraints.clear();
     IndexSet locally_relevant_dofs;
     DoFTools::extract_locally_relevant_dofs(dof_handler, locally_relevant_dofs);
     constraints.reinit(locally_relevant_dofs);
-    DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-    VectorTools::interpolate_boundary_values(mapping,
-                                             dof_handler,
-                                             dirichlet_boundary_id,
-                                             analytic_solution,
-                                             constraints);
-    constraints.close();
-    //... and fill in the constraints into the solution vector (non-homogenous
-    // part)
-    constraints.distribute(solution);
 
-    // Compute effect of the non-homogenous boundary condition on the system_rhs
-    system_rhs = 0;
-    inhomogeneous_operator.vmult(system_rhs, solution);
-    system_rhs *= -1.0;
+    for (const auto &el : testcase->dirichlet)
+      {
+        const auto &mask = testcase->dirichlet_mask.find(el.first);
+        Assert(mask != testcase->dirichlet_mask.end(),
+               ExcMessage("Could not find component mask for ID " +
+                          std::to_string(el.first)));
+
+        // Assumption: number of constrained dofs stays the sam throughout the
+        // simulation. Otherwise the MG constrained dofs would need to be
+        // initialized here as well
+        Function<dim> *func = el.second.get();
+        // Set the time in the analytic solution
+        func->set_time(time.current());
+        VectorTools::interpolate_boundary_values(
+          mapping, dof_handler, el.first, *func, constraints, mask->second);
+      }
+    constraints.close();
   }
 
 
@@ -774,13 +712,18 @@ namespace Heat_Transfer
 
   template <int dim>
   void
-  LaplaceProblem<dim>::run()
+  LaplaceProblem<dim>::run(
+    std::shared_ptr<TestCases::TestCaseBase<dim>> testcase_)
   {
+    testcase = testcase_;
     make_grid();
 
-    analytic_solution.set_time(0);
     setup_system();
-    VectorTools::interpolate(dof_handler, analytic_solution, solution);
+    Assert(testcase->initial_condition.get() != nullptr, ExcNotInitialized());
+    testcase->initial_condition->set_time(0.0);
+    VectorTools::interpolate(dof_handler,
+                             *(testcase->initial_condition),
+                             solution);
     solution_old = solution;
     output_results(0);
     time.increment();

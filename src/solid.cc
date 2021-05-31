@@ -41,7 +41,7 @@ main(int argc, char *argv[])
         {
           // query the testcase
           TestCases::CaseSelector<2> selector;
-          auto testcase = selector.get_test_case(case_name);
+          auto testcase = selector.get_test_case(case_name, "elasticity");
           Parameters::AllParameters<2> parameters(parameter_filename);
           Solid<2, double>             solid_2d(parameters);
           solid_2d.run(testcase);
@@ -50,7 +50,7 @@ main(int argc, char *argv[])
         {
           // query the testcase
           TestCases::CaseSelector<3> selector;
-          auto testcase = selector.get_test_case(case_name);
+          auto testcase = selector.get_test_case(case_name, "elasticity");
           Parameters::AllParameters<3> parameters(parameter_filename);
           Solid<3, double>             solid_3d(parameters);
           solid_3d.run(testcase);

@@ -26,6 +26,8 @@ namespace TestCases
     // Optional TODO in case of more involved BCs: use FunctionParser
     std::map<types::boundary_id, std::unique_ptr<Function<dim>>> dirichlet;
     std::map<types::boundary_id, ComponentMask>                  dirichlet_mask;
+    std::unique_ptr<Function<dim>> initial_condition;
+    std::unique_ptr<Function<dim>> heat_transfer_rhs;
 
     virtual void
     make_coarse_grid_and_bcs(Triangulation<dim> &triangulation) = 0;

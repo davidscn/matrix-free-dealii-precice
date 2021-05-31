@@ -23,8 +23,10 @@ main(int argc, char *argv[])
       // Disable multi-threading
       Utilities::MPI::MPI_InitFinalize mpi_init(argc, argv, 1);
 
-      const unsigned int degree = fesystem.poly_degree;
-      const unsigned int dim    = geometry.dim;
+      const unsigned int degree    = fesystem.poly_degree;
+      const unsigned int dim       = geometry.dim;
+      const std::string  case_name = geometry.testcase;
+
 
       if (degree == 0)
         AssertThrow(degree > 0, ExcInternalError());
@@ -32,16 +34,20 @@ main(int argc, char *argv[])
       if (dim == 2)
         {
           // query the testcase
+          TestCases::CaseSelector<2> selector;
+          auto testcase = selector.get_test_case(case_name, "heat_transfer");
           FSI::Parameters::AllParameters<2> parameters(parameter_filename);
           LaplaceProblem<2>                 laplace_problem(parameters);
-          laplace_problem.run();
+          laplace_problem.run(testcase);
         }
       else if (dim == 3)
         {
           // query the testcase
+          TestCases::CaseSelector<3> selector;
+          auto testcase = selector.get_test_case(case_name, "heat_transfer");
           FSI::Parameters::AllParameters<3> parameters(parameter_filename);
           LaplaceProblem<3>                 laplace_problem(parameters);
-          laplace_problem.run();
+          laplace_problem.run(testcase);
         }
       else
         {
