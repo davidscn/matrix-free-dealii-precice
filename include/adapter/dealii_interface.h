@@ -22,11 +22,11 @@ namespace Adapter
   public:
     dealiiInterface(
       std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
-      std::shared_ptr<precice::SolverInterface> precice,
-      const std::string                         mesh_name,
-      const types::boundary_id                  interface_id,
-      const int                                 mf_dof_index,
-      const int                                 mf_quad_index)
+      const std::shared_ptr<precice::SolverInterface> &precice,
+      const std::string &                              mesh_name,
+      const types::boundary_id                         interface_id,
+      const int                                        mf_dof_index,
+      const int                                        mf_quad_index)
       : CouplingInterface<dim, data_dim, VectorizedArrayType>(data,
                                                               precice,
                                                               mesh_name,

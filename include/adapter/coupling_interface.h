@@ -23,9 +23,9 @@ namespace Adapter
   public:
     CouplingInterface(
       std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
-      std::shared_ptr<precice::SolverInterface> precice,
-      const std::string                         mesh_name,
-      const types::boundary_id                  interface_id);
+      const std::shared_ptr<precice::SolverInterface> &precice,
+      const std::string &                              mesh_name,
+      const types::boundary_id                         interface_id);
 
     virtual ~CouplingInterface() = default;
 
@@ -117,8 +117,8 @@ namespace Adapter
   template <int dim, int data_dim, typename VectorizedArrayType>
   CouplingInterface<dim, data_dim, VectorizedArrayType>::CouplingInterface(
     std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
-    std::shared_ptr<precice::SolverInterface>                           precice,
-    const std::string        mesh_name,
+    const std::shared_ptr<precice::SolverInterface> &                   precice,
+    const std::string &      mesh_name,
     const types::boundary_id interface_id)
     : mf_data(data)
     , precice(precice)
