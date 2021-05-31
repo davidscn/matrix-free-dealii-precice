@@ -30,6 +30,7 @@
 #include <deal.II/numerics/vector_tools.h>
 
 #include <adapter/precice_adapter.h>
+#include <base/fe_integrator.h>
 #include <base/time_handler.h>
 #include <cases/case_selector.h>
 #include <parameter/parameter_handling.h>
@@ -41,10 +42,6 @@
 namespace Heat_Transfer
 {
   using namespace dealii;
-
-
-  const unsigned int degree_finite_element = 2;
-  const unsigned int dimension             = 2;
 
   /**
    *The coefficient is constant equal to one, at the moment. The class is kept
@@ -79,7 +76,7 @@ namespace Heat_Transfer
   }
 
 
-  template <int dim, int fe_degree, typename number>
+  template <int dim, typename number>
   class LaplaceOperator
     : public MatrixFreeOperators::
         Base<dim, LinearAlgebra::distributed::Vector<number>>
@@ -87,9 +84,9 @@ namespace Heat_Transfer
   public:
     using value_type = number;
     using FECellIntegrator =
-      FEEvaluation<dim, fe_degree, fe_degree + 1, 1, number>;
+      FECellIntegrators<dim, 1, number, VectorizedArray<number>>;
     using FEFaceIntegrator =
-      FEFaceEvaluation<dim, fe_degree, fe_degree + 1, 1, number>;
+      FEFaceIntegrators<dim, 1, number, VectorizedArray<number>>;
 
     LaplaceOperator();
 
@@ -129,17 +126,17 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, int fe_degree, typename number>
-  LaplaceOperator<dim, fe_degree, number>::LaplaceOperator()
+  template <int dim, typename number>
+  LaplaceOperator<dim, number>::LaplaceOperator()
     : MatrixFreeOperators::Base<dim,
                                 LinearAlgebra::distributed::Vector<number>>()
   {}
 
 
 
-  template <int dim, int fe_degree, typename number>
+  template <int dim, typename number>
   void
-  LaplaceOperator<dim, fe_degree, number>::clear()
+  LaplaceOperator<dim, number>::clear()
   {
     coefficient.reinit(0, 0);
     MatrixFreeOperators::Base<dim, LinearAlgebra::distributed::Vector<number>>::
@@ -148,13 +145,13 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, int fe_degree, typename number>
+  template <int dim, typename number>
   void
-  LaplaceOperator<dim, fe_degree, number>::evaluate_coefficient(
+  LaplaceOperator<dim, number>::evaluate_coefficient(
     const Coefficient<dim> &coefficient_function)
   {
     const unsigned int n_cells = this->data->n_cell_batches();
-    FEEvaluation<dim, fe_degree, fe_degree + 1, 1, number> phi(*this->data);
+    FECellIntegrator   phi(*this->data);
 
     coefficient.reinit(n_cells, phi.n_q_points);
     for (unsigned int cell = 0; cell < n_cells; ++cell)
@@ -168,9 +165,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, int fe_degree, typename number>
+  template <int dim, typename number>
   void
-  LaplaceOperator<dim, fe_degree, number>::local_apply(
+  LaplaceOperator<dim, number>::local_apply(
     const MatrixFree<dim, number> &                   data,
     LinearAlgebra::distributed::Vector<number> &      dst,
     const LinearAlgebra::distributed::Vector<number> &src,
@@ -192,9 +189,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, int fe_degree, typename number>
+  template <int dim, typename number>
   void
-  LaplaceOperator<dim, fe_degree, number>::apply_add(
+  LaplaceOperator<dim, number>::apply_add(
     LinearAlgebra::distributed::Vector<number> &      dst,
     const LinearAlgebra::distributed::Vector<number> &src) const
   {
@@ -203,9 +200,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, int fe_degree, typename number>
+  template <int dim, typename number>
   void
-  LaplaceOperator<dim, fe_degree, number>::compute_diagonal()
+  LaplaceOperator<dim, number>::compute_diagonal()
   {
     this->inverse_diagonal_entries.reset(
       new DiagonalMatrix<LinearAlgebra::distributed::Vector<number>>());
@@ -232,9 +229,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, int fe_degree, typename number>
+  template <int dim, typename number>
   void
-  LaplaceOperator<dim, fe_degree, number>::do_operation_on_cell(
+  LaplaceOperator<dim, number>::do_operation_on_cell(
     FECellIntegrator &phi) const
   {
     Assert(delta_t > 0, ExcNotInitialized());
@@ -320,12 +317,10 @@ namespace Heat_Transfer
   class LaplaceProblem
   {
   public:
-    using FECellIntegrator = typename LaplaceOperator<dim,
-                                                      degree_finite_element,
-                                                      double>::FECellIntegrator;
-    using FEFaceIntegrator = typename LaplaceOperator<dim,
-                                                      degree_finite_element,
-                                                      double>::FEFaceIntegrator;
+    using FECellIntegrator =
+      typename LaplaceOperator<dim, double>::FECellIntegrator;
+    using FEFaceIntegrator =
+      typename LaplaceOperator<dim, double>::FEFaceIntegrator;
 
     using VectorType      = LinearAlgebra::distributed::Vector<double>;
     using LevelVectorType = LinearAlgebra::distributed::Vector<float>;
@@ -353,6 +348,7 @@ namespace Heat_Transfer
     parallel::distributed::Triangulation<dim> triangulation;
 
     FE_Q<dim>       fe;
+    const QGauss<1> quadrature_1d;
     DoFHandler<dim> dof_handler;
 
     MappingQ1<dim> mapping;
@@ -364,15 +360,14 @@ namespace Heat_Transfer
     AnalyticSolution<dim> analytic_solution;
 
     AffineConstraints<double> constraints;
-    using SystemMatrixType =
-      LaplaceOperator<dim, degree_finite_element, double>;
+    using SystemMatrixType = LaplaceOperator<dim, double>;
     SystemMatrixType system_matrix;
     // In order to operate with the non-homogenous Dirichlet BCs
     // TODO: use one operator with different constraint objects instead
     SystemMatrixType inhomogeneous_operator;
 
     MGConstrainedDoFs mg_constrained_dofs;
-    using LevelMatrixType = LaplaceOperator<dim, degree_finite_element, float>;
+    using LevelMatrixType = LaplaceOperator<dim, float>;
     MGLevelObject<LevelMatrixType> mg_matrices;
 
     VectorType solution;
@@ -402,6 +397,7 @@ namespace Heat_Transfer
                     parallel::distributed::Triangulation<
                       dim>::construct_multigrid_hierarchy)
     , fe(parameters.poly_degree)
+    , quadrature_1d(parameters.quad_order)
     , dof_handler(triangulation)
     , dirichlet_boundary_id(2)
     , alpha(3)
@@ -490,11 +486,8 @@ namespace Heat_Transfer
       // AdditionalData
       additional_data.mapping_update_flags_boundary_faces =
         (update_values | update_JxW_values | update_quadrature_points);
-      system_mf_storage->reinit(mapping,
-                                dof_handler,
-                                constraints,
-                                QGauss<1>(fe.degree + 1),
-                                additional_data);
+      system_mf_storage->reinit(
+        mapping, dof_handler, constraints, quadrature_1d, additional_data);
       system_matrix.initialize(system_mf_storage);
       system_matrix.evaluate_coefficient(Coefficient<dim>());
       system_matrix.set_delta_t(time.get_delta_t());
@@ -504,11 +497,8 @@ namespace Heat_Transfer
       no_constraints.close();
       std::shared_ptr<MatrixFree<dim, double>> matrix_free(
         new MatrixFree<dim, double>());
-      matrix_free->reinit(mapping,
-                          dof_handler,
-                          no_constraints,
-                          QGauss<1>(fe.degree + 1),
-                          additional_data);
+      matrix_free->reinit(
+        mapping, dof_handler, no_constraints, quadrature_1d, additional_data);
       inhomogeneous_operator.initialize(matrix_free);
 
 
@@ -553,7 +543,7 @@ namespace Heat_Transfer
         mg_mf_storage_level->reinit(mapping,
                                     dof_handler,
                                     level_constraints,
-                                    QGauss<1>(fe.degree + 1),
+                                    quadrature_1d,
                                     additional_data);
 
         mg_matrices[level].initialize(mg_mf_storage_level,
@@ -591,7 +581,11 @@ namespace Heat_Transfer
       }
 
     FEFaceIntegrator phi_face(*data);
-    unsigned int     q_index = 0;
+    Assert(
+      phi_face.fast_evaluation_supported(fe.degree, quadrature_1d.size()),
+      ExcMessage(
+        "The given combination of the polynomial degree and quadrature order is not supported by default."));
+    unsigned int q_index = 0;
 
     for (unsigned int face = data->n_inner_face_batches();
          face < data->n_boundary_face_batches() + data->n_inner_face_batches();
