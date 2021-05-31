@@ -436,7 +436,7 @@ namespace Heat_Transfer
               face->set_boundary_id(dirichlet_boundary_id);
             else
               face->set_boundary_id(
-                FSI::TestCases::TestCaseBase<dim>::interface_id);
+                TestCases::TestCaseBase<dim>::interface_id);
           }
 
     triangulation.refine_global(parameters.n_global_refinement);
@@ -458,8 +458,17 @@ namespace Heat_Transfer
     dof_handler.distribute_dofs(fe);
     dof_handler.distribute_mg_dofs();
 
-    pcout << "Number of degrees of freedom: " << dof_handler.n_dofs()
+    std::locale s = pcout.get_stream().getloc();
+    pcout.get_stream().imbue(std::locale(""));
+    pcout << "--     . dim       = " << dim << "\n"
+          << "--     . fe_degree = " << fe.degree << "\n"
+          << "--     . 1d_quad   = " << quadrature_1d.size() << "\n"
+          << "--     . Number of active cells: "
+          << triangulation.n_global_active_cells() << "\n"
+          << "--     . Number of degrees of freedom: " << dof_handler.n_dofs()
+          << "\n"
           << std::endl;
+    pcout.get_stream().imbue(s);
 
     IndexSet locally_relevant_dofs;
     DoFTools::extract_locally_relevant_dofs(dof_handler, locally_relevant_dofs);
@@ -600,7 +609,7 @@ namespace Heat_Transfer
         const auto boundary_id = data->get_boundary_id(face);
 
         // Only interfaces
-        if (boundary_id != int(FSI::TestCases::TestCaseBase<dim>::interface_id))
+        if (boundary_id != int(TestCases::TestCaseBase<dim>::interface_id))
           continue;
 
         // Read out the total displacment
@@ -779,7 +788,7 @@ namespace Heat_Transfer
     precice_adapter = std::make_unique<
       Adapter::Adapter<dim, 1, VectorType, VectorizedArray<double>>>(
       parameters,
-      int(FSI::TestCases::TestCaseBase<dim>::interface_id),
+      int(TestCases::TestCaseBase<dim>::interface_id),
       system_matrix.get_matrix_free());
     precice_adapter->initialize(solution);
 

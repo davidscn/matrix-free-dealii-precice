@@ -16,50 +16,46 @@
 
 using namespace dealii;
 
-namespace FSI
+namespace TestCases
 {
-  namespace TestCases
+  template <int dim>
+  struct TestCaseBase
   {
-    template <int dim>
-    struct TestCaseBase
-    {
-    public:
-      static constexpr types::boundary_id interface_id = 11;
-      // Optional TODO in case of more involved BCs: use FunctionParser
-      std::map<types::boundary_id, std::unique_ptr<Function<dim>>> dirichlet;
-      std::map<types::boundary_id, ComponentMask> dirichlet_mask;
+  public:
+    static constexpr types::boundary_id interface_id = 11;
+    // Optional TODO in case of more involved BCs: use FunctionParser
+    std::map<types::boundary_id, std::unique_ptr<Function<dim>>> dirichlet;
+    std::map<types::boundary_id, ComponentMask>                  dirichlet_mask;
 
-      virtual void
-      make_coarse_grid_and_bcs(Triangulation<dim> &triangulation) = 0;
+    virtual void
+    make_coarse_grid_and_bcs(Triangulation<dim> &triangulation) = 0;
 
-      virtual ~TestCaseBase() = default;
+    virtual ~TestCaseBase() = default;
 
-    protected:
-      void
-      refine_boundary(Triangulation<dim> &     triangulation,
-                      const types::boundary_id boundary_id) const;
-    };
-
-
-
-    template <int dim>
+  protected:
     void
-    TestCaseBase<dim>::refine_boundary(
-      Triangulation<dim> &     triangulation,
-      const types::boundary_id boundary_id) const
-    {
-      for (const auto &cell : triangulation.active_cell_iterators())
-        {
-          for (auto f : GeometryInfo<dim>::face_indices())
-            {
-              const auto face = cell->face(f);
+    refine_boundary(Triangulation<dim> &     triangulation,
+                    const types::boundary_id boundary_id) const;
+  };
 
-              if (face->at_boundary() && face->boundary_id() == boundary_id)
-                cell->set_refine_flag();
-            }
-        }
-      triangulation.prepare_coarsening_and_refinement();
-      triangulation.execute_coarsening_and_refinement();
-    }
-  } // namespace TestCases
-} // namespace FSI
+
+
+  template <int dim>
+  void
+  TestCaseBase<dim>::refine_boundary(Triangulation<dim> &     triangulation,
+                                     const types::boundary_id boundary_id) const
+  {
+    for (const auto &cell : triangulation.active_cell_iterators())
+      {
+        for (auto f : GeometryInfo<dim>::face_indices())
+          {
+            const auto face = cell->face(f);
+
+            if (face->at_boundary() && face->boundary_id() == boundary_id)
+              cell->set_refine_flag();
+          }
+      }
+    triangulation.prepare_coarsening_and_refinement();
+    triangulation.execute_coarsening_and_refinement();
+  }
+} // namespace TestCases
