@@ -3,7 +3,6 @@
 #include <deal.II/matrix_free/fe_evaluation.h>
 
 #include <adapter/coupling_interface.h>
-#include <utilities/fe_integrator.h>
 
 namespace Adapter
 {
@@ -13,29 +12,35 @@ namespace Adapter
    * Derived class of the CouplingInterface: the classical coupling approach,
    * where each participant defines an interface based on the locally owned
    * triangulation. Here, quadrature points are used for reading and writing.
+   * data_dim is equivalent to n_components, indicating the type of your data in
+   * the preCICE sense (Vector vs Scalar)
    */
-  template <int dim, typename VectorizedArrayType>
-  class dealiiInterface : public CouplingInterface<dim, VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
+  class dealiiInterface
+    : public CouplingInterface<dim, data_dim, VectorizedArrayType>
   {
   public:
     dealiiInterface(
-      std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>> data,
-      std::shared_ptr<precice::SolverInterface>                     precice,
-      const std::string                                             mesh_name,
-      const types::boundary_id interface_id,
-      const int                mf_dof_index,
-      const int                mf_quad_index)
-      : CouplingInterface<dim, VectorizedArrayType>(data,
-                                                    precice,
-                                                    mesh_name,
-                                                    interface_id)
+      std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
+      std::shared_ptr<precice::SolverInterface> precice,
+      const std::string                         mesh_name,
+      const types::boundary_id                  interface_id,
+      const int                                 mf_dof_index,
+      const int                                 mf_quad_index)
+      : CouplingInterface<dim, data_dim, VectorizedArrayType>(data,
+                                                              precice,
+                                                              mesh_name,
+                                                              interface_id)
       , mf_dof_index(mf_dof_index)
       , mf_quad_index(mf_quad_index)
     {}
 
+    ~dealiiInterface() = default;
+
     /// Alias for the face integrator
     using FEFaceIntegrator =
-      FEFaceIntegrators<dim, dim, double, VectorizedArrayType>;
+      FEFaceIntegrators<dim, data_dim, double, VectorizedArrayType>;
+    using value_type = typename FEFaceIntegrator::value_type;
     /**
      * @brief define_mesh_vertices Define a vertex coupling mesh for preCICE
      *        coupling the classical preCICE way
@@ -57,7 +62,7 @@ namespace Adapter
 
 
     /**
-     * @brief read_on_quadrature_point Returns the dim dimensional read data
+     * @brief read_on_quadrature_point Returns the data_dim dimensional read data
      *        given the ID of the interface node we want to access.
      *
      * @param[in]  id_number Number of the quadrature point (counting from zero
@@ -73,7 +78,7 @@ namespace Adapter
      *
      * @return dim dimensional data associated to the interface node
      */
-    virtual Tensor<1, dim, VectorizedArrayType>
+    virtual value_type
     read_on_quadrature_point(const unsigned int id_number,
                              const unsigned int active_faces) const override;
 
@@ -94,9 +99,9 @@ namespace Adapter
 
 
 
-  template <int dim, typename VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
   void
-  dealiiInterface<dim, VectorizedArrayType>::define_coupling_mesh()
+  dealiiInterface<dim, data_dim, VectorizedArrayType>::define_coupling_mesh()
   {
     Assert(this->mesh_id != -1, ExcNotInitialized());
 
@@ -163,9 +168,9 @@ namespace Adapter
 
 
 
-  template <int dim, typename VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
   void
-  dealiiInterface<dim, VectorizedArrayType>::write_data(
+  dealiiInterface<dim, data_dim, VectorizedArrayType>::write_data(
     const LinearAlgebra::distributed::Vector<double> &data_vector)
   {
     Assert(this->write_data_id != -1, ExcNotInitialized());
@@ -174,7 +179,10 @@ namespace Adapter
     FEFaceIntegrator phi(*this->mf_data, true, mf_dof_index, mf_quad_index);
 
     // In order to unroll the vectorization
-    std::array<double, dim * VectorizedArrayType::size()> unrolled_local_data;
+    std::array<double, data_dim * VectorizedArrayType::size()>
+      unrolled_local_data;
+    (void)unrolled_local_data;
+
     auto index = interface_nodes_ids.begin();
 
     // Loop over all faces
@@ -191,7 +199,8 @@ namespace Adapter
 
         // Read and interpolate
         phi.reinit(face);
-        phi.gather_evaluate(data_vector, EvaluationFlags::values);
+        phi.read_dof_values_plain(data_vector);
+        phi.evaluate(EvaluationFlags::values);
         const int active_faces =
           this->mf_data->n_active_entries_per_face_batch(face);
 
@@ -200,16 +209,28 @@ namespace Adapter
             const auto local_data = phi.get_value(q);
             Assert(index != interface_nodes_ids.end(), ExcInternalError());
 
-            // Transform Tensor<1,dim,VectorizedArrayType> into preCICE conform
-            // format
-            for (int d = 0; d < dim; ++d)
-              for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
-                unrolled_local_data[d + dim * v] = local_data[d][v];
+            // Constexpr evaluation required in order to comply with the
+            // compiler here
+            if constexpr (data_dim > 1)
+              {
+                // Transform Tensor<1,dim,VectorizedArrayType> into preCICE
+                // conform format
+                for (int d = 0; d < data_dim; ++d)
+                  for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
+                    unrolled_local_data[d + data_dim * v] = local_data[d][v];
 
-            this->precice->writeBlockVectorData(this->write_data_id,
-                                                active_faces,
-                                                index->data(),
-                                                unrolled_local_data.data());
+                this->precice->writeBlockVectorData(this->write_data_id,
+                                                    active_faces,
+                                                    index->data(),
+                                                    unrolled_local_data.data());
+              }
+            else
+              {
+                this->precice->writeBlockScalarData(this->write_data_id,
+                                                    active_faces,
+                                                    index->data(),
+                                                    &local_data[0]);
+              }
             ++index;
           }
       }
@@ -217,36 +238,50 @@ namespace Adapter
 
 
 
-  template <int dim, typename VectorizedArrayType>
-  inline Tensor<1, dim, VectorizedArrayType>
-  dealiiInterface<dim, VectorizedArrayType>::read_on_quadrature_point(
-    const unsigned int id_number,
-    const unsigned int active_faces) const
+  template <int dim, int data_dim, typename VectorizedArrayType>
+  inline
+    typename dealiiInterface<dim, data_dim, VectorizedArrayType>::value_type
+    dealiiInterface<dim, data_dim, VectorizedArrayType>::
+      read_on_quadrature_point(const unsigned int id_number,
+                               const unsigned int active_faces) const
   {
     // Assert input
     Assert(active_faces <= VectorizedArrayType::size(), ExcInternalError());
     AssertIndexRange(id_number, interface_nodes_ids.size());
     Assert(this->read_data_id != -1, ExcNotInitialized());
 
-    Tensor<1, dim, VectorizedArrayType>                   dealii_data;
-    std::array<double, dim * VectorizedArrayType::size()> precice_data;
+    value_type dealii_data;
     const auto vertex_ids = &interface_nodes_ids[id_number];
-    this->precice->readBlockVectorData(this->read_data_id,
-                                       active_faces,
-                                       vertex_ids->data(),
-                                       precice_data.data());
-    // Transform back to Tensor format
-    for (int d = 0; d < dim; ++d)
-      for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
-        dealii_data[d][v] = precice_data[d + dim * v];
+    // Vector valued case
+    if constexpr (data_dim > 1)
+      {
+        std::array<double, data_dim * VectorizedArrayType::size()> precice_data;
+        this->precice->readBlockVectorData(this->read_data_id,
+                                           active_faces,
+                                           vertex_ids->data(),
+                                           precice_data.data());
+        // Transform back to Tensor format
+        for (int d = 0; d < data_dim; ++d)
+          for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
+            dealii_data[d][v] = precice_data[d + data_dim * v];
+      }
+    else
+      {
+        // Scalar case
+        this->precice->readBlockScalarData(this->read_data_id,
+                                           active_faces,
+                                           vertex_ids->data(),
+                                           &dealii_data[0]);
+      }
 
     return dealii_data;
   }
 
 
-  template <int dim, typename VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
   std::string
-  dealiiInterface<dim, VectorizedArrayType>::get_interface_type() const
+  dealiiInterface<dim, data_dim, VectorizedArrayType>::get_interface_type()
+    const
   {
     return "quadrature points using matrix-free index " +
            Utilities::to_string(mf_quad_index);

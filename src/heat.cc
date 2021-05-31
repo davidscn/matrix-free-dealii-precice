@@ -27,6 +27,8 @@
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/vector_tools.h>
 
+#include <adapter/precice_adapter.h>
+#include <cases/case_selector.h>
 #include <parameter/parameter_handling.h>
 
 #include <fstream>
@@ -130,7 +132,8 @@ namespace Heat_Transfer
     using value_type = number;
     using FECellIntegrator =
       FEEvaluation<dim, fe_degree, fe_degree + 1, 1, number>;
-
+    using FEFaceIntegrator =
+      FEFaceEvaluation<dim, fe_degree, fe_degree + 1, 1, number>;
 
     LaplaceOperator();
 
@@ -364,6 +367,12 @@ namespace Heat_Transfer
     using FECellIntegrator = typename LaplaceOperator<dim,
                                                       degree_finite_element,
                                                       double>::FECellIntegrator;
+    using FEFaceIntegrator = typename LaplaceOperator<dim,
+                                                      degree_finite_element,
+                                                      double>::FEFaceIntegrator;
+
+    using VectorType = LinearAlgebra::distributed::Vector<double>;
+
     LaplaceProblem(const FSI::Parameters::AllParameters<dim> &parameters);
     void
     run();
@@ -409,13 +418,18 @@ namespace Heat_Transfer
     using LevelMatrixType = LaplaceOperator<dim, degree_finite_element, float>;
     MGLevelObject<LevelMatrixType> mg_matrices;
 
-    LinearAlgebra::distributed::Vector<double> solution;
-    LinearAlgebra::distributed::Vector<double> solution_old;
-    LinearAlgebra::distributed::Vector<double> system_rhs;
+    VectorType solution;
+    VectorType solution_old;
+    VectorType solution_update;
+    VectorType system_rhs;
+    std::unique_ptr<
+      Adapter::Adapter<dim, 1, VectorType, VectorizedArray<double>>>
+      precice_adapter;
 
-    double             setup_time;
-    ConditionalOStream pcout;
-    ConditionalOStream time_details;
+    ConditionalOStream  pcout;
+    mutable TimerOutput timer;
+    unsigned long int   total_n_cg_iterations;
+    unsigned int        total_n_cg_solve;
 
     Time time;
   };
@@ -436,11 +450,10 @@ namespace Heat_Transfer
     , alpha(3)
     , beta(1.3)
     , analytic_solution(alpha, beta)
-    , setup_time(0.)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
-    , time_details(std::cout,
-                   false &&
-                     Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+    , timer(pcout, TimerOutput::never, TimerOutput::wall_times)
+    , total_n_cg_iterations(0)
+    , total_n_cg_solve(0)
     , time(parameters.end_time, parameters.delta_t)
 
   {}
@@ -460,8 +473,11 @@ namespace Heat_Transfer
         if (face->at_boundary() == true)
           {
             // Boundaries for the dirichlet boundary
-            //            if (face->boundary_id() != 0)
-            face->set_boundary_id(dirichlet_boundary_id);
+            if (face->boundary_id() != 0)
+              face->set_boundary_id(dirichlet_boundary_id);
+            else
+              face->set_boundary_id(
+                FSI::TestCases::TestCaseBase<dim>::interface_id);
           }
 
     triangulation.refine_global(parameters.n_global_refinement);
@@ -477,9 +493,6 @@ namespace Heat_Transfer
   void
   LaplaceProblem<dim>::setup_system()
   {
-    Timer timer;
-    setup_time = 0;
-
     system_matrix.clear();
     mg_matrices.clear_elements();
 
@@ -501,10 +514,6 @@ namespace Heat_Transfer
                                              analytic_solution,
                                              constraints);
     constraints.close();
-    setup_time += timer.wall_time();
-    time_details << "Distribute DoFs & B.C.     (CPU/wall) " << timer.cpu_time()
-                 << "s/" << timer.wall_time() << "s" << std::endl;
-    timer.restart();
 
     {
       // Set up two matrix-free objects: one for the homogenous part and one for
@@ -517,6 +526,13 @@ namespace Heat_Transfer
          update_quadrature_points);
       std::shared_ptr<MatrixFree<dim, double>> system_mf_storage(
         new MatrixFree<dim, double>());
+      // FIXME: The boundary face flag is only for the RHS assembly required in
+      // order to apply the coupling data. Here, only the second MatrixFree
+      // object is required. In order to ensure compatibility of the global
+      // vectors, we initialize both MatrixFree objects with the same
+      // AdditionalData
+      additional_data.mapping_update_flags_boundary_faces =
+        (update_values | update_JxW_values | update_quadrature_points);
       system_mf_storage->reinit(mapping,
                                 dof_handler,
                                 constraints,
@@ -531,7 +547,8 @@ namespace Heat_Transfer
       no_constraints.close();
       std::shared_ptr<MatrixFree<dim, double>> matrix_free(
         new MatrixFree<dim, double>());
-      matrix_free->reinit(dof_handler,
+      matrix_free->reinit(mapping,
+                          dof_handler,
                           no_constraints,
                           QGauss<1>(fe.degree + 1),
                           additional_data);
@@ -543,12 +560,8 @@ namespace Heat_Transfer
     }
     system_matrix.initialize_dof_vector(solution);
     system_matrix.initialize_dof_vector(solution_old);
+    system_matrix.initialize_dof_vector(solution_update);
     system_matrix.initialize_dof_vector(system_rhs);
-
-    setup_time += timer.wall_time();
-    time_details << "Setup matrix-free system   (CPU/wall) " << timer.cpu_time()
-                 << "s/" << timer.wall_time() << "s" << std::endl;
-    timer.restart();
 
     const unsigned int nlevels = triangulation.n_global_levels();
     mg_matrices.resize(0, nlevels - 1);
@@ -592,9 +605,6 @@ namespace Heat_Transfer
         mg_matrices[level].evaluate_coefficient(Coefficient<dim>());
         mg_matrices[level].set_delta_t(time.get_delta_t());
       }
-    setup_time += timer.wall_time();
-    time_details << "Setup matrix-free levels   (CPU/wall) " << timer.cpu_time()
-                 << "s/" << timer.wall_time() << "s" << std::endl;
   }
 
 
@@ -603,34 +613,58 @@ namespace Heat_Transfer
   void
   LaplaceProblem<dim>::assemble_rhs()
   {
-    Timer timer;
-
+    TimerOutput::Scope t(timer, "assemble rhs");
     apply_boundary_condition();
 
+    const auto data = inhomogeneous_operator.get_matrix_free();
     // Do not reset system_rhs here as it holds the non-homogenous boundary
     // condition
-    FECellIntegrator   phi(*inhomogeneous_operator.get_matrix_free());
+    FECellIntegrator   phi(*data);
     RightHandSide<dim> rhs_function(alpha, beta);
     const auto         dt = make_vectorized_array<double>(time.get_delta_t());
-    for (unsigned int cell = 0;
-         cell < system_matrix.get_matrix_free()->n_cell_batches();
-         ++cell)
+    for (unsigned int cell = 0; cell < data->n_cell_batches(); ++cell)
       {
         phi.reinit(cell);
-        phi.read_dof_values(solution_old);
-        phi.evaluate(EvaluationFlags::values);
+        phi.gather_evaluate(solution_old, EvaluationFlags::values);
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           phi.submit_value(phi.get_value(q) +
                              (dt * rhs_function.value(phi.quadrature_point(q))),
                            q);
-        phi.integrate(EvaluationFlags::values);
-        phi.distribute_local_to_global(system_rhs);
+        phi.integrate_scatter(EvaluationFlags::values, system_rhs);
       }
-    system_rhs.compress(VectorOperation::add);
 
-    setup_time += timer.wall_time();
-    time_details << "Assemble right hand side   (CPU/wall) " << timer.cpu_time()
-                 << "s/" << timer.wall_time() << "s" << std::endl;
+    FEFaceIntegrator phi_face(*data);
+    unsigned int     q_index = 0;
+
+    for (unsigned int face = data->n_inner_face_batches();
+         face < data->n_boundary_face_batches() + data->n_inner_face_batches();
+         ++face)
+      {
+        const auto boundary_id = data->get_boundary_id(face);
+
+        // Only interfaces
+        if (boundary_id != int(FSI::TestCases::TestCaseBase<dim>::interface_id))
+          continue;
+
+        // Read out the total displacment
+        phi_face.reinit(face);
+
+        // Number of active faces
+        const auto active_faces = data->n_active_entries_per_face_batch(face);
+
+        for (unsigned int q = 0; q < phi_face.n_q_points; ++q)
+          {
+            // Get the value from preCICE
+            const auto heat_flux =
+              precice_adapter->read_on_quadrature_point(q_index, active_faces);
+            phi_face.submit_value(-heat_flux * dt, q);
+            ++q_index;
+          }
+        // Integrate the result and write into the rhs vector
+        phi_face.integrate_scatter(EvaluationFlags::values, system_rhs);
+      }
+
+    system_rhs.compress(VectorOperation::add);
   }
 
 
@@ -670,13 +704,9 @@ namespace Heat_Transfer
   void
   LaplaceProblem<dim>::solve()
   {
-    Timer                            timer;
+    TimerOutput::Scope               t(timer, "solve system");
     MGTransferMatrixFree<dim, float> mg_transfer(mg_constrained_dofs);
     mg_transfer.build(dof_handler);
-    setup_time += timer.wall_time();
-    time_details << "MG build transfer time     (CPU/wall) " << timer.cpu_time()
-                 << "s/" << timer.wall_time() << "s\n";
-    timer.restart();
 
     using SmootherType =
       PreconditionChebyshev<LevelMatrixType,
@@ -735,26 +765,19 @@ namespace Heat_Transfer
 
     SolverControl solver_control(100, 1e-12 * system_rhs.l2_norm());
     SolverCG<LinearAlgebra::distributed::Vector<double>> cg(solver_control);
-    setup_time += timer.wall_time();
-    time_details << "MG build smoother time     (CPU/wall) " << timer.cpu_time()
-                 << "s/" << timer.wall_time() << "s\n";
-    pcout << "Total setup time               (wall) " << setup_time << "s\n";
-
-    timer.reset();
-    timer.start();
 
     // We misuse solution_old here for the solution update (the homogenous part)
     // The non-homogenous part is already included in the solution
-    cg.solve(system_matrix, solution_old, system_rhs, preconditioner);
+    solution_update = 0;
+    cg.solve(system_matrix, solution_update, system_rhs, preconditioner);
     // More or less a safety operation, as the constraints have already been
     // enforced
-    constraints.set_zero(solution_old);
+    constraints.set_zero(solution_update);
     // and update the complete solution = non-homogenous part + homogenous part
-    solution += solution_old;
+    solution += solution_update;
 
-    pcout << "Time solve (" << solver_control.last_step() << " iterations)"
-          << (solver_control.last_step() < 10 ? "  " : " ") << "(CPU/wall) "
-          << timer.cpu_time() << "s/" << timer.wall_time() << "s\n";
+    total_n_cg_iterations += solver_control.last_step();
+    ++total_n_cg_solve;
   }
 
 
@@ -763,7 +786,7 @@ namespace Heat_Transfer
   void
   LaplaceProblem<dim>::output_results(const unsigned int result_number) const
   {
-    Timer timer;
+    TimerOutput::Scope t(timer, "output");
 
     DataOut<dim> data_out;
 
@@ -784,10 +807,8 @@ namespace Heat_Transfer
 
     data_out.write_vtu_in_parallel(filename, MPI_COMM_WORLD);
 
-    time_details << "Time write output          (CPU/wall) " << timer.cpu_time()
-                 << "s/" << timer.wall_time() << "s\n";
-    pcout << "Output @ " << time.current() << "s written to solution_"
-          << result_number << std::endl;
+    pcout << "Output @ " << time.current() << "s written to " << filename
+          << std::endl;
   }
 
 
@@ -815,22 +836,48 @@ namespace Heat_Transfer
     output_results(0);
     time.increment();
 
-    while (time.current() < time.end())
+    precice_adapter = std::make_unique<
+      Adapter::Adapter<dim, 1, VectorType, VectorizedArray<double>>>(
+      parameters,
+      int(FSI::TestCases::TestCaseBase<dim>::interface_id),
+      system_matrix.get_matrix_free());
+    precice_adapter->initialize(solution);
+
+    while (precice_adapter->is_coupling_ongoing())
       {
+        precice_adapter->save_current_state_if_required([&]() {});
+
         assemble_rhs();
         solve();
+        {
+          TimerOutput::Scope t(timer, "advance preCICE");
+          precice_adapter->advance(solution, time.get_delta_t());
+        }
+        precice_adapter->reload_old_state_if_required(
+          [&]() { solution = solution_old; });
 
-        if (static_cast<int>(
-              std::round(time.current() / parameters.output_tick)) !=
-              static_cast<int>((time.current() - time.get_delta_t()) /
-                               parameters.output_tick) ||
-            time.current() >= time.end() - 1e-12)
-          output_results(static_cast<unsigned int>(
-            std::round(time.current() / parameters.output_tick)));
+        if (precice_adapter->is_time_window_complete())
+          {
+            if (static_cast<int>(
+                  std::round(time.current() / parameters.output_tick)) !=
+                  static_cast<int>((time.current() - time.get_delta_t()) /
+                                   parameters.output_tick) ||
+                time.current() >= time.end() - 1e-12)
+              output_results(static_cast<unsigned int>(
+                std::round(time.current() / parameters.output_tick)));
 
-        solution_old = solution;
-        time.increment();
+            // Increment and update
+            solution_old = solution;
+            time.increment();
+          }
       }
+    pcout << std::endl
+          << "Average CG iter = " << (total_n_cg_iterations / total_n_cg_solve)
+          << std::endl
+          << "Total CG iter = " << total_n_cg_iterations << std::endl
+          << "Total CG solve = " << total_n_cg_solve << std::endl;
+    timer.print_wall_time_statistics(MPI_COMM_WORLD);
+    pcout << std::endl;
   }
 } // namespace Heat_Transfer
 

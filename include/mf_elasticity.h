@@ -320,7 +320,7 @@ namespace FSI
       Material_Compressible_Neo_Hook_One_Field<dim, LevelVectorizedArrayType>>
       material_inclusion_level;
 
-    std::unique_ptr<Adapter::Adapter<dim, VectorType, VectorizedArrayType>>
+    std::unique_ptr<Adapter::Adapter<dim, dim, VectorType, VectorizedArrayType>>
       precice_adapter;
 
     static const unsigned int n_components      = dim;
@@ -698,11 +698,11 @@ namespace FSI
     // time domain.
     //
     setup_matrix_free();
-    precice_adapter =
-      std::make_unique<Adapter::Adapter<dim, VectorType, VectorizedArrayType>>(
-        parameters,
-        int(TestCases::TestCaseBase<dim>::interface_id),
-        mf_data_reference);
+    precice_adapter = std::make_unique<
+      Adapter::Adapter<dim, dim, VectorType, VectorizedArrayType>>(
+      parameters,
+      int(TestCases::TestCaseBase<dim>::interface_id),
+      mf_data_reference);
     precice_adapter->initialize(total_displacement);
 
     // At the beginning, we reset the solution update for this time step...

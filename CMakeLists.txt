@@ -91,20 +91,38 @@ DEAL_II_SETUP_TARGET(heat)
 DEAL_II_SETUP_TARGET(${TARGET})
 
 TARGET_LINK_LIBRARIES(${TARGET} precice::precice)
+TARGET_LINK_LIBRARIES(heat precice::precice)
 
 INCLUDE_DIRECTORIES (${CMAKE_CURRENT_BINARY_DIR}/include)
+
+# Some take over from deal.II's autopilot
+IF(CMAKE_GENERATOR MATCHES "Ninja")
+  SET(_make_command "$ ninja")
+ELSE()
+  SET(_make_command " $ make")
+ENDIF()
 
 #
 # Custom "debug" and "release" make targets:
 #
-ADD_CUSTOM_TARGET(debug
-COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=Debug ${CMAKE_SOURCE_DIR}
-COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target all
-COMMENT "Switch CMAKE_BUILD_TYPE to Debug"
-)
+IF(${DEAL_II_BUILD_TYPE} MATCHES "Debug")
+  ADD_CUSTOM_TARGET(debug
+    COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=Debug ${CMAKE_SOURCE_DIR}
+    COMMAND ${CMAKE_COMMAND} -E echo "***"
+    COMMAND ${CMAKE_COMMAND} -E echo "*** Switched to Debug mode. Now recompile with: ${_make_command}"
+    COMMAND ${CMAKE_COMMAND} -E echo "***"
+    COMMENT "Switching CMAKE_BUILD_TYPE to Debug"
+    VERBATIM
+    )
+ENDIF()
 
-ADD_CUSTOM_TARGET(release
-COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=Release ${CMAKE_SOURCE_DIR}
-COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target all
-COMMENT "Switch CMAKE_BUILD_TYPE to Release"
-)
+IF(${DEAL_II_BUILD_TYPE} MATCHES "Release")
+  ADD_CUSTOM_TARGET(release
+    COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=Release ${CMAKE_SOURCE_DIR}
+    COMMAND ${CMAKE_COMMAND} -E echo "***"
+    COMMAND ${CMAKE_COMMAND} -E echo "*** Switched to Release mode. Now recompile with: ${_make_command}"
+    COMMAND ${CMAKE_COMMAND} -E echo "***"
+    COMMENT "Switching CMAKE_BUILD_TYPE to Release"
+    VERBATIM
+    )
+ENDIF()
