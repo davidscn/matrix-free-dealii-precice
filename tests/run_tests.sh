@@ -34,7 +34,7 @@ print_result() {
 test_name="building"
 print_start ${test_name}
 mkdir -p build && cd build
-(cmake ../../ && make debug) >${test_name}.log
+(cmake ../../ && make debug && make all) >${test_name}.log
  if [ $? -eq 0 ]
     then
     echo -ne "${GREEN} passed ${NOCOLOR}\n"
