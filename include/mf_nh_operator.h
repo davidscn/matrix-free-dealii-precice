@@ -13,8 +13,8 @@
 
 #include <deal.II/multigrid/mg_constrained_dofs.h>
 
+#include <base/fe_integrator.h>
 #include <material.h>
-#include <utilities/fe_integrator.h>
 
 // Define an operation that takes two tensors $ \mathbf{A} $ and
 // $ \mathbf{B} $ such that their outer-product

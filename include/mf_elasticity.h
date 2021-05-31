@@ -62,14 +62,14 @@ static const unsigned int debug_level = 0;
 #include <deal.II/physics/transformations.h>
 
 #include <adapter/precice_adapter.h>
+#include <base/fe_integrator.h>
+#include <base/q_equidistant.h>
+#include <base/version.h>
 #include <cases/case_base.h>
 #include <material.h>
 #include <mf_nh_operator.h>
 #include <parameter/parameter_handling.h>
-#include <q_equidistant.h>
 #include <sys/stat.h>
-#include <utilities/fe_integrator.h>
-#include <version.h>
 
 #include <fstream>
 #include <iostream>

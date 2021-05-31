@@ -5,8 +5,8 @@
 
 #include <deal.II/matrix_free/matrix_free.h>
 
+#include <base/fe_integrator.h>
 #include <precice/SolverInterface.hpp>
-#include <utilities/fe_integrator.h>
 
 namespace Adapter
 {
