@@ -65,12 +65,12 @@ static const unsigned int debug_level = 0;
 #include <base/fe_integrator.h>
 #include <base/q_equidistant.h>
 #include <base/time_handler.h>
+#include <base/utilities.h>
 #include <base/version.h>
 #include <cases/case_base.h>
 #include <parameter/parameter_handling.h>
 #include <solid_mechanics/material.h>
 #include <solid_mechanics/mf_nh_operator.h>
-#include <sys/stat.h>
 
 #include <fstream>
 #include <iostream>
@@ -404,39 +404,7 @@ namespace FSI
     unsigned int      total_n_cg_solve;
   };
 
-  // @sect3{Implementation of the <code>Solid</code> class}
 
-  // @sect4{Public interface}
-
-  int
-  create_directory(std::string pathname, const mode_t mode)
-  {
-    // force trailing / so we can handle everything in loop
-    if (pathname[pathname.size() - 1] != '/')
-      {
-        pathname += '/';
-      }
-
-    size_t pre = 0;
-    size_t pos;
-
-    while ((pos = pathname.find_first_of('/', pre)) != std::string::npos)
-      {
-        const std::string subdir = pathname.substr(0, pos++);
-        pre                      = pos;
-
-        // if leading '/', first string is 0 length
-        if (subdir.size() == 0)
-          continue;
-
-        int mkdir_return_value;
-        if ((mkdir_return_value = mkdir(subdir.c_str(), mode)) &&
-            (errno != EEXIST))
-          return mkdir_return_value;
-      }
-
-    return 0;
-  }
 
   // We initialise the Solid class using data extracted from the parameter file.
   template <int dim, typename Number>
@@ -538,9 +506,7 @@ namespace FSI
         AssertThrow(gamma <= 1 && gamma >= 0, ExcInternalError());
         AssertThrow(2 * beta >= gamma, ExcInternalError());
         AssertThrow(gamma == 0 || gamma >= 0.5, ExcInternalError());
-        const int ierr =
-          create_directory(parameters.output_folder,
-                           S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+        const int ierr = Utilities::create_directory(parameters.output_folder);
         (void)ierr;
         Assert(ierr == 0,
                ExcMessage("can't create: " + parameters.output_folder));

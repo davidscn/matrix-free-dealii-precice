@@ -32,6 +32,7 @@
 #include <adapter/precice_adapter.h>
 #include <base/fe_integrator.h>
 #include <base/time_handler.h>
+#include <base/utilities.h>
 #include <cases/case_selector.h>
 #include <parameter/parameter_handling.h>
 
@@ -409,7 +410,11 @@ namespace Heat_Transfer
     , total_n_cg_solve(0)
     , time(parameters.end_time, parameters.delta_t)
 
-  {}
+  {
+    const int ierr = Utilities::create_directory(parameters.output_folder);
+    (void)ierr;
+    Assert(ierr == 0, ExcMessage("can't create: " + parameters.output_folder));
+  }
 
 
 
@@ -745,8 +750,9 @@ namespace Heat_Transfer
     flags.write_higher_order_cells = true;
     data_out.set_flags(flags);
 
-    const std::string filename =
-      "solution_" + Utilities::int_to_string(result_number, 3) + ".vtu";
+    const std::string filename = parameters.output_folder + "solution_" +
+                                 Utilities::int_to_string(result_number, 3) +
+                                 ".vtu";
 
     data_out.write_vtu_in_parallel(filename, MPI_COMM_WORLD);
 
