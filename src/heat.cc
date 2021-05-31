@@ -28,6 +28,7 @@
 #include <deal.II/numerics/vector_tools.h>
 
 #include <adapter/precice_adapter.h>
+#include <base/time_handler.h>
 #include <cases/case_selector.h>
 #include <parameter/parameter_handling.h>
 
@@ -42,53 +43,6 @@ namespace Heat_Transfer
 
   const unsigned int degree_finite_element = 2;
   const unsigned int dimension             = 2;
-
-
-  class Time
-  {
-  public:
-    Time(const double time_end, const double delta_t)
-      : timestep(0)
-      , time_current(0.0)
-      , time_end(time_end)
-      , delta_t(delta_t)
-    {}
-
-    virtual ~Time() = default;
-
-    double
-    current() const
-    {
-      return time_current;
-    }
-    double
-    end() const
-    {
-      return time_end;
-    }
-    double
-    get_delta_t() const
-    {
-      return delta_t;
-    }
-    unsigned int
-    get_timestep() const
-    {
-      return timestep;
-    }
-    void
-    increment()
-    {
-      time_current += delta_t;
-      ++timestep;
-    }
-
-  private:
-    unsigned int timestep;
-    double       time_current;
-    const double time_end;
-    const double delta_t;
-  };
 
   /**
    *The coefficient is constant equal to one, at the moment. The class is kept
