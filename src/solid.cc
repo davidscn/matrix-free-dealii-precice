@@ -26,42 +26,40 @@ main(int argc, char *argv[])
 
       prm.parse_input(parameter_filename, "", true);
 
-      {
-        // Disable multi-threading
-        Utilities::MPI::MPI_InitFinalize mpi_initialization(
-          argc, argv, 1 /*dealii::numbers::invalid_unsigned_int*/);
+      // Disable multi-threading
+      Utilities::MPI::MPI_InitFinalize mpi_initialization(
+        argc, argv, 1 /*dealii::numbers::invalid_unsigned_int*/);
 
-        const unsigned int degree    = fesystem.poly_degree;
-        const unsigned int dim       = geometry.dim;
-        const std::string  case_name = geometry.testcase;
+      const unsigned int degree    = fesystem.poly_degree;
+      const unsigned int dim       = geometry.dim;
+      const std::string  case_name = geometry.testcase;
 
-        if (degree == 0)
-          AssertThrow(degree > 0, ExcInternalError());
+      if (degree == 0)
+        AssertThrow(degree > 0, ExcInternalError());
 
-        if (dim == 2)
-          {
-            // query the testcase
-            TestCases::CaseSelector<2> selector;
-            auto testcase = selector.get_test_case(case_name);
-            Parameters::AllParameters<2> parameters(parameter_filename);
-            Solid<2, double>             solid_2d(parameters);
-            solid_2d.run(testcase);
-          }
-        else if (dim == 3)
-          {
-            // query the testcase
-            TestCases::CaseSelector<3> selector;
-            auto testcase = selector.get_test_case(case_name);
-            Parameters::AllParameters<3> parameters(parameter_filename);
-            Solid<3, double>             solid_3d(parameters);
-            solid_3d.run(testcase);
-          }
-        else
-          {
-            AssertThrow(false,
-                        ExcMessage("The given dimension is not supported."));
-          }
-      }
+      if (dim == 2)
+        {
+          // query the testcase
+          TestCases::CaseSelector<2> selector;
+          auto testcase = selector.get_test_case(case_name);
+          Parameters::AllParameters<2> parameters(parameter_filename);
+          Solid<2, double>             solid_2d(parameters);
+          solid_2d.run(testcase);
+        }
+      else if (dim == 3)
+        {
+          // query the testcase
+          TestCases::CaseSelector<3> selector;
+          auto testcase = selector.get_test_case(case_name);
+          Parameters::AllParameters<3> parameters(parameter_filename);
+          Solid<3, double>             solid_3d(parameters);
+          solid_3d.run(testcase);
+        }
+      else
+        {
+          AssertThrow(false,
+                      ExcMessage("The given dimension is not supported."));
+        }
     }
   catch (std::exception &exc)
     {
