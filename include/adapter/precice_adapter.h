@@ -9,8 +9,8 @@
 
 #include <deal.II/matrix_free/matrix_free.h>
 
-#include <adapter/dealii_interface.h>
 #include <adapter/dof_interface.h>
+#include <adapter/quad_interface.h>
 #include <base/q_equidistant.h>
 #include <precice/SolverInterface.hpp>
 

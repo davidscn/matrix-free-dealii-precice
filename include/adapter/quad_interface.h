@@ -16,11 +16,11 @@ namespace Adapter
    * the preCICE sense (Vector vs Scalar)
    */
   template <int dim, int data_dim, typename VectorizedArrayType>
-  class dealiiInterface
+  class QuadInterface
     : public CouplingInterface<dim, data_dim, VectorizedArrayType>
   {
   public:
-    dealiiInterface(
+    QuadInterface(
       std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
       const std::shared_ptr<precice::SolverInterface> &precice,
       const std::string &                              mesh_name,
@@ -35,7 +35,7 @@ namespace Adapter
       , mf_quad_index(mf_quad_index)
     {}
 
-    ~dealiiInterface() = default;
+    ~QuadInterface() = default;
 
     /// Alias for the face integrator
     using FEFaceIntegrator =
@@ -101,7 +101,7 @@ namespace Adapter
 
   template <int dim, int data_dim, typename VectorizedArrayType>
   void
-  dealiiInterface<dim, data_dim, VectorizedArrayType>::define_coupling_mesh()
+  QuadInterface<dim, data_dim, VectorizedArrayType>::define_coupling_mesh()
   {
     Assert(this->mesh_id != -1, ExcNotInitialized());
 
@@ -170,7 +170,7 @@ namespace Adapter
 
   template <int dim, int data_dim, typename VectorizedArrayType>
   void
-  dealiiInterface<dim, data_dim, VectorizedArrayType>::write_data(
+  QuadInterface<dim, data_dim, VectorizedArrayType>::write_data(
     const LinearAlgebra::distributed::Vector<double> &data_vector)
   {
     Assert(this->write_data_id != -1, ExcNotInitialized());
@@ -239,11 +239,10 @@ namespace Adapter
 
 
   template <int dim, int data_dim, typename VectorizedArrayType>
-  inline
-    typename dealiiInterface<dim, data_dim, VectorizedArrayType>::value_type
-    dealiiInterface<dim, data_dim, VectorizedArrayType>::
-      read_on_quadrature_point(const unsigned int id_number,
-                               const unsigned int active_faces) const
+  inline typename QuadInterface<dim, data_dim, VectorizedArrayType>::value_type
+  QuadInterface<dim, data_dim, VectorizedArrayType>::read_on_quadrature_point(
+    const unsigned int id_number,
+    const unsigned int active_faces) const
   {
     // Assert input
     Assert(active_faces <= VectorizedArrayType::size(), ExcInternalError());
@@ -280,8 +279,7 @@ namespace Adapter
 
   template <int dim, int data_dim, typename VectorizedArrayType>
   std::string
-  dealiiInterface<dim, data_dim, VectorizedArrayType>::get_interface_type()
-    const
+  QuadInterface<dim, data_dim, VectorizedArrayType>::get_interface_type() const
   {
     return "quadrature points using matrix-free quad index " +
            Utilities::to_string(mf_quad_index);
