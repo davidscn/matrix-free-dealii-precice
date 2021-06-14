@@ -12,10 +12,10 @@ namespace Adapter
 {
   using namespace dealii;
   /**
-   * An abstract base class, which defines the interface for the functions used
-   * in the main Adapter class. Each instance of all derived classes are always
-   * dedicated to a specific coupling mesh and may provide functions on how to
-   * read and write data on this mesh and how to define the mesh.
+   * A pure abstract base class, which defines the interface for the functions
+   * used in the main Adapter class. Each instance of all derived classes are
+   * always dedicated to a specific coupling mesh and may provide functions on
+   * how to read and write data on this mesh and how to define the mesh.
    */
   template <int dim, int data_dim, typename VectorizedArrayType>
   class CouplingInterface
@@ -53,9 +53,10 @@ namespace Adapter
       const LinearAlgebra::distributed::Vector<double> &data_vector) = 0;
 
     /**
-     * @brief read_on_quadrature_point Returns the relevant read data on
-     *        quadrature point. Currently only implemented in the
-     *        dealiiInterface
+     * @brief read_on_quadrature_point Read and return data from preCICE related
+     *        to a specific quadrature point. This function is not implemented
+     *        in the base class and an exception is thrown if it is used but
+     *        not re-implemeted.
      *
      * @param[in]  id_number Number of the quadrature point with respect to
      *             the total number of interface quadrature points this rank
@@ -67,7 +68,18 @@ namespace Adapter
      */
     virtual value_type
     read_on_quadrature_point(const unsigned int id_number,
-                             const unsigned int active_faces) const = 0;
+                             const unsigned int active_faces) const;
+
+    /**
+     * @brief apply_Dirichlet_bcs Read data from preCICE and fill a constraint
+     *        object. This function is not implemented in the base class and an
+     *        exception is thrown if it is used but not re-implemeted.
+     *
+     * @param constraint associated constraint object
+     */
+    virtual void
+    apply_Dirichlet_bcs(AffineConstraints<double> &constraints) const;
+
     /**
      * @brief add_read_data
      * @param read_data_name
@@ -84,7 +96,7 @@ namespace Adapter
 
     /**
      * @brief print_info
-     * @param stream
+     *
      * @param reader Boolean in order to decide if we want read or write
      *        data information
      */
@@ -153,6 +165,27 @@ namespace Adapter
     Assert(mesh_id != -1, ExcNotInitialized());
     write_data_name = write_data_name_;
     write_data_id   = precice->getDataID(write_data_name, mesh_id);
+  }
+
+
+
+  template <int dim, int data_dim, typename VectorizedArrayType>
+  typename CouplingInterface<dim, data_dim, VectorizedArrayType>::value_type
+  CouplingInterface<dim, data_dim, VectorizedArrayType>::
+    read_on_quadrature_point(const unsigned int /*id_number*/,
+                             const unsigned int /*active_faces*/) const
+  {
+    AssertThrow(false, ExcNotImplemented());
+  }
+
+
+
+  template <int dim, int data_dim, typename VectorizedArrayType>
+  void
+  CouplingInterface<dim, data_dim, VectorizedArrayType>::apply_Dirichlet_bcs(
+    AffineConstraints<double> &) const
+  {
+    AssertThrow(false, ExcNotImplemented());
   }
 
 

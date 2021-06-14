@@ -283,7 +283,7 @@ namespace Adapter
   dealiiInterface<dim, data_dim, VectorizedArrayType>::get_interface_type()
     const
   {
-    return "quadrature points using matrix-free index " +
+    return "quadrature points using matrix-free quad index " +
            Utilities::to_string(mf_quad_index);
   }
 
