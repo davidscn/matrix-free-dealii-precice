@@ -5,6 +5,7 @@
 
 #include <deal.II/matrix_free/matrix_free.h>
 
+#include <base/fe_integrator.h>
 #include <precice/SolverInterface.hpp>
 
 namespace Adapter
@@ -16,18 +17,21 @@ namespace Adapter
    * dedicated to a specific coupling mesh and may provide functions on how to
    * read and write data on this mesh and how to define the mesh.
    */
-  template <int dim, typename VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
   class CouplingInterface
   {
   public:
     CouplingInterface(
-      std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>> data,
-      std::shared_ptr<precice::SolverInterface>                     precice,
-      const std::string                                             mesh_name,
-      const types::boundary_id interface_id);
+      std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
+      const std::shared_ptr<precice::SolverInterface> &precice,
+      const std::string &                              mesh_name,
+      const types::boundary_id                         interface_id);
 
     virtual ~CouplingInterface() = default;
 
+    using value_type =
+      typename FEFaceIntegrators<dim, data_dim, double, VectorizedArrayType>::
+        value_type;
     /**
      * @brief define_coupling_mesh Define the coupling mesh associated to the
      *        data points
@@ -61,7 +65,7 @@ namespace Adapter
      *
      * @return dim dimensional data associated to the interface node
      */
-    virtual Tensor<1, dim, VectorizedArrayType>
+    virtual value_type
     read_on_quadrature_point(const unsigned int id_number,
                              const unsigned int active_faces) const = 0;
     /**
@@ -89,7 +93,7 @@ namespace Adapter
 
   protected:
     /// The MatrixFree object (preCICE can only handle double precision)
-    std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>> mf_data;
+    std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> mf_data;
 
     /// public precice solverinterface
     std::shared_ptr<precice::SolverInterface> precice;
@@ -110,12 +114,12 @@ namespace Adapter
 
 
 
-  template <int dim, typename VectorizedArrayType>
-  CouplingInterface<dim, VectorizedArrayType>::CouplingInterface(
-    std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>> data,
-    std::shared_ptr<precice::SolverInterface>                     precice,
-    const std::string                                             mesh_name,
-    const types::boundary_id                                      interface_id)
+  template <int dim, int data_dim, typename VectorizedArrayType>
+  CouplingInterface<dim, data_dim, VectorizedArrayType>::CouplingInterface(
+    std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
+    const std::shared_ptr<precice::SolverInterface> &                   precice,
+    const std::string &      mesh_name,
+    const types::boundary_id interface_id)
     : mf_data(data)
     , precice(precice)
     , mesh_name(mesh_name)
@@ -129,9 +133,9 @@ namespace Adapter
   }
 
 
-  template <int dim, typename VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
   void
-  CouplingInterface<dim, VectorizedArrayType>::add_read_data(
+  CouplingInterface<dim, data_dim, VectorizedArrayType>::add_read_data(
     const std::string &read_data_name_)
   {
     Assert(mesh_id != -1, ExcNotInitialized());
@@ -141,9 +145,9 @@ namespace Adapter
 
 
 
-  template <int dim, typename VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
   void
-  CouplingInterface<dim, VectorizedArrayType>::add_write_data(
+  CouplingInterface<dim, data_dim, VectorizedArrayType>::add_write_data(
     const std::string &write_data_name_)
   {
     Assert(mesh_id != -1, ExcNotInitialized());
@@ -153,9 +157,9 @@ namespace Adapter
 
 
 
-  template <int dim, typename VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
   void
-  CouplingInterface<dim, VectorizedArrayType>::print_info(
+  CouplingInterface<dim, data_dim, VectorizedArrayType>::print_info(
     const bool reader) const
   {
     ConditionalOStream pcout(std::cout,

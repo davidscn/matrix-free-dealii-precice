@@ -18,7 +18,6 @@ static const unsigned int debug_level = 0;
 #include <deal.II/base/function.h>
 #include <deal.II/base/point.h>
 #include <deal.II/base/quadrature_lib.h>
-#include <deal.II/base/revision.h>
 #include <deal.II/base/symmetric_tensor.h>
 #include <deal.II/base/tensor.h>
 #include <deal.II/base/timer.h>
@@ -62,14 +61,14 @@ static const unsigned int debug_level = 0;
 #include <deal.II/physics/transformations.h>
 
 #include <adapter/precice_adapter.h>
+#include <base/fe_integrator.h>
+#include <base/q_equidistant.h>
+#include <base/time_handler.h>
+#include <base/utilities.h>
 #include <cases/case_base.h>
-#include <material.h>
-#include <mf_nh_operator.h>
 #include <parameter/parameter_handling.h>
-#include <q_equidistant.h>
-#include <sys/stat.h>
-#include <utilities/fe_integrator.h>
-#include <version.h>
+#include <solid_mechanics/material.h>
+#include <solid_mechanics/mf_nh_operator.h>
 
 #include <fstream>
 #include <iostream>
@@ -82,57 +81,6 @@ using namespace dealii;
 namespace FSI
 {
   using namespace dealii;
-
-  // @sect3{Time class}
-
-  // A simple class to store time data. Its functioning is transparent so no
-  // discussion is necessary. For simplicity we assume a constant time step
-  // size.
-  class Time
-  {
-  public:
-    Time(const double time_end, const double delta_t)
-      : timestep(0)
-      , time_current(0.0)
-      , time_end(time_end)
-      , delta_t(delta_t)
-    {}
-
-    virtual ~Time() = default;
-
-    double
-    current() const
-    {
-      return time_current;
-    }
-    double
-    end() const
-    {
-      return time_end;
-    }
-    double
-    get_delta_t() const
-    {
-      return delta_t;
-    }
-    unsigned int
-    get_timestep() const
-    {
-      return timestep;
-    }
-    void
-    increment()
-    {
-      time_current += delta_t;
-      ++timestep;
-    }
-
-  private:
-    unsigned int timestep;
-    double       time_current;
-    const double time_end;
-    const double delta_t;
-  };
 
   // The Solid class is the central class.
   template <int dim, typename Number>
@@ -320,7 +268,7 @@ namespace FSI
       Material_Compressible_Neo_Hook_One_Field<dim, LevelVectorizedArrayType>>
       material_inclusion_level;
 
-    std::unique_ptr<Adapter::Adapter<dim, VectorType, VectorizedArrayType>>
+    std::unique_ptr<Adapter::Adapter<dim, dim, VectorType, VectorizedArrayType>>
       precice_adapter;
 
     static const unsigned int n_components      = dim;
@@ -454,39 +402,7 @@ namespace FSI
     unsigned int      total_n_cg_solve;
   };
 
-  // @sect3{Implementation of the <code>Solid</code> class}
 
-  // @sect4{Public interface}
-
-  int
-  create_directory(std::string pathname, const mode_t mode)
-  {
-    // force trailing / so we can handle everything in loop
-    if (pathname[pathname.size() - 1] != '/')
-      {
-        pathname += '/';
-      }
-
-    size_t pre = 0;
-    size_t pos;
-
-    while ((pos = pathname.find_first_of('/', pre)) != std::string::npos)
-      {
-        const std::string subdir = pathname.substr(0, pos++);
-        pre                      = pos;
-
-        // if leading '/', first string is 0 length
-        if (subdir.size() == 0)
-          continue;
-
-        int mkdir_return_value;
-        if ((mkdir_return_value = mkdir(subdir.c_str(), mode)) &&
-            (errno != EEXIST))
-          return mkdir_return_value;
-      }
-
-    return 0;
-  }
 
   // We initialise the Solid class using data extracted from the parameter file.
   template <int dim, typename Number>
@@ -588,9 +504,7 @@ namespace FSI
         AssertThrow(gamma <= 1 && gamma >= 0, ExcInternalError());
         AssertThrow(2 * beta >= gamma, ExcInternalError());
         AssertThrow(gamma == 0 || gamma >= 0.5, ExcInternalError());
-        const int ierr =
-          create_directory(parameters.output_folder,
-                           S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+        const int ierr = Utilities::create_directory(parameters.output_folder);
         (void)ierr;
         Assert(ierr == 0,
                ExcMessage("can't create: " + parameters.output_folder));
@@ -604,56 +518,8 @@ namespace FSI
 
     mf_nh_operator.set_material(material_vec, material_inclusion_vec);
 
-    // print some data about how we run:
-    auto print = [&](ConditionalOStream &stream) {
-      const int n_tasks =
-        dealii::Utilities::MPI::n_mpi_processes(mpi_communicator);
-      const int          n_threads      = dealii::MultithreadInfo::n_threads();
-      const unsigned int n_vect_doubles = VectorizedArray<double>::size();
-      const unsigned int n_vect_bits    = 8 * sizeof(double) * n_vect_doubles;
-
-      stream
-        << "-----------------------------------------------------------------------------"
-        << std::endl
-#ifdef DEBUG
-        << "--     . running in DEBUG mode" << std::endl
-#else
-        << "--     . running in OPTIMIZED mode" << std::endl
-#endif
-        << "--     . running with " << n_tasks << " MPI process"
-        << (n_tasks == 1 ? "" : "es") << std::endl;
-
-      if (n_threads > 1)
-        stream << "--     . using " << n_threads << " threads "
-               << (n_tasks == 1 ? "" : "each") << std::endl;
-
-      stream << "--     . vectorization over " << n_vect_doubles
-             << " doubles = " << n_vect_bits << " bits (";
-
-      if (n_vect_bits == 64)
-        stream << "disabled";
-      else if (n_vect_bits == 128)
-        stream << "SSE2";
-      else if (n_vect_bits == 256)
-        stream << "AVX";
-      else if (n_vect_bits == 512)
-        stream << "AVX512";
-      else
-        AssertThrow(false, ExcNotImplemented());
-
-      stream << ")" << std::endl;
-      stream << "--     . version " << GIT_TAG << " (revision " << GIT_SHORTREV
-             << " on branch " << GIT_BRANCH << ")" << std::endl;
-      stream << "--     . deal.II " << DEAL_II_PACKAGE_VERSION << " (revision "
-             << DEAL_II_GIT_SHORTREV << " on branch " << DEAL_II_GIT_BRANCH
-             << ")" << std::endl;
-      stream
-        << "-----------------------------------------------------------------------------"
-        << std::endl
-        << std::endl;
-    };
-    print(timer_out);
-    print(pcout);
+    Utilities::print_configuration(timer_out);
+    Utilities::print_configuration(pcout);
   }
 
   // The class destructor simply clears the data held by the DOFHandler
@@ -698,11 +564,11 @@ namespace FSI
     // time domain.
     //
     setup_matrix_free();
-    precice_adapter =
-      std::make_unique<Adapter::Adapter<dim, VectorType, VectorizedArrayType>>(
-        parameters,
-        int(TestCases::TestCaseBase<dim>::interface_id),
-        mf_data_reference);
+    precice_adapter = std::make_unique<
+      Adapter::Adapter<dim, dim, VectorType, VectorizedArrayType>>(
+      parameters,
+      int(TestCases::TestCaseBase<dim>::interface_id),
+      mf_data_reference);
     precice_adapter->initialize(total_displacement);
 
     // At the beginning, we reset the solution update for this time step...
