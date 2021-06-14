@@ -800,7 +800,10 @@ namespace Heat_Transfer
       Adapter::Adapter<dim, 1, VectorType, VectorizedArray<double>>>(
       parameters,
       int(TestCases::TestCaseBase<dim>::interface_id),
-      system_matrix.get_matrix_free());
+      system_matrix.get_matrix_free(),
+      0 /*MF dof index*/,
+      0 /*MF quad index*/,
+      testcase->is_dirichlet);
     precice_adapter->initialize(solution);
 
     while (precice_adapter->is_coupling_ongoing())

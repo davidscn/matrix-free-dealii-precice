@@ -11,6 +11,18 @@
 namespace Adapter
 {
   using namespace dealii;
+
+  /**
+   * Enum to handle all implemented data write methods one can use
+   */
+  enum class WriteDataType
+  {
+    undefined,
+    values_on_dofs,
+    values_on_quads,
+    normal_gradients_on_quads
+  };
+
   /**
    * A pure abstract base class, which defines the interface for the functions
    * used in the main Adapter class. Each instance of all derived classes are
@@ -92,7 +104,8 @@ namespace Adapter
      * @param read_data_name
      */
     void
-    add_write_data(const std::string &write_data_name);
+    add_write_data(const std::string &write_data_name,
+                   const std::string &write_data_specification);
 
     /**
      * @brief print_info
@@ -119,6 +132,8 @@ namespace Adapter
     int               write_data_id   = -1;
 
     const types::boundary_id dealii_boundary_interface_id;
+
+    WriteDataType write_data_type = WriteDataType::undefined;
 
     virtual std::string
     get_interface_type() const = 0;
@@ -160,11 +175,19 @@ namespace Adapter
   template <int dim, int data_dim, typename VectorizedArrayType>
   void
   CouplingInterface<dim, data_dim, VectorizedArrayType>::add_write_data(
-    const std::string &write_data_name_)
+    const std::string &write_data_name_,
+    const std::string &write_data_specification)
   {
     Assert(mesh_id != -1, ExcNotInitialized());
     write_data_name = write_data_name_;
     write_data_id   = precice->getDataID(write_data_name, mesh_id);
+
+    if (write_data_specification == "values_on_dofs")
+      write_data_type = WriteDataType::values_on_dofs;
+    else if (write_data_specification == "values_on_quads")
+      write_data_type = WriteDataType::values_on_quads;
+    else if (write_data_specification == "normal_gradients_on_quads")
+      write_data_type = WriteDataType::normal_gradients_on_quads;
   }
 
 
