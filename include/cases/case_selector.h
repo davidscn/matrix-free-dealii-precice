@@ -48,8 +48,10 @@ namespace TestCases
         }
       if (simulation_type == "heat_transfer")
         {
-          if (testcase_name == "partitioned_heat")
-            return std::make_shared<PartitionedHeat<dim>>();
+          if (testcase_name == "partitioned_heat_dirichlet")
+            return std::make_shared<PartitionedHeat<dim>>(true);
+          else if (testcase_name == "partitioned_heat_neumann")
+            return std::make_shared<PartitionedHeat<dim>>(false);
         }
       AssertThrow(false,
                   ExcMessage("Unable to configure your case " + testcase_name));
