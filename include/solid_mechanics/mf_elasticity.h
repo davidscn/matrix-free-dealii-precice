@@ -914,8 +914,11 @@ namespace FSI
       {
         const std::vector<const AffineConstraints<double> *> constr = {
           &constraints};
-        const std::vector<Quadrature<1>> quadratures = {
-          quad, QEquidistant<1>(quad_order)};
+        std::vector<Quadrature<1>> quadratures = {quad};
+
+        // Only push back the equidistant quadrature if actually needed
+        if (parameters.write_quad_index > 0)
+          quadratures.push_back(QEquidistant<1>(quad_order));
         mf_data_reference->reinit(StaticMappingQ1<dim>::mapping,
                                   {&dof_handler},
                                   constr,

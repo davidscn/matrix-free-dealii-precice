@@ -285,18 +285,43 @@ namespace Heat_Transfer
     run(std::shared_ptr<TestCases::TestCaseBase<dim>> testcase_);
 
   private:
+    /**
+     * @brief make_grid Creates the grid and the boundary conditions of the problem
+     */
     void
     make_grid();
+    /**
+     * @brief setup_system Initialize required data structures (MG and MF)
+     */
     void
     setup_system();
+    /**
+     * @brief assemble_rhs Assemble the RHS vector in each time step.
+     */
     void
     assemble_rhs();
+    /**
+     * @brief apply_boundary_condition Fill the constraint object in order to apply
+     *        Dirichlet boundary condition.
+     *
+     * @param initialize Boolean in order to set if we set up the constraint object
+     *        for MatrixFree during initialization (see comment in the function
+     *        for more detials).
+     */
     void
-    apply_boundary_condition();
+    apply_boundary_condition(const bool initialize);
+    /**
+     * @brief solve Solve the assembled system.
+     */
     void
     solve();
+    /**
+     * @brief output_results Output the generated results.
+     *
+     * @param result_number Number of the result for the name of the parameter file.
+     */
     void
-    output_results(const unsigned int cycle) const;
+    output_results(const unsigned int result_number) const;
 
     const FSI::Parameters::AllParameters<dim> &parameters;
 
@@ -400,8 +425,9 @@ namespace Heat_Transfer
     pcout.get_stream().imbue(s);
 
     // Fill the constraint object with the specified dirichlet boundary
-    // conditions
-    apply_boundary_condition();
+    // conditions. Initially, set up the constraint with Zero values on the
+    // interface
+    apply_boundary_condition(true);
     {
       // Set up two matrix-free objects: one for the homogenous part and one for
       // the inhomogenous part (without any constraints)
@@ -418,8 +444,16 @@ namespace Heat_Transfer
       // object is required. In order to ensure compatibility of the global
       // vectors, we initialize both MatrixFree objects with the same
       // AdditionalData
-      additional_data.mapping_update_flags_boundary_faces =
-        (update_values | update_JxW_values | update_quadrature_points);
+      // For Dirichlet: write gradients (maybe normal gradients)
+      // For Neumann: write values and integrate them during assembly
+      // In both cases: define interface using FEEvaluation::quadrature_point()
+      if (testcase->is_dirichlet)
+        additional_data.mapping_update_flags_boundary_faces =
+          (update_gradients | update_normal_vectors | update_quadrature_points);
+      else
+        additional_data.mapping_update_flags_boundary_faces =
+          (update_values | update_JxW_values | update_quadrature_points);
+
       system_mf_storage->reinit(
         mapping, dof_handler, constraints, quadrature_1d, additional_data);
       system_matrix.initialize(system_mf_storage);
@@ -459,6 +493,13 @@ namespace Heat_Transfer
         mg_constrained_dofs.make_zero_boundary_constraints(dof_handler,
                                                            {el.first},
                                                            mask->second);
+        // Add the Dirichlet boundary condition in case we read Dirichlet
+        // boundary values
+        if (testcase->is_dirichlet)
+          mg_constrained_dofs.make_zero_boundary_constraints(
+            dof_handler,
+            {int(TestCases::TestCaseBase<dim>::interface_id)},
+            ComponentMask());
       }
 
     for (unsigned int level = 0; level < nlevels; ++level)
@@ -502,7 +543,8 @@ namespace Heat_Transfer
   LaplaceProblem<dim>::assemble_rhs()
   {
     TimerOutput::Scope t(timer, "assemble rhs");
-    apply_boundary_condition();
+
+    apply_boundary_condition(false);
 
     //... and fill in the constraints into the solution vector (non-homogenous
     // part)
@@ -540,33 +582,36 @@ namespace Heat_Transfer
         "The given combination of the polynomial degree and quadrature order is not supported by default."));
     unsigned int q_index = 0;
 
-    for (unsigned int face = data->n_inner_face_batches();
-         face < data->n_boundary_face_batches() + data->n_inner_face_batches();
-         ++face)
-      {
-        const auto boundary_id = data->get_boundary_id(face);
+    if (!testcase->is_dirichlet)
+      for (unsigned int face = data->n_inner_face_batches();
+           face <
+           data->n_boundary_face_batches() + data->n_inner_face_batches();
+           ++face)
+        {
+          const auto boundary_id = data->get_boundary_id(face);
 
-        // Only interfaces
-        if (boundary_id != int(TestCases::TestCaseBase<dim>::interface_id))
-          continue;
+          // Only interfaces
+          if (boundary_id != int(TestCases::TestCaseBase<dim>::interface_id))
+            continue;
 
-        // Read out the total displacment
-        phi_face.reinit(face);
+          // Read out the total displacment
+          phi_face.reinit(face);
 
-        // Number of active faces
-        const auto active_faces = data->n_active_entries_per_face_batch(face);
+          // Number of active faces
+          const auto active_faces = data->n_active_entries_per_face_batch(face);
 
-        for (unsigned int q = 0; q < phi_face.n_q_points; ++q)
-          {
-            // Get the value from preCICE
-            const auto heat_flux =
-              precice_adapter->read_on_quadrature_point(q_index, active_faces);
-            phi_face.submit_value(-heat_flux * dt, q);
-            ++q_index;
-          }
-        // Integrate the result and write into the rhs vector
-        phi_face.integrate_scatter(EvaluationFlags::values, system_rhs);
-      }
+          for (unsigned int q = 0; q < phi_face.n_q_points; ++q)
+            {
+              // Get the value from preCICE
+              const auto heat_flux =
+                precice_adapter->read_on_quadrature_point(q_index,
+                                                          active_faces);
+              phi_face.submit_value(-heat_flux * dt, q);
+              ++q_index;
+            }
+          // Integrate the result and write into the rhs vector
+          phi_face.integrate_scatter(EvaluationFlags::values, system_rhs);
+        }
 
     system_rhs.compress(VectorOperation::add);
   }
@@ -575,13 +620,36 @@ namespace Heat_Transfer
 
   template <int dim>
   void
-  LaplaceProblem<dim>::apply_boundary_condition()
+  LaplaceProblem<dim>::apply_boundary_condition(const bool initialize)
   {
     // Update the constraints object
     constraints.clear();
     IndexSet locally_relevant_dofs;
     DoFTools::extract_locally_relevant_dofs(dof_handler, locally_relevant_dofs);
     constraints.reinit(locally_relevant_dofs);
+
+    // First, fill the constraint object with the constraints at the interface
+    if (testcase->is_dirichlet)
+      {
+        Assert((precice_adapter.get() != nullptr) || initialize,
+               ExcNotInitialized());
+        // That's a bit odd: we need to fill the constraint object at the
+        // coupling interface initially in order to tell MatrixFree during the
+        // initialization that these constraints are actually constrained.
+        // However, the adapter object is not yet initialized, since we need an
+        // initialized MatrixFree object in order to set up the Adapter. As a
+        // remedy, we fill the interface Dirichlet constraints initially with a
+        // dummy zero boundary condition, which is only relevant for the
+        // initialization of MatrixFree. Afterwards, we use the adapter as
+        // usual.
+        initialize ? VectorTools::interpolate_boundary_values(
+                       mapping,
+                       dof_handler,
+                       int(TestCases::TestCaseBase<dim>::interface_id),
+                       Functions::ZeroFunction<dim>(),
+                       constraints) :
+                     precice_adapter->apply_dirichlet_bcs(constraints);
+      }
 
     for (const auto &el : testcase->dirichlet)
       {
@@ -732,7 +800,10 @@ namespace Heat_Transfer
       Adapter::Adapter<dim, 1, VectorType, VectorizedArray<double>>>(
       parameters,
       int(TestCases::TestCaseBase<dim>::interface_id),
-      system_matrix.get_matrix_free());
+      system_matrix.get_matrix_free(),
+      0 /*MF dof index*/,
+      0 /*MF quad index*/,
+      testcase->is_dirichlet);
     precice_adapter->initialize(solution);
 
     while (precice_adapter->is_coupling_ongoing())

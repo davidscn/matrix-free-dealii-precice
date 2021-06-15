@@ -19,14 +19,15 @@ namespace FSI
      */
     struct PreciceAdapterConfiguration
     {
-      std::string config_file      = "precice config-file";
-      std::string participant_name = "dealiisolver";
-      std::string mesh_name        = "default";
-      std::string read_mesh_name   = "default";
-      std::string write_mesh_name  = "default";
-      int         write_sampling   = std::numeric_limits<int>::max();
-      std::string read_data_name   = "received-data";
-      std::string write_data_name  = "calculated-data";
+      std::string config_file              = "precice config-file";
+      std::string participant_name         = "dealiisolver";
+      std::string mesh_name                = "default";
+      std::string read_mesh_name           = "default";
+      std::string write_mesh_name          = "default";
+      int         write_quad_index         = 0;
+      std::string write_data_specification = "values_on_quads";
+      std::string read_data_name           = "received-data";
+      std::string write_data_name          = "calculated-data";
 
       void
       add_parameters(ParameterHandler &prm);
@@ -62,10 +63,18 @@ namespace FSI
           write_mesh_name,
           "Name of the write coupling mesh in the precice-config.xml file",
           Patterns::Anything());
-        prm.add_parameter("Write sampling",
-                          write_sampling,
-                          "Nodes per coupling face of the write mesh",
-                          Patterns::Integer(0));
+        prm.add_parameter(
+          "Write quadrature index",
+          write_quad_index,
+          "Index of the quadrature formula in MatrixFree used for initialization",
+          Patterns::Integer(0));
+        prm.add_parameter(
+          "Write data specification",
+          write_data_specification,
+          "Specification of the write data location and the data type"
+          "Available options are: values_on_dofs, values_on_quads, normal_gradients_on_quads",
+          Patterns::Selection(
+            "values_on_dofs|values_on_quads|normal_gradients_on_quads"));
         prm.add_parameter(
           "Read data name",
           read_data_name,

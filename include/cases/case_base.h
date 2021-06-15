@@ -28,7 +28,10 @@ namespace TestCases
     std::map<types::boundary_id, ComponentMask>                  dirichlet_mask;
     std::unique_ptr<Function<dim>> initial_condition;
     std::unique_ptr<Function<dim>> heat_transfer_rhs;
-
+    // Boolean for the simulation type (only used for heat transfer).
+    // is_dirichlet = true reads and applys Dirichlet boundary condition,
+    // is_dirichlet = false reads and applys Neumann boundary condition
+    bool is_dirichlet = false;
     virtual void
     make_coarse_grid_and_bcs(Triangulation<dim> &triangulation) = 0;
 

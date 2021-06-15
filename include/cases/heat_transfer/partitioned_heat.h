@@ -8,6 +8,8 @@ namespace TestCases
   struct PartitionedHeat : public TestCaseBase<dim>
   {
   public:
+    PartitionedHeat(const bool is_dirichlet);
+
     virtual void
     make_coarse_grid_and_bcs(Triangulation<dim> &triangulation) override;
 
@@ -80,34 +82,49 @@ namespace TestCases
 
 
   template <int dim>
+  PartitionedHeat<dim>::PartitionedHeat(const bool is_dirichlet)
+  {
+    this->is_dirichlet = is_dirichlet;
+  }
+
+
+
+  template <int dim>
   void
   PartitionedHeat<dim>::make_coarse_grid_and_bcs(
     Triangulation<dim> &triangulation)
   {
+    // The Dirichlet domain is located on the left, the Neumann domain is
+    // located on the right
+    const double root_location = this->is_dirichlet ? 0 : 1;
     Assert(dim == 2, ExcNotImplemented());
     GridGenerator::hyper_rectangle(triangulation,
-                                   Point<dim>{1, 0},
-                                   Point<dim>{2, 1},
-                                   true);
+                                   Point<dim>{0 + root_location, 0},
+                                   Point<dim>{1 + root_location, 1},
+                                   false);
 
     const types::boundary_id dirichlet_id = 1;
 
-
+    const double tol_boundary = 1e-6;
     for (const auto &cell : triangulation.active_cell_iterators())
       for (const auto &face : cell->face_iterators())
         if (face->at_boundary() == true)
           {
-            // Boundaries for the dirichlet boundary
-            if (face->boundary_id() != 0)
-              face->set_boundary_id(dirichlet_id);
-            else
+            const auto center = face->center();
+            // Boundaries for the interface at x = 1
+            if (center[0] >= (1 - tol_boundary) &&
+                center[0] <= (1 + tol_boundary))
               face->set_boundary_id(this->interface_id);
+            else
+              // Boundaries for the dirichlet boundary
+              face->set_boundary_id(dirichlet_id);
           }
 
     this->dirichlet_mask[dirichlet_id] = ComponentMask(1, true);
     this->dirichlet[dirichlet_id] =
       std::make_unique<AnalyticSolution<dim>>(alpha, beta);
     this->dirichlet[dirichlet_id]->set_time(0.0);
+
     this->heat_transfer_rhs = std::make_unique<RightHandSide<dim>>(alpha, beta);
     this->initial_condition =
       std::make_unique<AnalyticSolution<dim>>(alpha, beta);

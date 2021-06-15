@@ -9,7 +9,8 @@
 
 #include <deal.II/matrix_free/matrix_free.h>
 
-#include <adapter/dealii_interface.h>
+#include <adapter/dof_interface.h>
+#include <adapter/quad_interface.h>
 #include <base/q_equidistant.h>
 #include <precice/SolverInterface.hpp>
 
@@ -51,18 +52,18 @@ namespace Adapter
      * @param[in]  read_quad_index Index of the quadrature formula in the
      *             corresponding MatrixFree object which should be used for data
      *             reading
-     * @param[in]  write_quad_index Index of the quadrature formula in the
-     *             corresponding MatrixFree object which should be used for data
-     *             writing
+     * @param[in]  is_dirichlet Boolean to distinguish between Dirichlet type
+     *             solver (using the DoFs for data reading) and Neumann type
+     *             solver (using quadrature points for reading)
      */
     template <typename ParameterClass>
     Adapter(
       const ParameterClass &parameters,
       const unsigned int    dealii_boundary_interface_id,
       std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
-      const unsigned int dof_index        = 0,
-      const unsigned int read_quad_index  = 0,
-      const unsigned int write_quad_index = 1);
+      const unsigned int dof_index       = 0,
+      const unsigned int read_quad_index = 0,
+      const bool         is_dirichlet    = false);
 
     /**
      * @brief      Initializes preCICE and passes all relevant data to preCICE
@@ -131,6 +132,13 @@ namespace Adapter
     value_type
     read_on_quadrature_point(const unsigned int id_number,
                              const unsigned int active_faces) const;
+    /**
+     * @brief Public API adapter method, which calls the respective implementation
+     *        in derived classes of the CouplingInterface. Have a look at the
+     *        documentation there.
+     */
+    void
+    apply_dirichlet_bcs(AffineConstraints<double> &constraints) const;
 
     /**
      * @brief is_coupling_ongoing Calls the preCICE API function isCouplingOnGoing
@@ -186,7 +194,7 @@ namespace Adapter
     std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
     const unsigned int dof_index,
     const unsigned int read_quad_index,
-    const unsigned int write_quad_index)
+    const bool         is_dirichlet)
     : dealii_boundary_interface_id(dealii_boundary_interface_id)
   {
     precice = std::make_shared<precice::SolverInterface>(
@@ -198,36 +206,56 @@ namespace Adapter
     AssertThrow(dim == precice->getDimensions(), ExcInternalError());
     AssertThrow(dim > 1, ExcNotImplemented());
 
-    // The read interface is always the same
-    reader =
-      std::make_shared<dealiiInterface<dim, data_dim, VectorizedArrayType>>(
-        data,
-        precice,
-        parameters.read_mesh_name,
-        dealii_boundary_interface_id,
-        dof_index,
-        read_quad_index);
-
+    // 1. Set the reader, which is defined in the Adapter constructor
+    // dof reading (Dirichlet)
+    if (is_dirichlet)
+      reader =
+        std::make_shared<DoFInterface<dim, data_dim, VectorizedArrayType>>(
+          data,
+          precice,
+          parameters.read_mesh_name,
+          dealii_boundary_interface_id,
+          dof_index);
+    else
+      // Quad reading
+      reader =
+        std::make_shared<QuadInterface<dim, data_dim, VectorizedArrayType>>(
+          data,
+          precice,
+          parameters.read_mesh_name,
+          dealii_boundary_interface_id,
+          dof_index,
+          read_quad_index);
+    // 2. Set the writer, which is defined in the parameter file
     if (parameters.write_mesh_name == parameters.read_mesh_name)
-      {
-        writer = reader;
-      }
+      writer = reader;
+    else if (parameters.write_data_specification == "values_on_dofs")
+      writer =
+        std::make_shared<DoFInterface<dim, data_dim, VectorizedArrayType>>(
+          data,
+          precice,
+          parameters.write_mesh_name,
+          dealii_boundary_interface_id,
+          dof_index);
     else
       {
+        Assert(parameters.write_data_specification == "values_on_quads" ||
+                 parameters.write_data_specification ==
+                   "normal_gradients_on_quads",
+               ExcNotImplemented());
         writer =
-          std::make_shared<dealiiInterface<dim, data_dim, VectorizedArrayType>>(
+          std::make_shared<QuadInterface<dim, data_dim, VectorizedArrayType>>(
             data,
             precice,
             parameters.write_mesh_name,
             dealii_boundary_interface_id,
             dof_index,
-            write_quad_index);
+            parameters.write_quad_index);
       }
 
-
-
     reader->add_read_data(parameters.read_data_name);
-    writer->add_write_data(parameters.write_data_name);
+    writer->add_write_data(parameters.write_data_name,
+                           parameters.write_data_specification);
 
     Assert(reader.get() != nullptr, ExcInternalError());
     Assert(writer.get() != nullptr, ExcInternalError());
@@ -243,8 +271,8 @@ namespace Adapter
   Adapter<dim, data_dim, VectorType, VectorizedArrayType>::initialize(
     const VectorType &dealii_to_precice)
   {
-    writer->define_coupling_mesh();
     reader->define_coupling_mesh();
+    writer->define_coupling_mesh();
 
     reader->print_info(true);
     writer->print_info(false);
@@ -307,6 +335,19 @@ namespace Adapter
                                const unsigned int active_faces) const
   {
     return reader->read_on_quadrature_point(id_number, active_faces);
+  }
+
+
+
+  template <int dim,
+            int data_dim,
+            typename VectorType,
+            typename VectorizedArrayType>
+  void
+  Adapter<dim, data_dim, VectorType, VectorizedArrayType>::apply_dirichlet_bcs(
+    AffineConstraints<double> &constraints) const
+  {
+    reader->apply_Dirichlet_bcs(constraints);
   }
 
 

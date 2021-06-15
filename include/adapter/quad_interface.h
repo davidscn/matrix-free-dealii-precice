@@ -16,11 +16,11 @@ namespace Adapter
    * the preCICE sense (Vector vs Scalar)
    */
   template <int dim, int data_dim, typename VectorizedArrayType>
-  class dealiiInterface
+  class QuadInterface
     : public CouplingInterface<dim, data_dim, VectorizedArrayType>
   {
   public:
-    dealiiInterface(
+    QuadInterface(
       std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
       const std::shared_ptr<precice::SolverInterface> &precice,
       const std::string &                              mesh_name,
@@ -35,7 +35,7 @@ namespace Adapter
       , mf_quad_index(mf_quad_index)
     {}
 
-    ~dealiiInterface() = default;
+    ~QuadInterface() = default;
 
     /// Alias for the face integrator
     using FEFaceIntegrator =
@@ -59,6 +59,22 @@ namespace Adapter
     virtual void
     write_data(
       const LinearAlgebra::distributed::Vector<double> &data_vector) override;
+
+    /**
+     * @brief write_data_factory Factory function in order to write different
+     *        data (gradients, values..) to preCICE
+     *
+     * @param[in] data_vector The data to be passed to preCICE (absolute
+     *            displacement for FSI)
+     * @param[in] flags
+     * @param[in] get_write_value
+     */
+    void
+    write_data_factory(
+      const LinearAlgebra::distributed::Vector<double> &data_vector,
+      const EvaluationFlags::EvaluationFlags            flags,
+      const std::function<value_type(FEFaceIntegrator &, unsigned int)>
+        &get_write_value);
 
 
     /**
@@ -101,7 +117,7 @@ namespace Adapter
 
   template <int dim, int data_dim, typename VectorizedArrayType>
   void
-  dealiiInterface<dim, data_dim, VectorizedArrayType>::define_coupling_mesh()
+  QuadInterface<dim, data_dim, VectorizedArrayType>::define_coupling_mesh()
   {
     Assert(this->mesh_id != -1, ExcNotInitialized());
 
@@ -167,11 +183,41 @@ namespace Adapter
   }
 
 
+  template <int dim, int data_dim, typename VectorizedArrayType>
+  void
+  QuadInterface<dim, data_dim, VectorizedArrayType>::write_data(
+    const LinearAlgebra::distributed::Vector<double> &data_vector)
+  {
+    switch (this->write_data_type)
+      {
+        case WriteDataType::values_on_quads:
+          write_data_factory(data_vector,
+                             EvaluationFlags::values,
+                             [](auto &phi, auto q_point) {
+                               return phi.get_value(q_point);
+                             });
+          break;
+        case WriteDataType::normal_gradients_on_quads:
+          write_data_factory(data_vector,
+                             EvaluationFlags::gradients,
+                             [](auto &phi, auto q_point) {
+                               return phi.get_normal_derivative(q_point);
+                             });
+          break;
+        default:
+          AssertThrow(false, ExcNotImplemented());
+      }
+  }
+
+
 
   template <int dim, int data_dim, typename VectorizedArrayType>
   void
-  dealiiInterface<dim, data_dim, VectorizedArrayType>::write_data(
-    const LinearAlgebra::distributed::Vector<double> &data_vector)
+  QuadInterface<dim, data_dim, VectorizedArrayType>::write_data_factory(
+    const LinearAlgebra::distributed::Vector<double> &data_vector,
+    const EvaluationFlags::EvaluationFlags            flags,
+    const std::function<value_type(FEFaceIntegrator &, unsigned int)>
+      &get_write_value)
   {
     Assert(this->write_data_id != -1, ExcNotInitialized());
     Assert(interface_is_defined, ExcNotInitialized());
@@ -200,13 +246,13 @@ namespace Adapter
         // Read and interpolate
         phi.reinit(face);
         phi.read_dof_values_plain(data_vector);
-        phi.evaluate(EvaluationFlags::values);
+        phi.evaluate(flags);
         const int active_faces =
           this->mf_data->n_active_entries_per_face_batch(face);
 
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           {
-            const auto local_data = phi.get_value(q);
+            const auto local_data = get_write_value(phi, q);
             Assert(index != interface_nodes_ids.end(), ExcInternalError());
 
             // Constexpr evaluation required in order to comply with the
@@ -239,11 +285,10 @@ namespace Adapter
 
 
   template <int dim, int data_dim, typename VectorizedArrayType>
-  inline
-    typename dealiiInterface<dim, data_dim, VectorizedArrayType>::value_type
-    dealiiInterface<dim, data_dim, VectorizedArrayType>::
-      read_on_quadrature_point(const unsigned int id_number,
-                               const unsigned int active_faces) const
+  inline typename QuadInterface<dim, data_dim, VectorizedArrayType>::value_type
+  QuadInterface<dim, data_dim, VectorizedArrayType>::read_on_quadrature_point(
+    const unsigned int id_number,
+    const unsigned int active_faces) const
   {
     // Assert input
     Assert(active_faces <= VectorizedArrayType::size(), ExcInternalError());
@@ -280,10 +325,9 @@ namespace Adapter
 
   template <int dim, int data_dim, typename VectorizedArrayType>
   std::string
-  dealiiInterface<dim, data_dim, VectorizedArrayType>::get_interface_type()
-    const
+  QuadInterface<dim, data_dim, VectorizedArrayType>::get_interface_type() const
   {
-    return "quadrature points using matrix-free index " +
+    return "quadrature points using matrix-free quad index " +
            Utilities::to_string(mf_quad_index);
   }
 
