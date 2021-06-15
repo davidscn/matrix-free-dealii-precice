@@ -61,23 +61,6 @@ namespace Adapter
       const LinearAlgebra::distributed::Vector<double> &data_vector) override;
 
     /**
-     * @brief write_data_factory Factory function in order to write different
-     *        data (gradients, values..) to preCICE
-     *
-     * @param[in] data_vector The data to be passed to preCICE (absolute
-     *            displacement for FSI)
-     * @param[in] flags
-     * @param[in] get_write_value
-     */
-    void
-    write_data_factory(
-      const LinearAlgebra::distributed::Vector<double> &data_vector,
-      const EvaluationFlags::EvaluationFlags            flags,
-      const std::function<value_type(FEFaceIntegrator &, unsigned int)>
-        &get_write_value);
-
-
-    /**
      * @brief read_on_quadrature_point Returns the data_dim dimensional read data
      *        given the ID of the interface node we want to access.
      *
@@ -99,6 +82,22 @@ namespace Adapter
                              const unsigned int active_faces) const override;
 
   private:
+    /**
+     * @brief write_data_factory Factory function in order to write different
+     *        data (gradients, values..) to preCICE
+     *
+     * @param[in] data_vector The data to be passed to preCICE (absolute
+     *            displacement for FSI)
+     * @param[in] flags
+     * @param[in] get_write_value
+     */
+    void
+    write_data_factory(
+      const LinearAlgebra::distributed::Vector<double> &data_vector,
+      const EvaluationFlags::EvaluationFlags            flags,
+      const std::function<value_type(FEFaceIntegrator &, unsigned int)>
+        &get_write_value);
+
     /// The preCICE IDs
     std::vector<std::array<int, VectorizedArrayType::size()>>
       interface_nodes_ids;

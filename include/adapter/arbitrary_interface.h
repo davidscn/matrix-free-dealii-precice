@@ -63,6 +63,23 @@ namespace Adapter
     finish_initialization();
 
   private:
+    /**
+     * @brief write_data_factory Factory function in order to write different
+     *        data (gradients, values..) to preCICE
+     *
+     * @param[in] data_vector The data to be passed to preCICE (absolute
+     *            displacement for FSI)
+     * @param[in] flags UpdateFlags passed to the FEPointEvaluation object
+     * @param[in] write_value the local index when iterating over all values
+     */
+    void
+    write_data_factory(
+      const LinearAlgebra::distributed::Vector<double> &data_vector,
+      const UpdateFlags                                 flags,
+      const std::function<void(FEPointEvaluation<data_dim, dim> &,
+                               const Vector<double> &,
+                               const size_t)> &         write_value) const;
+
     virtual std::string
     get_interface_type() const override;
 
@@ -137,13 +154,63 @@ namespace Adapter
   ArbitraryInterface<dim, data_dim, VectorizedArrayType>::write_data(
     const LinearAlgebra::distributed::Vector<double> &data_vector)
   {
+    switch (this->write_data_type)
+      {
+        case WriteDataType::values_on_other_mesh:
+          write_data_factory(
+            data_vector,
+            UpdateFlags::update_values,
+            [this](auto &fe_evaluator, auto &local_values, auto i) {
+              fe_evaluator.evaluate(make_array_view(local_values),
+                                    EvaluationFlags::values);
+              const auto val = fe_evaluator.get_value(0);
+              if constexpr (data_dim > 1)
+                this->precice->writeVectorData(this->write_data_id,
+                                               interface_nodes_ids[i],
+                                               val.begin_raw());
+              else
+                this->precice->writeScalarData(this->write_data_id,
+                                               interface_nodes_ids[i],
+                                               val);
+            });
+          break;
+        case WriteDataType::gradients_on_other_mesh:
+          write_data_factory(
+            data_vector,
+            UpdateFlags::update_gradients,
+            [this](auto &fe_evaluator, auto &local_values, auto i) {
+              Assert(data_dim == 1, ExcNotImplemented());
+              fe_evaluator.evaluate(make_array_view(local_values),
+                                    EvaluationFlags::gradients);
+              const auto val = fe_evaluator.get_gradient(0);
+              this->precice->writeVectorData(this->write_data_id,
+                                             interface_nodes_ids[i],
+                                             val.begin_raw());
+            });
+          break;
+        default:
+          AssertThrow(false, ExcNotImplemented());
+      }
+  }
+
+
+
+  template <int dim, int data_dim, typename VectorizedArrayType>
+  void
+  ArbitraryInterface<dim, data_dim, VectorizedArrayType>::write_data_factory(
+    const LinearAlgebra::distributed::Vector<double> &data_vector,
+    const UpdateFlags                                 flags,
+    const std::function<void(FEPointEvaluation<data_dim, dim> &,
+                             const Vector<double> &,
+                             const size_t)> &         write_value) const
+  {
     Assert(this->write_data_id != -1, ExcNotInitialized());
     data_vector.update_ghost_values();
 
     FEPointEvaluation<data_dim, dim> fe_evaluator(
       *(this->mf_data->get_mapping_info().mapping),
       this->mf_data->get_dof_handler().get_fe(),
-      UpdateFlags::update_values);
+      flags);
 
     Vector<double> local_values(
       this->mf_data->get_dof_handler().get_fe().n_dofs_per_cell());
@@ -164,23 +231,7 @@ namespace Adapter
           &(this->mf_data->get_dof_handler()));
 
         dof_cell->get_dof_values(data_vector, local_values);
-        fe_evaluator.evaluate(make_array_view(local_values),
-                              EvaluationFlags::values);
-
-        const auto val = fe_evaluator.get_value(0);
-
-        if constexpr (data_dim > 1)
-          {
-            this->precice->writeVectorData(this->write_data_id,
-                                           interface_nodes_ids[i],
-                                           val.begin_raw());
-          }
-        else
-          {
-            this->precice->writeScalarData(this->write_data_id,
-                                           interface_nodes_ids[i],
-                                           val);
-          }
+        write_value(fe_evaluator, local_values, i);
       }
   }
 

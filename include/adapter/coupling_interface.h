@@ -20,6 +20,7 @@ namespace Adapter
     undefined,
     values_on_dofs,
     values_on_other_mesh,
+    gradients_on_other_mesh,
     values_on_quads,
     normal_gradients_on_quads
   };
