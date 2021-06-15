@@ -50,7 +50,7 @@ namespace DoFTools
     for (const auto &cell : dof_handler.active_cell_iterators())
       for (const auto &face : cell->face_iterators())
         if (face->at_boundary() == true && face->boundary_id() == boundary_id &&
-            cell->is_artificial() == false)
+            cell->is_locally_owned())
           // only work on locally relevant cells
           {
             fe_values.reinit(cell, face);
