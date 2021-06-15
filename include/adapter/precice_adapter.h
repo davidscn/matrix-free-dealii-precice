@@ -239,7 +239,7 @@ namespace Adapter
           parameters.write_mesh_name,
           dealii_boundary_interface_id,
           dof_index);
-    else if (parameters.write_data_specification == "values_on_other")
+    else if (parameters.write_data_specification == "values_on_other_mesh")
       {
         writer = std::make_shared<
           ArbitraryInterface<dim, data_dim, VectorizedArrayType>>(
@@ -284,9 +284,6 @@ namespace Adapter
   {
     reader->define_coupling_mesh();
     writer->define_coupling_mesh();
-
-    reader->print_info(true);
-    writer->print_info(false);
 
     // Initialize preCICE internally
     precice->initialize();

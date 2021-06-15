@@ -323,7 +323,6 @@ namespace Adapter
                                            vertex_ids->data(),
                                            &dealii_data[0]);
       }
-
     return dealii_data;
   }
 

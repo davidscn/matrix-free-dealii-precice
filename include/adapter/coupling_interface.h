@@ -19,6 +19,7 @@ namespace Adapter
   {
     undefined,
     values_on_dofs,
+    values_on_other_mesh,
     values_on_quads,
     normal_gradients_on_quads
   };
@@ -114,16 +115,17 @@ namespace Adapter
     add_write_data(const std::string &write_data_name,
                    const std::string &write_data_specification);
 
+  protected:
     /**
      * @brief print_info
      *
      * @param reader Boolean in order to decide if we want read or write
      *        data information
+     * @param local_size The number of element the local process works on
      */
     void
-    print_info(const bool reader) const;
+    print_info(const bool reader, const unsigned int local_size) const;
 
-  protected:
     /// The MatrixFree object (preCICE can only handle double precision)
     std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> mf_data;
 
@@ -191,6 +193,8 @@ namespace Adapter
 
     if (write_data_specification == "values_on_dofs")
       write_data_type = WriteDataType::values_on_dofs;
+    else if (write_data_specification == "values_on_other_mesh")
+      write_data_type = WriteDataType::values_on_other_mesh;
     else if (write_data_specification == "values_on_quads")
       write_data_type = WriteDataType::values_on_quads;
     else if (write_data_specification == "normal_gradients_on_quads")
@@ -232,7 +236,8 @@ namespace Adapter
   template <int dim, int data_dim, typename VectorizedArrayType>
   void
   CouplingInterface<dim, data_dim, VectorizedArrayType>::print_info(
-    const bool reader) const
+    const bool         reader,
+    const unsigned int local_size) const
   {
     ConditionalOStream pcout(std::cout,
                              Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
@@ -243,9 +248,7 @@ namespace Adapter
           << (reader ? read_data_name : write_data_name) << "\n"
           << "--     . associated mesh: " << mesh_name << "\n"
           << "--     . Number of interface nodes: "
-          << Utilities::MPI::sum(precice->getMeshVertexSize(mesh_id),
-                                 MPI_COMM_WORLD)
-          << "\n"
+          << Utilities::MPI::sum(local_size, MPI_COMM_WORLD) << "\n"
           << "--     . Node location: " << get_interface_type() << "\n"
           << std::endl;
   }

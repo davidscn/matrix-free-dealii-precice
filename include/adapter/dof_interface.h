@@ -156,6 +156,11 @@ namespace Adapter
       }
 
     interface_is_defined = true;
+
+    if (this->read_data_id != -1)
+      this->print_info(true, this->precice->getMeshVertexSize(this->mesh_id));
+    if (this->write_data_id != -1)
+      this->print_info(false, this->precice->getMeshVertexSize(this->mesh_id));
   }
 
 

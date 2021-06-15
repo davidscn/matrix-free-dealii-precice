@@ -754,17 +754,23 @@ namespace Heat_Transfer
 
     DataOut<dim> data_out;
 
-    solution.update_ghost_values();
-    data_out.attach_dof_handler(dof_handler);
-    data_out.add_data_vector(solution, "solution");
-    data_out.build_patches(mapping,
-                           fe.degree,
-                           DataOut<dim>::curved_inner_cells);
-
     DataOutBase::VtkFlags flags;
     flags.compression_level        = DataOutBase::VtkFlags::best_speed;
     flags.write_higher_order_cells = true;
     data_out.set_flags(flags);
+
+    solution.update_ghost_values();
+    data_out.attach_dof_handler(dof_handler);
+    data_out.add_data_vector(solution, "solution");
+
+    Vector<double> mpi_owner(triangulation.n_active_cells());
+    mpi_owner =
+      Utilities::MPI::this_mpi_process(triangulation.get_communicator());
+    data_out.add_data_vector(mpi_owner, "owner");
+
+    data_out.build_patches(mapping,
+                           fe.degree,
+                           DataOut<dim>::curved_inner_cells);
 
     const std::string filename = parameters.output_folder + "solution_" +
                                  Utilities::int_to_string(result_number, 3) +

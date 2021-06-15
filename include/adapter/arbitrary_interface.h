@@ -138,8 +138,9 @@ namespace Adapter
     const LinearAlgebra::distributed::Vector<double> &data_vector)
   {
     Assert(this->write_data_id != -1, ExcNotInitialized());
+    data_vector.update_ghost_values();
 
-    FEPointEvaluation<dim, dim> fe_evaluator(
+    FEPointEvaluation<data_dim, dim> fe_evaluator(
       *(this->mf_data->get_mapping_info().mapping),
       this->mf_data->get_dof_handler().get_fe(),
       UpdateFlags::update_values);
@@ -167,9 +168,19 @@ namespace Adapter
                               EvaluationFlags::values);
 
         const auto val = fe_evaluator.get_value(0);
-        this->precice->writeVectorData(this->write_data_id,
-                                       interface_nodes_ids[i],
-                                       val.begin_raw());
+
+        if constexpr (data_dim > 1)
+          {
+            this->precice->writeVectorData(this->write_data_id,
+                                           interface_nodes_ids[i],
+                                           val.begin_raw());
+          }
+        else
+          {
+            this->precice->writeScalarData(this->write_data_id,
+                                           interface_nodes_ids[i],
+                                           val);
+          }
       }
   }
 
@@ -213,7 +224,7 @@ namespace Adapter
     Assert(this->read_data_id == -1, ExcInternalError());
     Assert(this->write_data_id != -1, ExcInternalError());
 
-    this->print_info(false/*, interface_nodes_ids.size()*/);
+    this->print_info(false, interface_nodes_ids.size());
   }
 
 

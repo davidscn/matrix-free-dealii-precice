@@ -74,7 +74,7 @@ namespace FSI
           "Specification of the write data location and the data type"
           "Available options are: values_on_dofs, values_on_quads, normal_gradients_on_quads",
           Patterns::Selection(
-            "values_on_dofs|values_on_quads|normal_gradients_on_quads"));
+            "values_on_dofs|values_on_quads|normal_gradients_on_quads|values_on_other_mesh"));
         prm.add_parameter(
           "Read data name",
           read_data_name,
