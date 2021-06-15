@@ -9,10 +9,10 @@
 
 #include <deal.II/matrix_free/matrix_free.h>
 
-#include <adapter/arbitrary_interface.h>
-#include <adapter/dealii_interface.h>
+#include <adapter/dof_interface.h>
+#include <adapter/quad_interface.h>
+#include <base/q_equidistant.h>
 #include <precice/SolverInterface.hpp>
-#include <q_equidistant.h>
 
 #include <ostream>
 
@@ -26,14 +26,20 @@ namespace Adapter
    * structures are set up, necessary information is passed to preCICE etc.
    */
   template <int dim,
-            int fe_degree,
+            int data_dim,
             typename VectorType,
             typename VectorizedArrayType = VectorizedArray<double>>
   class Adapter
   {
   public:
+    using value_type =
+      typename FEFaceIntegrators<dim, data_dim, double, VectorizedArrayType>::
+        value_type;
     /**
      * @brief      Constructor, which sets up the precice Solverinterface
+     *
+     * @tparam     data_dim Dimension of the coupling data. Equivalent to n_components
+     *             in the deal.II documentation
      *
      * @param[in]  parameters Parameter class, which hold the data specified
      *             in the parameters.prm file
@@ -46,17 +52,18 @@ namespace Adapter
      * @param[in]  read_quad_index Index of the quadrature formula in the
      *             corresponding MatrixFree object which should be used for data
      *             reading
-     * @param[in]  write_quad_index Index of the quadrature formula in the
-     *             corresponding MatrixFree object which should be used for data
-     *             writing
+     * @param[in]  is_dirichlet Boolean to distinguish between Dirichlet type
+     *             solver (using the DoFs for data reading) and Neumann type
+     *             solver (using quadrature points for reading)
      */
     template <typename ParameterClass>
-    Adapter(const ParameterClass &parameters,
-            const unsigned int    dealii_boundary_interface_id,
-            std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>> data,
-            const unsigned int dof_index        = 0,
-            const unsigned int read_quad_index  = 0,
-            const unsigned int write_quad_index = 1);
+    Adapter(
+      const ParameterClass &parameters,
+      const unsigned int    dealii_boundary_interface_id,
+      std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
+      const unsigned int dof_index       = 0,
+      const unsigned int read_quad_index = 0,
+      const bool         is_dirichlet    = false);
 
     /**
      * @brief      Initializes preCICE and passes all relevant data to preCICE
@@ -122,9 +129,16 @@ namespace Adapter
      *        in derived classes of the CouplingInterface. Have a look at the
      *        documentation there.
      */
-    Tensor<1, dim, VectorizedArrayType>
+    value_type
     read_on_quadrature_point(const unsigned int id_number,
                              const unsigned int active_faces) const;
+    /**
+     * @brief Public API adapter method, which calls the respective implementation
+     *        in derived classes of the CouplingInterface. Have a look at the
+     *        documentation there.
+     */
+    void
+    apply_dirichlet_bcs(AffineConstraints<double> &constraints) const;
 
     /**
      * @brief is_coupling_ongoing Calls the preCICE API function isCouplingOnGoing
@@ -157,8 +171,10 @@ namespace Adapter
     // inside the solver.
     std::shared_ptr<precice::SolverInterface> precice;
     /// The objects handling reading and writing data
-    std::shared_ptr<CouplingInterface<dim, VectorizedArrayType>> writer;
-    std::shared_ptr<CouplingInterface<dim, VectorizedArrayType>> reader;
+    std::shared_ptr<CouplingInterface<dim, data_dim, VectorizedArrayType>>
+      writer;
+    std::shared_ptr<CouplingInterface<dim, data_dim, VectorizedArrayType>>
+      reader;
 
     // Container to store time dependent data in case of an implicit coupling
     std::vector<VectorType> old_state_data;
@@ -168,17 +184,17 @@ namespace Adapter
 
 
   template <int dim,
-            int fe_degree,
+            int data_dim,
             typename VectorType,
             typename VectorizedArrayType>
   template <typename ParameterClass>
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::Adapter(
+  Adapter<dim, data_dim, VectorType, VectorizedArrayType>::Adapter(
     const ParameterClass &parameters,
     const unsigned int    dealii_boundary_interface_id,
-    std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>> data,
-    const unsigned int                                            dof_index,
+    std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
+    const unsigned int dof_index,
     const unsigned int read_quad_index,
-    const unsigned int write_quad_index)
+    const bool         is_dirichlet)
     : dealii_boundary_interface_id(dealii_boundary_interface_id)
   {
     precice = std::make_shared<precice::SolverInterface>(
@@ -190,18 +206,40 @@ namespace Adapter
     AssertThrow(dim == precice->getDimensions(), ExcInternalError());
     AssertThrow(dim > 1, ExcNotImplemented());
 
-    // The read interface is always the same
-    reader = std::make_shared<
-      dealiiInterface<dim, fe_degree, fe_degree + 1, VectorizedArrayType>>(
-      data,
-      precice,
-      parameters.read_mesh_name,
-      dealii_boundary_interface_id,
-      dof_index,
-      read_quad_index);
-
+    // 1. Set the reader, which is defined in the Adapter constructor
+    // dof reading (Dirichlet)
+    if (is_dirichlet)
+      reader =
+        std::make_shared<DoFInterface<dim, data_dim, VectorizedArrayType>>(
+          data,
+          precice,
+          parameters.read_mesh_name,
+          dealii_boundary_interface_id,
+          dof_index);
+    else
+      // Quad reading
+      reader =
+        std::make_shared<QuadInterface<dim, data_dim, VectorizedArrayType>>(
+          data,
+          precice,
+          parameters.read_mesh_name,
+          dealii_boundary_interface_id,
+          dof_index,
+          read_quad_index);
+    
     const bool use_solver_mapping = true;
-    if (use_solver_mapping == true)
+    // 2. Set the writer, which is defined in the parameter file
+    if (parameters.write_mesh_name == parameters.read_mesh_name)
+      writer = reader;
+    else if (parameters.write_data_specification == "values_on_dofs")
+      writer =
+        std::make_shared<DoFInterface<dim, data_dim, VectorizedArrayType>>(
+          data,
+          precice,
+          parameters.write_mesh_name,
+          dealii_boundary_interface_id,
+          dof_index);
+    else if (use_solver_mapping == true)
       {
         writer = std::make_shared<ArbitraryInterface<dim, VectorizedArrayType>>(
           data,
@@ -209,23 +247,25 @@ namespace Adapter
           parameters.write_mesh_name,
           dealii_boundary_interface_id);
       }
-    else if (parameters.write_mesh_name == parameters.read_mesh_name)
-      {
-        writer = reader;
-      }
     else
       {
-        writer = std::make_shared<
-          dealiiInterface<dim, fe_degree, fe_degree + 1, VectorizedArrayType>>(
-          data,
-          precice,
-          parameters.write_mesh_name,
-          dealii_boundary_interface_id,
-          dof_index,
-          write_quad_index);
+        Assert(parameters.write_data_specification == "values_on_quads" ||
+                 parameters.write_data_specification ==
+                   "normal_gradients_on_quads",
+               ExcNotImplemented());
+        writer =
+          std::make_shared<QuadInterface<dim, data_dim, VectorizedArrayType>>(
+            data,
+            precice,
+            parameters.write_mesh_name,
+            dealii_boundary_interface_id,
+            dof_index,
+            parameters.write_quad_index);
       }
+
     reader->add_read_data(parameters.read_data_name);
-    writer->add_write_data(parameters.write_data_name);
+    writer->add_write_data(parameters.write_data_name,
+                           parameters.write_data_specification);
 
     Assert(reader.get() != nullptr, ExcInternalError());
     Assert(writer.get() != nullptr, ExcInternalError());
@@ -234,15 +274,18 @@ namespace Adapter
 
 
   template <int dim,
-            int fe_degree,
+            int data_dim,
             typename VectorType,
             typename VectorizedArrayType>
   void
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::initialize(
+  Adapter<dim, data_dim, VectorType, VectorizedArrayType>::initialize(
     const VectorType &dealii_to_precice)
   {
-    writer->define_coupling_mesh();
     reader->define_coupling_mesh();
+    writer->define_coupling_mesh();
+
+    reader->print_info(true);
+    writer->print_info(false);
 
     // Initialize preCICE internally
     precice->initialize();
@@ -273,11 +316,11 @@ namespace Adapter
 
 
   template <int dim,
-            int fe_degree,
+            int data_dim,
             typename VectorType,
             typename VectorizedArrayType>
   void
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::advance(
+  Adapter<dim, data_dim, VectorType, VectorizedArrayType>::advance(
     const VectorType &dealii_to_precice,
     const double      computed_timestep_length)
   {
@@ -296,13 +339,14 @@ namespace Adapter
 
 
   template <int dim,
-            int fe_degree,
+            int data_dim,
             typename VectorType,
             typename VectorizedArrayType>
-  inline Tensor<1, dim, VectorizedArrayType>
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::
-    read_on_quadrature_point(const unsigned int id_number,
-                             const unsigned int active_faces) const
+  inline
+    typename Adapter<dim, data_dim, VectorType, VectorizedArrayType>::value_type
+    Adapter<dim, data_dim, VectorType, VectorizedArrayType>::
+      read_on_quadrature_point(const unsigned int id_number,
+                               const unsigned int active_faces) const
   {
     return reader->read_on_quadrature_point(id_number, active_faces);
   }
@@ -310,11 +354,24 @@ namespace Adapter
 
 
   template <int dim,
-            int fe_degree,
+            int data_dim,
+            typename VectorType,
+            typename VectorizedArrayType>
+  void
+  Adapter<dim, data_dim, VectorType, VectorizedArrayType>::apply_dirichlet_bcs(
+    AffineConstraints<double> &constraints) const
+  {
+    reader->apply_Dirichlet_bcs(constraints);
+  }
+
+
+
+  template <int dim,
+            int data_dim,
             typename VectorType,
             typename VectorizedArrayType>
   inline void
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::
+  Adapter<dim, data_dim, VectorType, VectorizedArrayType>::
     save_current_state_if_required(const std::function<void()> &save_state)
   {
     // First, we let preCICE check, whether we need to store the variables.
@@ -331,11 +388,11 @@ namespace Adapter
 
 
   template <int dim,
-            int fe_degree,
+            int data_dim,
             typename VectorType,
             typename VectorizedArrayType>
   inline void
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::
+  Adapter<dim, data_dim, VectorType, VectorizedArrayType>::
     reload_old_state_if_required(const std::function<void()> &reload_old_state)
   {
     // In case we need to reload a state, we just take the internally stored
@@ -352,12 +409,12 @@ namespace Adapter
 
 
   template <int dim,
-            int fe_degree,
+            int data_dim,
             typename VectorType,
             typename VectorizedArrayType>
   inline bool
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::
-    is_coupling_ongoing() const
+  Adapter<dim, data_dim, VectorType, VectorizedArrayType>::is_coupling_ongoing()
+    const
   {
     return precice->isCouplingOngoing();
   }
@@ -365,11 +422,11 @@ namespace Adapter
 
 
   template <int dim,
-            int fe_degree,
+            int data_dim,
             typename VectorType,
             typename VectorizedArrayType>
   inline bool
-  Adapter<dim, fe_degree, VectorType, VectorizedArrayType>::
+  Adapter<dim, data_dim, VectorType, VectorizedArrayType>::
     is_time_window_complete() const
   {
     return precice->isTimeWindowComplete();

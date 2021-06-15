@@ -5,38 +5,45 @@
 
 #include <deal.II/matrix_free/matrix_free.h>
 
+#include <base/fe_integrator.h>
 #include <precice/SolverInterface.hpp>
 
 namespace Adapter
 {
   using namespace dealii;
+
   /**
-   * An abstract base class, which defines the interface for the functions used
-   * in the main Adapter class. Each instance of all derived classes are always
-   * dedicated to a specific coupling mesh and may provide functions on how to
-   * read and write data on this mesh and how to define the mesh.
+   * Enum to handle all implemented data write methods one can use
    */
-  template <int dim, typename VectorizedArrayType>
+  enum class WriteDataType
+  {
+    undefined,
+    values_on_dofs,
+    values_on_quads,
+    normal_gradients_on_quads
+  };
+
+  /**
+   * A pure abstract base class, which defines the interface for the functions
+   * used in the main Adapter class. Each instance of all derived classes are
+   * always dedicated to a specific coupling mesh and may provide functions on
+   * how to read and write data on this mesh and how to define the mesh.
+   */
+  template <int dim, int data_dim, typename VectorizedArrayType>
   class CouplingInterface
   {
   public:
-    /**
-     * @brief Constructor of the abstract base class
-     *
-     * @param[in] data Underlying MatrixFree object
-     * @param[in] precice The preCICE SolverInterface object
-     * @param[in] mesh_name Name of the coupling mesh in the preCICE
-     *            configuration associated to this interface
-     * @param[in] interface_id boundary ID of the deal.II mesh
-     */
     CouplingInterface(
-      std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>> data,
-      std::shared_ptr<precice::SolverInterface>                     precice,
-      const std::string                                             mesh_name,
-      const types::boundary_id interface_id);
+      std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
+      const std::shared_ptr<precice::SolverInterface> &precice,
+      const std::string &                              mesh_name,
+      const types::boundary_id                         interface_id);
 
     virtual ~CouplingInterface() = default;
 
+    using value_type =
+      typename FEFaceIntegrators<dim, data_dim, double, VectorizedArrayType>::
+        value_type;
     /**
      * @brief define_coupling_mesh Define the coupling mesh associated to the
      *        data points
@@ -64,9 +71,10 @@ namespace Adapter
       const LinearAlgebra::distributed::Vector<double> &data_vector) = 0;
 
     /**
-     * @brief read_on_quadrature_point Returns the relevant read data on
-     *        quadrature point. Currently only implemented in the
-     *        dealiiInterface
+     * @brief read_on_quadrature_point Read and return data from preCICE related
+     *        to a specific quadrature point. This function is not implemented
+     *        in the base class and an exception is thrown if it is used but
+     *        not re-implemeted.
      *
      * @param[in]  id_number Number of the quadrature point with respect to
      *             the total number of interface quadrature points this rank
@@ -76,9 +84,20 @@ namespace Adapter
      *
      * @return dim dimensional data associated to the interface node
      */
-    virtual Tensor<1, dim, VectorizedArrayType>
+    virtual value_type
     read_on_quadrature_point(const unsigned int id_number,
-                             const unsigned int active_faces) const = 0;
+                             const unsigned int active_faces) const;
+
+    /**
+     * @brief apply_Dirichlet_bcs Read data from preCICE and fill a constraint
+     *        object. This function is not implemented in the base class and an
+     *        exception is thrown if it is used but not re-implemeted.
+     *
+     * @param constraint associated constraint object
+     */
+    virtual void
+    apply_Dirichlet_bcs(AffineConstraints<double> &constraints) const;
+
     /**
      * @brief add_read_data
      * @param read_data_name
@@ -91,21 +110,21 @@ namespace Adapter
      * @param read_data_name
      */
     void
-    add_write_data(const std::string &write_data_name);
+    add_write_data(const std::string &write_data_name,
+                   const std::string &write_data_specification);
 
-  protected:
     /**
      * @brief print_info
+     *
      * @param reader Boolean in order to decide if we want read or write
      *        data information
-     * @param local_size Number of local interface noces this process is
-     *        working on
      */
     void
-    print_info(const bool reader, const unsigned int local_size) const;
+    print_info(const bool reader) const;
 
+  protected:
     /// The MatrixFree object (preCICE can only handle double precision)
-    std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>> mf_data;
+    std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> mf_data;
 
     /// public precice solverinterface
     std::shared_ptr<precice::SolverInterface> precice;
@@ -120,18 +139,20 @@ namespace Adapter
 
     const types::boundary_id dealii_boundary_interface_id;
 
+    WriteDataType write_data_type = WriteDataType::undefined;
+
     virtual std::string
     get_interface_type() const = 0;
   };
 
 
 
-  template <int dim, typename VectorizedArrayType>
-  CouplingInterface<dim, VectorizedArrayType>::CouplingInterface(
-    std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>> data,
-    std::shared_ptr<precice::SolverInterface>                     precice,
-    const std::string                                             mesh_name,
-    const types::boundary_id                                      interface_id)
+  template <int dim, int data_dim, typename VectorizedArrayType>
+  CouplingInterface<dim, data_dim, VectorizedArrayType>::CouplingInterface(
+    std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
+    const std::shared_ptr<precice::SolverInterface> &                   precice,
+    const std::string &      mesh_name,
+    const types::boundary_id interface_id)
     : mf_data(data)
     , precice(precice)
     , mesh_name(mesh_name)
@@ -145,9 +166,9 @@ namespace Adapter
   }
 
 
-  template <int dim, typename VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
   void
-  CouplingInterface<dim, VectorizedArrayType>::add_read_data(
+  CouplingInterface<dim, data_dim, VectorizedArrayType>::add_read_data(
     const std::string &read_data_name_)
   {
     Assert(mesh_id != -1, ExcNotInitialized());
@@ -157,23 +178,51 @@ namespace Adapter
 
 
 
-  template <int dim, typename VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
   void
-  CouplingInterface<dim, VectorizedArrayType>::add_write_data(
-    const std::string &write_data_name_)
+  CouplingInterface<dim, data_dim, VectorizedArrayType>::add_write_data(
+    const std::string &write_data_name_,
+    const std::string &write_data_specification)
   {
     Assert(mesh_id != -1, ExcNotInitialized());
     write_data_name = write_data_name_;
     write_data_id   = precice->getDataID(write_data_name, mesh_id);
+
+    if (write_data_specification == "values_on_dofs")
+      write_data_type = WriteDataType::values_on_dofs;
+    else if (write_data_specification == "values_on_quads")
+      write_data_type = WriteDataType::values_on_quads;
+    else if (write_data_specification == "normal_gradients_on_quads")
+      write_data_type = WriteDataType::normal_gradients_on_quads;
   }
 
 
 
-  template <int dim, typename VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
+  typename CouplingInterface<dim, data_dim, VectorizedArrayType>::value_type
+  CouplingInterface<dim, data_dim, VectorizedArrayType>::
+    read_on_quadrature_point(const unsigned int /*id_number*/,
+                             const unsigned int /*active_faces*/) const
+  {
+    AssertThrow(false, ExcNotImplemented());
+  }
+
+
+
+  template <int dim, int data_dim, typename VectorizedArrayType>
   void
-  CouplingInterface<dim, VectorizedArrayType>::print_info(
-    const bool         reader,
-    const unsigned int local_size) const
+  CouplingInterface<dim, data_dim, VectorizedArrayType>::apply_Dirichlet_bcs(
+    AffineConstraints<double> &) const
+  {
+    AssertThrow(false, ExcNotImplemented());
+  }
+
+
+
+  template <int dim, int data_dim, typename VectorizedArrayType>
+  void
+  CouplingInterface<dim, data_dim, VectorizedArrayType>::print_info(
+    const bool reader) const
   {
     ConditionalOStream pcout(std::cout,
                              Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
@@ -183,8 +232,10 @@ namespace Adapter
           << "--     . data name: "
           << (reader ? read_data_name : write_data_name) << "\n"
           << "--     . associated mesh: " << mesh_name << "\n"
-          << "--     . Number of active interface nodes: "
-          << Utilities::MPI::sum(local_size, MPI_COMM_WORLD) << "\n"
+          << "--     . Number of interface nodes: "
+          << Utilities::MPI::sum(precice->getMeshVertexSize(mesh_id),
+                                 MPI_COMM_WORLD)
+          << "\n"
           << "--     . Node location: " << get_interface_type() << "\n"
           << std::endl;
   }

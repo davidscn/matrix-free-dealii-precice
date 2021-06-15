@@ -1,7 +1,7 @@
 # A matrix-free high performance solid solver for coupled fluid-structure interactions
 ![GitHub CI](https://github.com/DavidSCN/matrix-free-dealii-precice/workflows/GitHub%20CI/badge.svg)
 
-This project provides a matrix-free high performance solid solver for coupled fluid-structure interactions. It was primarily developed on the basis of the ['large-strain-matrix-free'](https://github.com/davydden/large-strain-matrix-free) project and the ['dealii-adapter'](https://github.com/precice/dealii-adapter) project.
+This project provides a matrix-free high performance solid solver for coupled fluid-structure interactions. It was primarily developed on the basis of the ['large-strain-matrix-free'](https://github.com/davydden/large-strain-matrix-free) project and the ['dealii-adapter'](https://github.com/precice/dealii-adapter) project. Special thanks goes to [@peterrum](https://github.com/peterrum/) for his valuable deal.II advice at all times.
 
 ## Description
 The program builds on the [finite-element library deal.II ](https://github.com/dealii/dealii) and the [coupling library preCICE](https://github.com/precice/precice) and includes the following capabilities:
@@ -21,7 +21,7 @@ The program builds on the [finite-element library deal.II ](https://github.com/d
 In order to build the program, both libraries (deal.II and preCICE) need to be installed on your system:
 
 ### Step 1: install deal.II
-At least version `9.3` or greater is required. Older versions might work as well, but have not been tested. You can use the following command line instructions in order to download and compile deal.II. Note that the library relies on [p4est](https://www.p4est.org/) in order to handle distributed meshes and you need to adjust the `P4EST_DIR` according to your installation. If you have not yet installed p4est, you might want to download the [latest tarball](https://p4est.github.io/release/p4est-2.2.tar.gz) and run the `p4est-setup.sh` script located in your deal.II directory at `dealii/doc/external-libs`. A complete installation guide including all installation options is also given on the [deal.II installation page](https://dealii.org/developer/readme.html#installation).
+At least version `9.3` or greater is required. Compatibility for older deal.II versions and corresponding older repository versions might be available thorugh the [list of releases](https://github.com/DavidSCN/matrix-free-dealii-precice/releases). You can use the following command line instructions in order to download and compile deal.II. Note that the library relies on [p4est](https://www.p4est.org/) in order to handle distributed meshes and you need to adjust the `P4EST_DIR` according to your installation. If you have not yet installed p4est, you might want to download the [latest tarball](https://p4est.github.io/release/p4est-2.2.tar.gz) and run the `p4est-setup.sh` script located in your deal.II directory at `dealii/doc/external-libs`. A complete installation guide including all installation options is also given on the [deal.II installation page](https://dealii.org/developer/readme.html#installation).
 ```
 git clone https://github.com/dealii/dealii.git
 mkdir build && cd build

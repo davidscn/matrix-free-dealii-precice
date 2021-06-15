@@ -18,7 +18,6 @@ static const unsigned int debug_level = 0;
 #include <deal.II/base/function.h>
 #include <deal.II/base/point.h>
 #include <deal.II/base/quadrature_lib.h>
-#include <deal.II/base/revision.h>
 #include <deal.II/base/symmetric_tensor.h>
 #include <deal.II/base/tensor.h>
 #include <deal.II/base/timer.h>
@@ -62,13 +61,14 @@ static const unsigned int debug_level = 0;
 #include <deal.II/physics/transformations.h>
 
 #include <adapter/precice_adapter.h>
+#include <base/fe_integrator.h>
+#include <base/q_equidistant.h>
+#include <base/time_handler.h>
+#include <base/utilities.h>
 #include <cases/case_base.h>
-#include <material.h>
-#include <mf_nh_operator.h>
 #include <parameter/parameter_handling.h>
-#include <q_equidistant.h>
-#include <sys/stat.h>
-#include <version.h>
+#include <solid_mechanics/material.h>
+#include <solid_mechanics/mf_nh_operator.h>
 
 #include <fstream>
 #include <iostream>
@@ -82,59 +82,8 @@ namespace FSI
 {
   using namespace dealii;
 
-  // @sect3{Time class}
-
-  // A simple class to store time data. Its functioning is transparent so no
-  // discussion is necessary. For simplicity we assume a constant time step
-  // size.
-  class Time
-  {
-  public:
-    Time(const double time_end, const double delta_t)
-      : timestep(0)
-      , time_current(0.0)
-      , time_end(time_end)
-      , delta_t(delta_t)
-    {}
-
-    virtual ~Time() = default;
-
-    double
-    current() const
-    {
-      return time_current;
-    }
-    double
-    end() const
-    {
-      return time_end;
-    }
-    double
-    get_delta_t() const
-    {
-      return delta_t;
-    }
-    unsigned int
-    get_timestep() const
-    {
-      return timestep;
-    }
-    void
-    increment()
-    {
-      time_current += delta_t;
-      ++timestep;
-    }
-
-  private:
-    unsigned int timestep;
-    double       time_current;
-    const double time_end;
-    const double delta_t;
-  };
-
   // The Solid class is the central class.
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   class Solid
   {
   public:
@@ -143,6 +92,10 @@ namespace FSI
     using VectorType          = LinearAlgebra::distributed::Vector<Number>;
     using VectorizedArrayType = VectorizedArray<Number>;
     using LevelVectorizedArrayType = VectorizedArray<LevelNumber>;
+    using FECellIntegrator =
+      FECellIntegrators<dim, dim, Number, VectorizedArrayType>;
+    using FEFaceIntegrator =
+      FEFaceIntegrators<dim, dim, Number, VectorizedArrayType>;
 
     Solid(const Parameters::AllParameters<dim> &parameters);
 
@@ -268,6 +221,8 @@ namespace FSI
     std::ofstream       deallogfile;
     std::ofstream       blessed_output_file;
     ConditionalOStream  bcout;
+    const int           fe_degree;
+    const int           quad_order;
 
     // A description of the finite-element system including the displacement
     // polynomial degree, the degree-of-freedom handler, number of DoFs per
@@ -313,8 +268,7 @@ namespace FSI
       Material_Compressible_Neo_Hook_One_Field<dim, LevelVectorizedArrayType>>
       material_inclusion_level;
 
-    std::unique_ptr<
-      Adapter::Adapter<dim, degree, VectorType, VectorizedArrayType>>
+    std::unique_ptr<Adapter::Adapter<dim, dim, VectorType, VectorizedArrayType>>
       precice_adapter;
 
     static const unsigned int n_components      = dim;
@@ -405,9 +359,9 @@ namespace FSI
     std::vector<std::shared_ptr<MatrixFree<dim, float>>> mg_mf_data_current;
     std::vector<std::shared_ptr<MatrixFree<dim, float>>> mg_mf_data_reference;
 
-    NeoHookOperator<dim, degree, n_q_points_1d, double> mf_nh_operator;
+    NeoHookOperator<dim, double> mf_nh_operator;
 
-    using LevelMatrixType = NeoHookOperator<dim, degree, n_q_points_1d, float>;
+    using LevelMatrixType = NeoHookOperator<dim, float>;
 
     MGLevelObject<LevelMatrixType> mg_mf_nh_operator;
 
@@ -448,44 +402,11 @@ namespace FSI
     unsigned int      total_n_cg_solve;
   };
 
-  // @sect3{Implementation of the <code>Solid</code> class}
 
-  // @sect4{Public interface}
-
-  int
-  create_directory(std::string pathname, const mode_t mode)
-  {
-    // force trailing / so we can handle everything in loop
-    if (pathname[pathname.size() - 1] != '/')
-      {
-        pathname += '/';
-      }
-
-    size_t pre = 0;
-    size_t pos;
-
-    while ((pos = pathname.find_first_of('/', pre)) != std::string::npos)
-      {
-        const std::string subdir = pathname.substr(0, pos++);
-        pre                      = pos;
-
-        // if leading '/', first string is 0 length
-        if (subdir.size() == 0)
-          continue;
-
-        int mkdir_return_value;
-        if ((mkdir_return_value = mkdir(subdir.c_str(), mode)) &&
-            (errno != EEXIST))
-          return mkdir_return_value;
-      }
-
-    return 0;
-  }
 
   // We initialise the Solid class using data extracted from the parameter file.
-  template <int dim, int degree, int n_q_points_1d, typename Number>
-  Solid<dim, degree, n_q_points_1d, Number>::Solid(
-    const Parameters::AllParameters<dim> &parameters)
+  template <int dim, typename Number>
+  Solid<dim, Number>::Solid(const Parameters::AllParameters<dim> &parameters)
     : mpi_communicator(MPI_COMM_WORLD)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(mpi_communicator) == 0)
     , parameters(parameters)
@@ -513,7 +434,9 @@ namespace FSI
     ,
     // The Finite Element System is composed of dim continuous displacement
     // DOFs.
-    fe(FE_Q<dim>(degree), dim)
+    fe_degree(parameters.poly_degree)
+    , quad_order(parameters.quad_order)
+    , fe(FE_Q<dim>(fe_degree), dim)
     , // displacement
     dof_handler(triangulation)
     , dofs_per_cell(fe.dofs_per_cell)
@@ -566,8 +489,8 @@ namespace FSI
           parameters.rho,
           alpha_1,
           parameters.material_formulation))
-    , qf_cell(n_q_points_1d)
-    , qf_face(n_q_points_1d)
+    , qf_cell(quad_order)
+    , qf_face(quad_order)
     , n_q_points(qf_cell.size())
     , n_q_points_f(qf_face.size())
     , print_mf_memory(true)
@@ -581,9 +504,7 @@ namespace FSI
         AssertThrow(gamma <= 1 && gamma >= 0, ExcInternalError());
         AssertThrow(2 * beta >= gamma, ExcInternalError());
         AssertThrow(gamma == 0 || gamma >= 0.5, ExcInternalError());
-        const int ierr =
-          create_directory(parameters.output_folder,
-                           S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+        const int ierr = Utilities::create_directory(parameters.output_folder);
         (void)ierr;
         Assert(ierr == 0,
                ExcMessage("can't create: " + parameters.output_folder));
@@ -597,61 +518,13 @@ namespace FSI
 
     mf_nh_operator.set_material(material_vec, material_inclusion_vec);
 
-    // print some data about how we run:
-    auto print = [&](ConditionalOStream &stream) {
-      const int n_tasks =
-        dealii::Utilities::MPI::n_mpi_processes(mpi_communicator);
-      const int          n_threads      = dealii::MultithreadInfo::n_threads();
-      const unsigned int n_vect_doubles = VectorizedArray<double>::size();
-      const unsigned int n_vect_bits    = 8 * sizeof(double) * n_vect_doubles;
-
-      stream
-        << "-----------------------------------------------------------------------------"
-        << std::endl
-#ifdef DEBUG
-        << "--     . running in DEBUG mode" << std::endl
-#else
-        << "--     . running in OPTIMIZED mode" << std::endl
-#endif
-        << "--     . running with " << n_tasks << " MPI process"
-        << (n_tasks == 1 ? "" : "es") << std::endl;
-
-      if (n_threads > 1)
-        stream << "--     . using " << n_threads << " threads "
-               << (n_tasks == 1 ? "" : "each") << std::endl;
-
-      stream << "--     . vectorization over " << n_vect_doubles
-             << " doubles = " << n_vect_bits << " bits (";
-
-      if (n_vect_bits == 64)
-        stream << "disabled";
-      else if (n_vect_bits == 128)
-        stream << "SSE2";
-      else if (n_vect_bits == 256)
-        stream << "AVX";
-      else if (n_vect_bits == 512)
-        stream << "AVX512";
-      else
-        AssertThrow(false, ExcNotImplemented());
-
-      stream << ")" << std::endl;
-      stream << "--     . version " << GIT_TAG << " (revision " << GIT_SHORTREV
-             << " on branch " << GIT_BRANCH << ")" << std::endl;
-      stream << "--     . deal.II " << DEAL_II_PACKAGE_VERSION << " (revision "
-             << DEAL_II_GIT_SHORTREV << " on branch " << DEAL_II_GIT_BRANCH
-             << ")" << std::endl;
-      stream
-        << "-----------------------------------------------------------------------------"
-        << std::endl
-        << std::endl;
-    };
-    print(timer_out);
-    print(pcout);
+    Utilities::print_configuration(timer_out);
+    Utilities::print_configuration(pcout);
   }
 
   // The class destructor simply clears the data held by the DOFHandler
-  template <int dim, int degree, int n_q_points_1d, typename Number>
-  Solid<dim, degree, n_q_points_1d, Number>::~Solid()
+  template <int dim, typename Number>
+  Solid<dim, Number>::~Solid()
   {
     mf_nh_operator.clear();
 
@@ -675,9 +548,9 @@ namespace FSI
   // before starting the simulation proper with the first time (and loading)
   // increment.
   //
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::run(
+  Solid<dim, Number>::run(
     std::shared_ptr<TestCases::TestCaseBase<dim>> testcase_)
   {
     testcase = testcase_;
@@ -692,7 +565,7 @@ namespace FSI
     //
     setup_matrix_free();
     precice_adapter = std::make_unique<
-      Adapter::Adapter<dim, degree, VectorType, VectorizedArrayType>>(
+      Adapter::Adapter<dim, dim, VectorType, VectorizedArrayType>>(
       parameters,
       int(TestCases::TestCaseBase<dim>::interface_id),
       mf_data_reference);
@@ -751,9 +624,9 @@ namespace FSI
 
 
 
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::make_grid()
+  Solid<dim, Number>::make_grid()
   {
     Assert(testcase.get() != nullptr, ExcInternalError());
     testcase->make_coarse_grid_and_bcs(triangulation);
@@ -771,9 +644,9 @@ namespace FSI
   // Next we describe how the FE system is setup.  We first determine the number
   // of components per block. Since the displacement is a vector component, the
   // first dim components belong to it.
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::system_setup()
+  Solid<dim, Number>::system_setup()
   {
     timer.enter_subsection("Setup system");
 
@@ -785,8 +658,8 @@ namespace FSI
 
     auto print = [&](ConditionalOStream &stream) {
       stream << "--     . dim       = " << dim << "\n"
-             << "--     . fe_degree = " << degree << "\n"
-             << "--     . 1d_quad   = " << n_q_points_1d << "\n"
+             << "--     . fe_degree = " << fe_degree << "\n"
+             << "--     . 1d_quad   = " << quad_order << "\n"
              << "--     . Number of active cells: "
              << triangulation.n_global_active_cells() << "\n"
              << "--     . Number of degrees of freedom: "
@@ -827,8 +700,8 @@ namespace FSI
 
     // print some info
     timer_out << "dim   = " << dim << std::endl
-              << "p     = " << degree << std::endl
-              << "q     = " << n_q_points_1d << std::endl
+              << "p     = " << fe_degree << std::endl
+              << "q     = " << quad_order << std::endl
               << "cells = " << triangulation.n_global_active_cells()
               << std::endl
               << "dofs  = " << dof_handler.n_dofs() << std::endl
@@ -837,9 +710,9 @@ namespace FSI
 
 
 
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::setup_matrix_free()
+  Solid<dim, Number>::setup_matrix_free()
   {
     make_constraints(0, false);
     // Setup MF dditional data
@@ -852,7 +725,7 @@ namespace FSI
     mf_data_reference = std::make_shared<MatrixFree<dim, double>>();
 
     eulerian_mapping =
-      std::make_shared<MappingQEulerian<dim, VectorType>>(degree,
+      std::make_shared<MappingQEulerian<dim, VectorType>>(fe_degree,
                                                           dof_handler,
                                                           total_displacement);
     reinit_matrix_free(data,
@@ -900,7 +773,7 @@ namespace FSI
         // Eulerian mapping
         std::shared_ptr<MappingQEulerian<dim, LevelVectorType>> euler_level =
           std::make_shared<MappingQEulerian<dim, LevelVectorType>>(
-            degree, dof_handler, mg_total_displacement[level], level);
+            fe_degree, dof_handler, mg_total_displacement[level], level);
         mg_eulerian_mapping.push_back(euler_level);
 
         // Reinit
@@ -918,10 +791,10 @@ namespace FSI
 
 
 
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   template <typename AdditionalData>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::setup_mf_additional_data(
+  Solid<dim, Number>::setup_mf_additional_data(
     AdditionalData &   data,
     const unsigned int level,
     const bool         initialize_indices) const
@@ -971,9 +844,9 @@ namespace FSI
 
 
 
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::reinit_mg_transfer()
+  Solid<dim, Number>::reinit_mg_transfer()
   {
     timer.enter_subsection("Setup MF: MGTransferMatrixFree");
 
@@ -989,11 +862,10 @@ namespace FSI
 
 
 
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::setup_mg_interpolation(
-    const unsigned int max_level,
-    const bool         reset_mg_transfer)
+  Solid<dim, Number>::setup_mg_interpolation(const unsigned int max_level,
+                                             const bool reset_mg_transfer)
   {
     timer.enter_subsection("Setup MF: interpolate_to_mg");
 
@@ -1013,14 +885,13 @@ namespace FSI
 
 
 
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   template <typename AdditionalData>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::reinit_matrix_free(
-    const AdditionalData &data,
-    const bool            reinit_mf_current,
-    const bool            update_mapping_current,
-    const bool            reinit_mf_reference)
+  Solid<dim, Number>::reinit_matrix_free(const AdditionalData &data,
+                                         const bool reinit_mf_current,
+                                         const bool update_mapping_current,
+                                         const bool reinit_mf_reference)
   {
     if (!reinit_mf_current && !reinit_mf_reference && !update_mapping_current)
       return;
@@ -1028,7 +899,7 @@ namespace FSI
     timer.enter_subsection("Setup MF: Reinit matrix-free");
 
     // TODO: Parametrize with function below
-    const QGauss<1> quad(n_q_points_1d);
+    const QGauss<1> quad(quad_order);
 
     // solution_total is the point around which we linearize
     if (reinit_mf_current)
@@ -1043,8 +914,11 @@ namespace FSI
       {
         const std::vector<const AffineConstraints<double> *> constr = {
           &constraints};
-        const std::vector<Quadrature<1>> quadratures = {
-          quad, QEquidistant<1>(n_q_points_1d)};
+        std::vector<Quadrature<1>> quadratures = {quad};
+
+        // Only push back the equidistant quadrature if actually needed
+        if (parameters.write_quad_index > 0)
+          quadratures.push_back(QEquidistant<1>(quad_order));
         mf_data_reference->reinit(StaticMappingQ1<dim>::mapping,
                                   {&dof_handler},
                                   constr,
@@ -1074,10 +948,10 @@ namespace FSI
 
 
 
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   template <typename AdditionalData>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::reinit_multi_grid_matrix_free(
+  Solid<dim, Number>::reinit_multi_grid_matrix_free(
     const AdditionalData &data,
     const bool            reinit_mf_current,
     const bool            update_mf_current_mapping,
@@ -1092,7 +966,7 @@ namespace FSI
 
     timer.enter_subsection("Setup MF: Reinit multi-grid MF");
 
-    const QGauss<1> quad(n_q_points_1d);
+    const QGauss<1> quad(quad_order);
 
     AffineConstraints<double> level_constraints;
     IndexSet                  relevant_dofs;
@@ -1138,10 +1012,9 @@ namespace FSI
 
 
 
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::adjust_ghost_range(
-    const unsigned int level)
+  Solid<dim, Number>::adjust_ghost_range(const unsigned int level)
   {
     timer.enter_subsection("Setup MF: ghost range");
 
@@ -1184,12 +1057,11 @@ namespace FSI
 
 
 
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   template <typename Operator>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::setup_operator_cache(
-    Operator &         nh_operator,
-    const unsigned int level)
+  Solid<dim, Number>::setup_operator_cache(Operator &         nh_operator,
+                                           const unsigned int level)
   {
     timer.enter_subsection("Setup MF: cache() and diagonal()");
 
@@ -1222,10 +1094,9 @@ namespace FSI
 
 
 
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::setup_gmg(
-    const bool initialize_all)
+  Solid<dim, Number>::setup_gmg(const bool initialize_all)
   {
     timer.enter_subsection("Setup MF: GMG setup");
 
@@ -1372,9 +1243,9 @@ namespace FSI
   // assumption is not exploited in make_constraints. However, the MF and GMG
   // constraints are not updated accordingly and in case one wants to utilize
   // other contraints, the MF GMG needs to be reinitialized here.
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::update_matrix_free(const int &)
+  Solid<dim, Number>::update_matrix_free(const int &)
   {
     // We need to update the mapping in case we use a current dof handler, which
     // depends on selected caching strategy
@@ -1440,10 +1311,9 @@ namespace FSI
 
 
 
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   bool
-  Solid<dim, degree, n_q_points_1d, Number>::check_convergence(
-    const unsigned int newton_iteration)
+  Solid<dim, Number>::check_convergence(const unsigned int newton_iteration)
   {
     if (newton_iteration == 0)
       error_residual_0 = error_residual;
@@ -1484,9 +1354,9 @@ namespace FSI
   // The next function is the driver method for the Newton-Raphson scheme. At
   // its top we create a new vector to store the current Newton update step,
   // reset the error storage objects and print solver header.
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::solve_nonlinear_timestep()
+  Solid<dim, Number>::solve_nonlinear_timestep()
   {
     pcout << std::endl
           << "Timestep " << time.get_timestep() << " @ " << time.current()
@@ -1584,9 +1454,9 @@ namespace FSI
   // This program prints out data in a nice table that is updated
   // on a per-iteration basis. The next two functions set up the table
   // header and footer:
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::print_conv_header()
+  Solid<dim, Number>::print_conv_header()
   {
     static const unsigned int l_width = 98;
 
@@ -1606,9 +1476,9 @@ namespace FSI
 
 
 
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::print_conv_footer()
+  Solid<dim, Number>::print_conv_footer()
   {
     static const unsigned int l_width = 98;
 
@@ -1629,9 +1499,9 @@ namespace FSI
 
 
   // Print solution at a given point
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::print_solution_watchpoint()
+  Solid<dim, Number>::print_solution_watchpoint()
   {
     if (!parameters.output_solution)
       return;
@@ -1684,10 +1554,9 @@ namespace FSI
 
 
   // Update the acceleration according to Newmarks method
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::update_velocity(
-    VectorType &displacement_delta)
+  Solid<dim, Number>::update_velocity(VectorType &displacement_delta)
   {
     velocity.equ(alpha_4, displacement_delta);
     velocity.add(alpha_5, velocity_old, alpha_6, acceleration_old);
@@ -1699,10 +1568,9 @@ namespace FSI
 
 
   // Update the acceleration according to Newmarks method
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::update_acceleration(
-    VectorType &displacement_delta)
+  Solid<dim, Number>::update_acceleration(VectorType &displacement_delta)
   {
     acceleration.equ(alpha_1, displacement_delta);
     acceleration.add(-alpha_2, velocity_old, -alpha_3, acceleration_old);
@@ -1711,9 +1579,9 @@ namespace FSI
 
   // Note that we must ensure that
   // the matrix is reset before any assembly operations can occur.
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::assemble_residual(const int it_nr)
+  Solid<dim, Number>::assemble_residual(const int it_nr)
   {
     TimerOutput::Scope t(timer, "Assemble residual");
     pcout << " ASR " << std::flush;
@@ -1821,12 +1689,14 @@ namespace FSI
       }
     else
       {
-        FEEvaluation<dim, degree, n_q_points_1d, dim, Number> phi_reference(
-          *mf_data_reference);
-        // Copy constructor
-        FEEvaluation<dim, degree, n_q_points_1d, dim, Number> phi_acc(
-          phi_reference);
+        // The FEEvaluation objects
+        FECellIntegrator   phi_reference(*mf_data_reference);
+        FECellIntegrator   phi_acc(phi_reference);
         const unsigned int n_cells = mf_data_reference->n_cell_batches();
+
+        Assert(phi_reference.fast_evaluation_supported(fe_degree, quad_order),
+               ExcMessage(
+                 "The given degree/n_qpoints combination is not supported."));
 
         for (unsigned int cell = 0; cell < n_cells; ++cell)
           {
@@ -1837,11 +1707,11 @@ namespace FSI
 
             phi_reference.reinit(cell);
             phi_reference.read_dof_values_plain(total_displacement);
-            phi_reference.evaluate(false, true, false);
+            phi_reference.evaluate(EvaluationFlags::gradients);
 
             phi_acc.reinit(cell);
             phi_acc.read_dof_values_plain(acceleration);
-            phi_acc.evaluate(true, false);
+            phi_acc.evaluate(EvaluationFlags::values);
 
 
             // Now we build the residual. In doing so, we first extract some
@@ -1850,16 +1720,16 @@ namespace FSI
             for (unsigned int q_point = 0; q_point < phi_reference.n_q_points;
                  ++q_point)
               {
-                const Tensor<2, dim, VectorizedArray<Number>> grad_u =
+                const Tensor<2, dim, VectorizedArrayType> grad_u =
                   phi_reference.get_gradient(q_point);
 
-                const Tensor<2, dim, VectorizedArray<Number>> F =
+                const Tensor<2, dim, VectorizedArrayType> F =
                   Physics::Elasticity::Kinematics::F(grad_u);
 
-                const SymmetricTensor<2, dim, VectorizedArray<Number>> b =
+                const SymmetricTensor<2, dim, VectorizedArrayType> b =
                   Physics::Elasticity::Kinematics::b(F);
 
-                const VectorizedArray<Number> det_F = determinant(F);
+                const VectorizedArrayType det_F = determinant(F);
 
                 Assert(*std::min_element(
                          det_F.begin(),
@@ -1868,20 +1738,20 @@ namespace FSI
                              cell)) > Number(0.0),
                        ExcInternalError());
 
-                const Tensor<2, dim, VectorizedArray<Number>> F_inv = invert(F);
+                const Tensor<2, dim, VectorizedArrayType> F_inv = invert(F);
 
                 // don't calculate b_bar if we don't need to:
-                const SymmetricTensor<2, dim, VectorizedArray<Number>> b_bar =
+                const SymmetricTensor<2, dim, VectorizedArrayType> b_bar =
                   cell_mat->formulation == 0 ?
                     Physics::Elasticity::Kinematics::b(
                       Physics::Elasticity::Kinematics::F_iso(F)) :
-                    SymmetricTensor<2, dim, VectorizedArray<Number>>();
+                    SymmetricTensor<2, dim, VectorizedArrayType>();
 
-                SymmetricTensor<2, dim, VectorizedArray<Number>> tau;
+                SymmetricTensor<2, dim, VectorizedArrayType> tau;
                 cell_mat->get_tau(tau, det_F, b_bar, b);
 
-                const Tensor<2, dim, VectorizedArray<Number>> res =
-                  Tensor<2, dim, VectorizedArray<Number>>(tau);
+                const Tensor<2, dim, VectorizedArrayType> res =
+                  Tensor<2, dim, VectorizedArrayType>(tau);
 
                 phi_reference.submit_gradient(-res * transpose(F_inv), q_point);
                 phi_acc.submit_value(-phi_acc.get_value(q_point) *
@@ -1889,18 +1759,16 @@ namespace FSI
                                      q_point);
               } // end loop over quadrature points
 
-            phi_reference.integrate(false, true);
+            phi_reference.integrate(EvaluationFlags::gradients);
             phi_reference.distribute_local_to_global(system_rhs);
-            phi_acc.integrate(true, false);
+            phi_acc.integrate(EvaluationFlags::values);
             phi_acc.distribute_local_to_global(system_rhs);
           }
       }
 
 
-
-    FEFaceEvaluation<dim, degree, n_q_points_1d, dim, Number> phi(
-      *mf_data_reference);
-    unsigned int q_index = 0;
+    FEFaceIntegrator phi(*mf_data_reference);
+    unsigned int     q_index = 0;
 
     for (unsigned int face = mf_data_reference->n_inner_face_batches();
          face < mf_data_reference->n_boundary_face_batches() +
@@ -1915,7 +1783,7 @@ namespace FSI
 
         // Read out the total displacment
         phi.reinit(face);
-        phi.gather_evaluate(total_displacement, false, true);
+        phi.gather_evaluate(total_displacement, EvaluationFlags::gradients);
         // Number of active faces
         const auto active_faces =
           mf_data_reference->n_active_entries_per_face_batch(face);
@@ -1934,7 +1802,7 @@ namespace FSI
             ++q_index;
           }
         // Integrate the result and write into the rhs vector
-        phi.integrate_scatter(true, false, system_rhs);
+        phi.integrate_scatter(EvaluationFlags::values, system_rhs);
       }
 
     system_rhs.compress(VectorOperation::add);
@@ -1956,10 +1824,9 @@ namespace FSI
   // be specified at the zeroth iteration and subsequently no
   // additional contributions are to be made since the constraints
   // are already exactly satisfied.
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::make_constraints(const int &it_nr,
-                                                              const bool print)
+  Solid<dim, Number>::make_constraints(const int &it_nr, const bool print)
   {
     if (print)
       pcout << " CST " << std::flush;
@@ -2019,10 +1886,9 @@ namespace FSI
   // @sect4{Solid::solve_linear_system}
   // As the system is composed of a single block, defining a solution scheme
   // for the linear problem is straight-forward.
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   std::tuple<unsigned int, double, double>
-  Solid<dim, degree, n_q_points_1d, Number>::solve_linear_system(
-    VectorType &newton_update) const
+  Solid<dim, Number>::solve_linear_system(VectorType &newton_update) const
   {
     unsigned int lin_it      = 0;
     double       lin_res     = 0.0;
@@ -2067,8 +1933,7 @@ namespace FSI
 
     if (parameters.preconditioner_type == "jacobi")
       {
-        PreconditionJacobi<NeoHookOperator<dim, degree, n_q_points_1d, double>>
-          preconditioner;
+        PreconditionJacobi<NeoHookOperator<dim, double>> preconditioner;
         preconditioner.initialize(mf_nh_operator,
                                   parameters.preconditioner_relaxation);
 
@@ -2112,10 +1977,9 @@ namespace FSI
     return std::make_tuple(lin_it, lin_res, cond_number);
   }
 
-  template <int dim, int degree, int n_q_points_1d, typename Number>
+  template <int dim, typename Number>
   void
-  Solid<dim, degree, n_q_points_1d, Number>::output_results(
-    const unsigned int result_number) const
+  Solid<dim, Number>::output_results(const unsigned int result_number) const
   {
     DataOutBase::VtkFlags flags;
     flags.write_higher_order_cells = true;
@@ -2155,11 +2019,11 @@ namespace FSI
 
     // Visualize the displacements on a displaced grid
     // Recompute Eulerian mapping according to the current configuration
-    MappingQEulerian<dim, VectorType> euler_mapping(degree,
+    MappingQEulerian<dim, VectorType> euler_mapping(fe_degree,
                                                     dof_handler,
                                                     total_displacement);
     data_out.build_patches(euler_mapping,
-                           degree,
+                           fe_degree,
                            DataOut<dim>::curved_inner_cells);
 
     const std::string filename = parameters.output_folder + "solution_" +

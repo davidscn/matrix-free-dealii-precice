@@ -12,36 +12,35 @@ namespace Adapter
    * Derived class of the CouplingInterface: the classical coupling approach,
    * where each participant defines an interface based on the locally owned
    * triangulation. Here, quadrature points are used for reading and writing.
+   * data_dim is equivalent to n_components, indicating the type of your data in
+   * the preCICE sense (Vector vs Scalar)
    */
-  template <int dim,
-            int fe_degree,
-            int n_qpoints_1d,
-            typename VectorizedArrayType>
-  class dealiiInterface : public CouplingInterface<dim, VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
+  class QuadInterface
+    : public CouplingInterface<dim, data_dim, VectorizedArrayType>
   {
   public:
-    dealiiInterface(
-      std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>> data,
-      std::shared_ptr<precice::SolverInterface>                     precice,
-      const std::string                                             mesh_name,
-      const types::boundary_id interface_id,
-      const int                mf_dof_index,
-      const int                mf_quad_index)
-      : CouplingInterface<dim, VectorizedArrayType>(data,
-                                                    precice,
-                                                    mesh_name,
-                                                    interface_id)
+    QuadInterface(
+      std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
+      const std::shared_ptr<precice::SolverInterface> &precice,
+      const std::string &                              mesh_name,
+      const types::boundary_id                         interface_id,
+      const int                                        mf_dof_index,
+      const int                                        mf_quad_index)
+      : CouplingInterface<dim, data_dim, VectorizedArrayType>(data,
+                                                              precice,
+                                                              mesh_name,
+                                                              interface_id)
       , mf_dof_index(mf_dof_index)
       , mf_quad_index(mf_quad_index)
     {}
 
+    ~QuadInterface() = default;
+
     /// Alias for the face integrator
-    using FEFaceIntegrator = FEFaceEvaluation<dim,
-                                              fe_degree,
-                                              n_qpoints_1d,
-                                              dim,
-                                              double,
-                                              VectorizedArrayType>;
+    using FEFaceIntegrator =
+      FEFaceIntegrators<dim, data_dim, double, VectorizedArrayType>;
+    using value_type = typename FEFaceIntegrator::value_type;
     /**
      * @brief define_mesh_vertices Define a vertex coupling mesh for preCICE
      *        coupling the classical preCICE way
@@ -71,9 +70,25 @@ namespace Adapter
     write_data(
       const LinearAlgebra::distributed::Vector<double> &data_vector) override;
 
+    /**
+     * @brief write_data_factory Factory function in order to write different
+     *        data (gradients, values..) to preCICE
+     *
+     * @param[in] data_vector The data to be passed to preCICE (absolute
+     *            displacement for FSI)
+     * @param[in] flags
+     * @param[in] get_write_value
+     */
+    void
+    write_data_factory(
+      const LinearAlgebra::distributed::Vector<double> &data_vector,
+      const EvaluationFlags::EvaluationFlags            flags,
+      const std::function<value_type(FEFaceIntegrator &, unsigned int)>
+        &get_write_value);
+
 
     /**
-     * @brief read_on_quadrature_point Returns the dim dimensional read data
+     * @brief read_on_quadrature_point Returns the data_dim dimensional read data
      *        given the ID of the interface node we want to access.
      *
      * @param[in]  id_number Number of the quadrature point (counting from zero
@@ -89,7 +104,7 @@ namespace Adapter
      *
      * @return dim dimensional data associated to the interface node
      */
-    virtual Tensor<1, dim, VectorizedArrayType>
+    virtual value_type
     read_on_quadrature_point(const unsigned int id_number,
                              const unsigned int active_faces) const override;
 
@@ -110,13 +125,9 @@ namespace Adapter
 
 
 
-  template <int dim,
-            int fe_degree,
-            int n_qpoints_1d,
-            typename VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
   void
-  dealiiInterface<dim, fe_degree, n_qpoints_1d, VectorizedArrayType>::
-    define_coupling_mesh()
+  QuadInterface<dim, data_dim, VectorizedArrayType>::define_coupling_mesh()
   {
     Assert(this->mesh_id != -1, ExcNotInitialized());
 
@@ -130,9 +141,6 @@ namespace Adapter
 
     // Set up data structures
     FEFaceIntegrator phi(*this->mf_data, true, mf_dof_index, mf_quad_index);
-    Assert(phi.fast_evaluation_supported(fe_degree, n_qpoints_1d),
-           ExcMessage("Fast evaluation is not supported."));
-
     std::array<double, dim * VectorizedArrayType::size()> unrolled_vertices;
     std::array<int, VectorizedArrayType::size()>          node_ids;
     unsigned int                                          size = 0;
@@ -190,14 +198,41 @@ namespace Adapter
   }
 
 
-
-  template <int dim,
-            int fe_degree,
-            int n_qpoints_1d,
-            typename VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
   void
-  dealiiInterface<dim, fe_degree, n_qpoints_1d, VectorizedArrayType>::
-    write_data(const LinearAlgebra::distributed::Vector<double> &data_vector)
+  QuadInterface<dim, data_dim, VectorizedArrayType>::write_data(
+    const LinearAlgebra::distributed::Vector<double> &data_vector)
+  {
+    switch (this->write_data_type)
+      {
+        case WriteDataType::values_on_quads:
+          write_data_factory(data_vector,
+                             EvaluationFlags::values,
+                             [](auto &phi, auto q_point) {
+                               return phi.get_value(q_point);
+                             });
+          break;
+        case WriteDataType::normal_gradients_on_quads:
+          write_data_factory(data_vector,
+                             EvaluationFlags::gradients,
+                             [](auto &phi, auto q_point) {
+                               return phi.get_normal_derivative(q_point);
+                             });
+          break;
+        default:
+          AssertThrow(false, ExcNotImplemented());
+      }
+  }
+
+
+
+  template <int dim, int data_dim, typename VectorizedArrayType>
+  void
+  QuadInterface<dim, data_dim, VectorizedArrayType>::write_data_factory(
+    const LinearAlgebra::distributed::Vector<double> &data_vector,
+    const EvaluationFlags::EvaluationFlags            flags,
+    const std::function<value_type(FEFaceIntegrator &, unsigned int)>
+      &get_write_value)
   {
     Assert(this->write_data_id != -1, ExcNotInitialized());
     Assert(interface_is_defined, ExcNotInitialized());
@@ -205,7 +240,10 @@ namespace Adapter
     FEFaceIntegrator phi(*this->mf_data, true, mf_dof_index, mf_quad_index);
 
     // In order to unroll the vectorization
-    std::array<double, dim * VectorizedArrayType::size()> unrolled_local_data;
+    std::array<double, data_dim * VectorizedArrayType::size()>
+      unrolled_local_data;
+    (void)unrolled_local_data;
+
     auto index = interface_nodes_ids.begin();
 
     // Loop over all faces
@@ -222,25 +260,38 @@ namespace Adapter
 
         // Read and interpolate
         phi.reinit(face);
-        phi.gather_evaluate(data_vector, EvaluationFlags::values);
+        phi.read_dof_values_plain(data_vector);
+        phi.evaluate(flags);
         const int active_faces =
           this->mf_data->n_active_entries_per_face_batch(face);
 
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           {
-            const auto local_data = phi.get_value(q);
+            const auto local_data = get_write_value(phi, q);
             Assert(index != interface_nodes_ids.end(), ExcInternalError());
 
-            // Transform Tensor<1,dim,VectorizedArrayType> into preCICE conform
-            // format
-            for (int d = 0; d < dim; ++d)
-              for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
-                unrolled_local_data[d + dim * v] = local_data[d][v];
+            // Constexpr evaluation required in order to comply with the
+            // compiler here
+            if constexpr (data_dim > 1)
+              {
+                // Transform Tensor<1,dim,VectorizedArrayType> into preCICE
+                // conform format
+                for (int d = 0; d < data_dim; ++d)
+                  for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
+                    unrolled_local_data[d + data_dim * v] = local_data[d][v];
 
-            this->precice->writeBlockVectorData(this->write_data_id,
-                                                active_faces,
-                                                index->data(),
-                                                unrolled_local_data.data());
+                this->precice->writeBlockVectorData(this->write_data_id,
+                                                    active_faces,
+                                                    index->data(),
+                                                    unrolled_local_data.data());
+              }
+            else
+              {
+                this->precice->writeBlockScalarData(this->write_data_id,
+                                                    active_faces,
+                                                    index->data(),
+                                                    &local_data[0]);
+              }
             ++index;
           }
       }
@@ -248,45 +299,50 @@ namespace Adapter
 
 
 
-  template <int dim,
-            int fe_degree,
-            int n_qpoints_1d,
-            typename VectorizedArrayType>
-  inline Tensor<1, dim, VectorizedArrayType>
-  dealiiInterface<dim, fe_degree, n_qpoints_1d, VectorizedArrayType>::
-    read_on_quadrature_point(const unsigned int id_number,
-                             const unsigned int active_faces) const
+  template <int dim, int data_dim, typename VectorizedArrayType>
+  inline typename QuadInterface<dim, data_dim, VectorizedArrayType>::value_type
+  QuadInterface<dim, data_dim, VectorizedArrayType>::read_on_quadrature_point(
+    const unsigned int id_number,
+    const unsigned int active_faces) const
   {
     // Assert input
     Assert(active_faces <= VectorizedArrayType::size(), ExcInternalError());
     AssertIndexRange(id_number, interface_nodes_ids.size());
     Assert(this->read_data_id != -1, ExcNotInitialized());
 
-    Tensor<1, dim, VectorizedArrayType>                   dealii_data;
-    std::array<double, dim * VectorizedArrayType::size()> precice_data;
+    value_type dealii_data;
     const auto vertex_ids = &interface_nodes_ids[id_number];
-    this->precice->readBlockVectorData(this->read_data_id,
-                                       active_faces,
-                                       vertex_ids->data(),
-                                       precice_data.data());
-    // Transform back to Tensor format
-    for (int d = 0; d < dim; ++d)
-      for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
-        dealii_data[d][v] = precice_data[d + dim * v];
+    // Vector valued case
+    if constexpr (data_dim > 1)
+      {
+        std::array<double, data_dim * VectorizedArrayType::size()> precice_data;
+        this->precice->readBlockVectorData(this->read_data_id,
+                                           active_faces,
+                                           vertex_ids->data(),
+                                           precice_data.data());
+        // Transform back to Tensor format
+        for (int d = 0; d < data_dim; ++d)
+          for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
+            dealii_data[d][v] = precice_data[d + data_dim * v];
+      }
+    else
+      {
+        // Scalar case
+        this->precice->readBlockScalarData(this->read_data_id,
+                                           active_faces,
+                                           vertex_ids->data(),
+                                           &dealii_data[0]);
+      }
 
     return dealii_data;
   }
 
 
-  template <int dim,
-            int fe_degree,
-            int n_qpoints_1d,
-            typename VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
   std::string
-  dealiiInterface<dim, fe_degree, n_qpoints_1d, VectorizedArrayType>::
-    get_interface_type() const
+  QuadInterface<dim, data_dim, VectorizedArrayType>::get_interface_type() const
   {
-    return "quadrature points using matrix-free index " +
+    return "quadrature points using matrix-free quad index " +
            Utilities::to_string(mf_quad_index);
   }
 
