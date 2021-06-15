@@ -569,6 +569,7 @@ namespace Heat_Transfer
     FECellIntegrator phi(*data);
     Assert(testcase->heat_transfer_rhs.get() != nullptr, ExcNotInitialized());
 
+    solution_old.update_ghost_values();
     const auto dt = make_vectorized_array<double>(time.get_delta_t());
     for (unsigned int cell = 0; cell < data->n_cell_batches(); ++cell)
       {
@@ -738,9 +739,6 @@ namespace Heat_Transfer
     SolverControl        solver_control(100, 1e-12 * system_rhs.l2_norm());
     SolverCG<VectorType> cg(solver_control);
 
-    // We misuse solution_old here for the solution update (the homogenous part)
-    // The non-homogenous part is already included in the solution
-    solution_update = 0;
     cg.solve(system_matrix, solution_update, system_rhs, preconditioner);
     // More or less a safety operation, as the constraints have already been
     // enforced
