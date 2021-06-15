@@ -49,16 +49,6 @@ namespace Adapter
     define_coupling_mesh() override;
 
     /**
-     * @brief process_coupling_mesh A post initialization step is not required
-     *        for this interface type
-     */
-    virtual void
-    process_coupling_mesh() override
-    {
-      return;
-    }
-
-    /**
      * @brief write_data Evaluates the given @param data at the
      *        quadrature_points of the defined mesh and passes
      *        them to preCICE

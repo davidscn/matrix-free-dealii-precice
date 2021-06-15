@@ -54,10 +54,11 @@ namespace Adapter
     /**
      * @brief process_coupling_mesh (optional) Handle post-preCICE-initialization
      *        steps, e.g. do computations on recieved partitions or create
-     *        communication patterns.
+     *        communication patterns. This function just returns in the base
+     *        class implementation.
      */
     virtual void
-    process_coupling_mesh() = 0;
+    process_coupling_mesh();
 
     /**
      * @brief write_data Write the data associated to the defined vertice
@@ -194,6 +195,15 @@ namespace Adapter
       write_data_type = WriteDataType::values_on_quads;
     else if (write_data_specification == "normal_gradients_on_quads")
       write_data_type = WriteDataType::normal_gradients_on_quads;
+  }
+
+
+
+  template <int dim, int data_dim, typename VectorizedArrayType>
+  void
+  CouplingInterface<dim, data_dim, VectorizedArrayType>::process_coupling_mesh()
+  {
+    return;
   }
 
 

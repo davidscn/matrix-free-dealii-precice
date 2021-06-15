@@ -15,28 +15,25 @@ namespace Adapter
    * Derived class of the CouplingInterface: where data is written on an
    * arbitrary
    */
-  template <int dim, typename VectorizedArrayType>
-  class ArbitraryInterface : public CouplingInterface<dim, VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
+  class ArbitraryInterface
+    : public CouplingInterface<dim, data_dim, VectorizedArrayType>
   {
   public:
     ArbitraryInterface(
-      std::shared_ptr<MatrixFree<dim, double, VectorizedArrayType>> data,
-      std::shared_ptr<precice::SolverInterface>                     precice,
-      const std::string                                             mesh_name,
-      const types::boundary_id interface_id)
-      : CouplingInterface<dim, VectorizedArrayType>(data,
-                                                    precice,
-                                                    mesh_name,
-                                                    interface_id)
+      std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
+      std::shared_ptr<precice::SolverInterface> precice,
+      const std::string                         mesh_name,
+      const types::boundary_id                  interface_id)
+      : CouplingInterface<dim, data_dim, VectorizedArrayType>(data,
+                                                              precice,
+                                                              mesh_name,
+                                                              interface_id)
     {}
 
     /**
-     * @brief write_mapped_data Evaluates the given @param data at arbitrary
-     *        data points (defined by coupling participants) and passes them
-     *        to preCICE
-     *
-     * @param[in] data The global (distributed) data vector to be passed to
-     *            preCICE (absolute displacement for FSI)
+     * @brief define_mesh_vertices Define a region of interest this process
+     *        works on using bounding boxes.
      */
     virtual void
     define_coupling_mesh() override;
@@ -58,16 +55,6 @@ namespace Adapter
     virtual void
     write_data(
       const LinearAlgebra::distributed::Vector<double> &data_vector) override;
-
-    /**
-     * @brief read_on_quadrature_point Not implemented in this derived class
-     */
-    virtual Tensor<1, dim, VectorizedArrayType>
-    read_on_quadrature_point(const unsigned int,
-                             const unsigned int) const override
-    {
-      AssertThrow(false, ExcNotImplemented());
-    }
 
     /**
      * @brief finish_initialization Handles received vertices
@@ -115,9 +102,9 @@ namespace Adapter
 
 
 
-  template <int dim, typename VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
   void
-  ArbitraryInterface<dim, VectorizedArrayType>::define_coupling_mesh()
+  ArbitraryInterface<dim, data_dim, VectorizedArrayType>::define_coupling_mesh()
   {
     Assert(this->mesh_id != -1, ExcNotInitialized());
     const auto &triangulation =
@@ -145,9 +132,9 @@ namespace Adapter
 
 
 
-  template <int dim, typename VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
   void
-  ArbitraryInterface<dim, VectorizedArrayType>::write_data(
+  ArbitraryInterface<dim, data_dim, VectorizedArrayType>::write_data(
     const LinearAlgebra::distributed::Vector<double> &data_vector)
   {
     Assert(this->write_data_id != -1, ExcNotInitialized());
@@ -188,9 +175,10 @@ namespace Adapter
 
 
 
-  template <int dim, typename VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
   void
-  ArbitraryInterface<dim, VectorizedArrayType>::process_coupling_mesh()
+  ArbitraryInterface<dim, data_dim, VectorizedArrayType>::
+    process_coupling_mesh()
   {
     Assert(this->mesh_id != -1, ExcNotInitialized());
 
@@ -225,23 +213,24 @@ namespace Adapter
     Assert(this->read_data_id == -1, ExcInternalError());
     Assert(this->write_data_id != -1, ExcInternalError());
 
-    this->print_info(false, interface_nodes_ids.size());
+    this->print_info(false/*, interface_nodes_ids.size()*/);
   }
 
 
-  template <int dim, typename VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
   std::string
-  ArbitraryInterface<dim, VectorizedArrayType>::get_interface_type() const
+  ArbitraryInterface<dim, data_dim, VectorizedArrayType>::get_interface_type()
+    const
   {
     return "arbitrary nodes defined by the coupling partner ";
   }
 
 
 
-  template <int dim, typename VectorizedArrayType>
+  template <int dim, int data_dim, typename VectorizedArrayType>
   std::vector<
     std::pair<typename Triangulation<dim>::active_cell_iterator, Point<dim>>>
-  ArbitraryInterface<dim, VectorizedArrayType>::
+  ArbitraryInterface<dim, data_dim, VectorizedArrayType>::
     filter_vertices_to_local_partition(const Mapping<dim> &          mapping,
                                        const Triangulation<dim> &    tria,
                                        const std::vector<Point<dim>> points_in,

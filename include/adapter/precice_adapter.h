@@ -9,6 +9,7 @@
 
 #include <deal.II/matrix_free/matrix_free.h>
 
+#include <adapter/arbitrary_interface.h>
 #include <adapter/dof_interface.h>
 #include <adapter/quad_interface.h>
 #include <base/q_equidistant.h>
@@ -226,8 +227,7 @@ namespace Adapter
           dealii_boundary_interface_id,
           dof_index,
           read_quad_index);
-    
-    const bool use_solver_mapping = true;
+
     // 2. Set the writer, which is defined in the parameter file
     if (parameters.write_mesh_name == parameters.read_mesh_name)
       writer = reader;
@@ -239,9 +239,10 @@ namespace Adapter
           parameters.write_mesh_name,
           dealii_boundary_interface_id,
           dof_index);
-    else if (use_solver_mapping == true)
+    else if (parameters.write_data_specification == "values_on_other")
       {
-        writer = std::make_shared<ArbitraryInterface<dim, VectorizedArrayType>>(
+        writer = std::make_shared<
+          ArbitraryInterface<dim, data_dim, VectorizedArrayType>>(
           data,
           precice,
           parameters.write_mesh_name,
