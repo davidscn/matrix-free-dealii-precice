@@ -621,7 +621,6 @@ namespace Heat_Transfer
           // Integrate the result and write into the rhs vector
           phi_face.integrate_scatter(EvaluationFlags::values, system_rhs);
         }
-
     system_rhs.compress(VectorOperation::add);
   }
 
@@ -745,7 +744,7 @@ namespace Heat_Transfer
     constraints.set_zero(solution_update);
     // and update the complete solution = non-homogenous part + homogenous part
     solution += solution_update;
-
+    solution.update_ghost_values();
     total_n_cg_iterations += solver_control.last_step();
     ++total_n_cg_solve;
   }
@@ -760,15 +759,13 @@ namespace Heat_Transfer
   {
     TimerOutput::Scope t(timer, "compute errors");
     double             errors_squared = 0;
-    FECellIntegrator   phi(*system_matrix.get_matrix_free());
+    const auto         data = inhomogeneous_operator.get_matrix_free();
+    FECellIntegrator   phi(*data);
 
-    for (unsigned int cell = 0;
-         cell < system_matrix.get_matrix_free()->n_cell_batches();
-         ++cell)
+    for (unsigned int cell = 0; cell < data->n_cell_batches(); ++cell)
       {
         phi.reinit(cell);
-        phi.read_dof_values_plain(solution);
-        phi.evaluate(EvaluationFlags::values);
+        phi.gather_evaluate(solution, EvaluationFlags::values);
         VectorizedArray<double> local_errors_squared = 0;
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           {
@@ -780,9 +777,7 @@ namespace Heat_Transfer
             local_errors_squared += error * error * JxW;
           }
         for (unsigned int v = 0;
-             v <
-             system_matrix.get_matrix_free()->n_active_entries_per_cell_batch(
-               cell);
+             v < data->n_active_entries_per_cell_batch(cell);
              ++v)
           errors_squared += local_errors_squared[v];
       }

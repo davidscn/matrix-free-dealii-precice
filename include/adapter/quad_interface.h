@@ -54,7 +54,9 @@ namespace Adapter
      *        them to preCICE
      *
      * @param[in] data_vector The data to be passed to preCICE (absolute
-     *            displacement for FSI)
+     *            displacement for FSI). Note that the data_vector needs to
+     *            contain valid ghost values for parallel runs, i.e.
+     *            update_ghost_values must be calles before
      */
     virtual void
     write_data(
