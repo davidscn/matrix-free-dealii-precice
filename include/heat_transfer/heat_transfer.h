@@ -316,6 +316,14 @@ namespace Heat_Transfer
     void
     solve();
     /**
+     * @brief compute_error
+     * @return error
+     */
+    double
+    compute_error(
+      const Function<dim> &                             function,
+      const LinearAlgebra::distributed::Vector<double> &solution) const;
+    /**
      * @brief output_results Output the generated results.
      *
      * @param result_number Number of the result for the name of the parameter file.
@@ -747,6 +755,47 @@ namespace Heat_Transfer
 
 
   template <int dim>
+  double
+  LaplaceProblem<dim>::compute_error(
+    const Function<dim> &                             function,
+    const LinearAlgebra::distributed::Vector<double> &solution) const
+  {
+    TimerOutput::Scope t(timer, "compute errors");
+    double             errors_squared = 0;
+    FECellIntegrator   phi(*system_matrix.get_matrix_free());
+
+    for (unsigned int cell = 0;
+         cell < system_matrix.get_matrix_free()->n_cell_batches();
+         ++cell)
+      {
+        phi.reinit(cell);
+        phi.read_dof_values_plain(solution);
+        phi.evaluate(EvaluationFlags::values);
+        VectorizedArray<double> local_errors_squared = 0;
+        for (unsigned int q = 0; q < phi.n_q_points; ++q)
+          {
+            const auto error =
+              evaluate_function(function, phi.quadrature_point(q)) -
+              phi.get_value(q);
+            const auto JxW = phi.JxW(q);
+
+            local_errors_squared += error * error * JxW;
+          }
+        for (unsigned int v = 0;
+             v <
+             system_matrix.get_matrix_free()->n_active_entries_per_cell_batch(
+               cell);
+             ++v)
+          errors_squared += local_errors_squared[v];
+      }
+    const double global_error =
+      Utilities::MPI::sum(errors_squared, MPI_COMM_WORLD);
+    return std::sqrt(global_error);
+  }
+
+
+
+  template <int dim>
   void
   LaplaceProblem<dim>::output_results(const unsigned int result_number) const
   {
@@ -780,6 +829,10 @@ namespace Heat_Transfer
 
     pcout << "Output @ " << time.current() << "s written to " << filename
           << std::endl;
+    // Compute error
+    testcase->initial_condition->set_time(time.current());
+    const auto error = compute_error(*(testcase->initial_condition), solution);
+    pcout << "Error: " << error << "\n" << std::endl;
   }
 
 
