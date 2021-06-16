@@ -54,28 +54,13 @@ namespace Adapter
      *        them to preCICE
      *
      * @param[in] data_vector The data to be passed to preCICE (absolute
-     *            displacement for FSI)
+     *            displacement for FSI). Note that the data_vector needs to
+     *            contain valid ghost values for parallel runs, i.e.
+     *            update_ghost_values must be calles before
      */
     virtual void
     write_data(
       const LinearAlgebra::distributed::Vector<double> &data_vector) override;
-
-    /**
-     * @brief write_data_factory Factory function in order to write different
-     *        data (gradients, values..) to preCICE
-     *
-     * @param[in] data_vector The data to be passed to preCICE (absolute
-     *            displacement for FSI)
-     * @param[in] flags
-     * @param[in] get_write_value
-     */
-    void
-    write_data_factory(
-      const LinearAlgebra::distributed::Vector<double> &data_vector,
-      const EvaluationFlags::EvaluationFlags            flags,
-      const std::function<value_type(FEFaceIntegrator &, unsigned int)>
-        &get_write_value);
-
 
     /**
      * @brief read_on_quadrature_point Returns the data_dim dimensional read data
@@ -99,6 +84,22 @@ namespace Adapter
                              const unsigned int active_faces) const override;
 
   private:
+    /**
+     * @brief write_data_factory Factory function in order to write different
+     *        data (gradients, values..) to preCICE
+     *
+     * @param[in] data_vector The data to be passed to preCICE (absolute
+     *            displacement for FSI)
+     * @param[in] flags
+     * @param[in] get_write_value
+     */
+    void
+    write_data_factory(
+      const LinearAlgebra::distributed::Vector<double> &data_vector,
+      const EvaluationFlags::EvaluationFlags            flags,
+      const std::function<value_type(FEFaceIntegrator &, unsigned int)>
+        &get_write_value);
+
     /// The preCICE IDs
     std::vector<std::array<int, VectorizedArrayType::size()>>
       interface_nodes_ids;
@@ -180,6 +181,11 @@ namespace Adapter
              static_cast<unsigned int>(
                this->precice->getMeshVertexSize(this->mesh_id)),
            ExcInternalError());
+
+    if (this->read_data_id != -1)
+      this->print_info(true, this->precice->getMeshVertexSize(this->mesh_id));
+    if (this->write_data_id != -1)
+      this->print_info(false, this->precice->getMeshVertexSize(this->mesh_id));
   }
 
 
@@ -318,7 +324,6 @@ namespace Adapter
                                            vertex_ids->data(),
                                            &dealii_data[0]);
       }
-
     return dealii_data;
   }
 

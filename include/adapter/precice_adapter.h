@@ -8,7 +8,9 @@
 #include <deal.II/fe/mapping_q_generic.h>
 
 #include <deal.II/matrix_free/matrix_free.h>
-
+#ifdef PRECICE_DEVELOP_MODE
+#  include <adapter/arbitrary_interface.h>
+#endif
 #include <adapter/dof_interface.h>
 #include <adapter/quad_interface.h>
 #include <base/q_equidistant.h>
@@ -226,6 +228,7 @@ namespace Adapter
           dealii_boundary_interface_id,
           dof_index,
           read_quad_index);
+
     // 2. Set the writer, which is defined in the parameter file
     if (parameters.write_mesh_name == parameters.read_mesh_name)
       writer = reader;
@@ -237,6 +240,18 @@ namespace Adapter
           parameters.write_mesh_name,
           dealii_boundary_interface_id,
           dof_index);
+#ifdef PRECICE_DEVELOP_MODE
+    else if (parameters.write_data_specification == "values_on_other_mesh" ||
+             parameters.write_data_specification == "gradients_on_other_mesh")
+      {
+        writer = std::make_shared<
+          ArbitraryInterface<dim, data_dim, VectorizedArrayType>>(
+          data,
+          precice,
+          parameters.write_mesh_name,
+          dealii_boundary_interface_id);
+      }
+#endif
     else
       {
         Assert(parameters.write_data_specification == "values_on_quads" ||
@@ -274,11 +289,12 @@ namespace Adapter
     reader->define_coupling_mesh();
     writer->define_coupling_mesh();
 
-    reader->print_info(true);
-    writer->print_info(false);
-
     // Initialize preCICE internally
     precice->initialize();
+
+    // Only the writer needs potentially to process the coupling mesh, if the
+    // mapping is carried out in the solver
+    writer->process_coupling_mesh();
 
     // write initial writeData to preCICE if required
     if (precice->isActionRequired(precice::constants::actionWriteInitialData()))

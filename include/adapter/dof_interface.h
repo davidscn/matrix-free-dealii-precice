@@ -105,10 +105,21 @@ namespace Adapter
       component_mask.set(component, true);
 
       // Get the global DoF indices of the component
-      const IndexSet indices = DoFTools::extract_boundary_dofs(
-        this->mf_data->get_dof_handler(mf_dof_index),
-        component_mask,
-        std::set<types::boundary_id>{this->dealii_boundary_interface_id});
+      // Compute the intersection with locally owned dofs
+      // TODO: This is super inefficient, have a look at the
+      // dof_handler.n_boundary_dofs implementation for a proper version
+      const IndexSet indices =
+        (DoFTools::extract_boundary_dofs(
+           this->mf_data->get_dof_handler(mf_dof_index),
+           component_mask,
+           std::set<types::boundary_id>{this->dealii_boundary_interface_id}) &
+         this->mf_data->get_dof_handler(mf_dof_index).locally_owned_dofs());
+
+      Assert(indices.n_elements() ==
+               this->mf_data->get_dof_handler(mf_dof_index)
+                 .n_boundary_dofs(std::set<types::boundary_id>{
+                   this->dealii_boundary_interface_id}),
+             ExcInternalError());
       // Resize the global dof index conatiner in case we call this lambda for
       // the first time
       if (component == 0)
@@ -156,6 +167,11 @@ namespace Adapter
       }
 
     interface_is_defined = true;
+
+    if (this->read_data_id != -1)
+      this->print_info(true, this->precice->getMeshVertexSize(this->mesh_id));
+    if (this->write_data_id != -1)
+      this->print_info(false, this->precice->getMeshVertexSize(this->mesh_id));
   }
 
 

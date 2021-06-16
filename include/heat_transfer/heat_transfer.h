@@ -316,6 +316,14 @@ namespace Heat_Transfer
     void
     solve();
     /**
+     * @brief compute_error
+     * @return error
+     */
+    double
+    compute_error(
+      const Function<dim> &                             function,
+      const LinearAlgebra::distributed::Vector<double> &solution) const;
+    /**
      * @brief output_results Output the generated results.
      *
      * @param result_number Number of the result for the name of the parameter file.
@@ -561,6 +569,7 @@ namespace Heat_Transfer
     FECellIntegrator phi(*data);
     Assert(testcase->heat_transfer_rhs.get() != nullptr, ExcNotInitialized());
 
+    solution_old.update_ghost_values();
     const auto dt = make_vectorized_array<double>(time.get_delta_t());
     for (unsigned int cell = 0; cell < data->n_cell_batches(); ++cell)
       {
@@ -612,7 +621,6 @@ namespace Heat_Transfer
           // Integrate the result and write into the rhs vector
           phi_face.integrate_scatter(EvaluationFlags::values, system_rhs);
         }
-
     system_rhs.compress(VectorOperation::add);
   }
 
@@ -730,18 +738,52 @@ namespace Heat_Transfer
     SolverControl        solver_control(100, 1e-12 * system_rhs.l2_norm());
     SolverCG<VectorType> cg(solver_control);
 
-    // We misuse solution_old here for the solution update (the homogenous part)
-    // The non-homogenous part is already included in the solution
-    solution_update = 0;
     cg.solve(system_matrix, solution_update, system_rhs, preconditioner);
     // More or less a safety operation, as the constraints have already been
     // enforced
     constraints.set_zero(solution_update);
     // and update the complete solution = non-homogenous part + homogenous part
     solution += solution_update;
-
+    solution.update_ghost_values();
     total_n_cg_iterations += solver_control.last_step();
     ++total_n_cg_solve;
+  }
+
+
+
+  template <int dim>
+  double
+  LaplaceProblem<dim>::compute_error(
+    const Function<dim> &                             function,
+    const LinearAlgebra::distributed::Vector<double> &solution) const
+  {
+    TimerOutput::Scope t(timer, "compute errors");
+    double             errors_squared = 0;
+    const auto         data = inhomogeneous_operator.get_matrix_free();
+    FECellIntegrator   phi(*data);
+
+    for (unsigned int cell = 0; cell < data->n_cell_batches(); ++cell)
+      {
+        phi.reinit(cell);
+        phi.gather_evaluate(solution, EvaluationFlags::values);
+        VectorizedArray<double> local_errors_squared = 0;
+        for (unsigned int q = 0; q < phi.n_q_points; ++q)
+          {
+            const auto error =
+              evaluate_function(function, phi.quadrature_point(q)) -
+              phi.get_value(q);
+            const auto JxW = phi.JxW(q);
+
+            local_errors_squared += error * error * JxW;
+          }
+        for (unsigned int v = 0;
+             v < data->n_active_entries_per_cell_batch(cell);
+             ++v)
+          errors_squared += local_errors_squared[v];
+      }
+    const double global_error =
+      Utilities::MPI::sum(errors_squared, MPI_COMM_WORLD);
+    return std::sqrt(global_error);
   }
 
 
@@ -754,17 +796,23 @@ namespace Heat_Transfer
 
     DataOut<dim> data_out;
 
-    solution.update_ghost_values();
-    data_out.attach_dof_handler(dof_handler);
-    data_out.add_data_vector(solution, "solution");
-    data_out.build_patches(mapping,
-                           fe.degree,
-                           DataOut<dim>::curved_inner_cells);
-
     DataOutBase::VtkFlags flags;
     flags.compression_level        = DataOutBase::VtkFlags::best_speed;
     flags.write_higher_order_cells = true;
     data_out.set_flags(flags);
+
+    solution.update_ghost_values();
+    data_out.attach_dof_handler(dof_handler);
+    data_out.add_data_vector(solution, "solution");
+
+    Vector<double> mpi_owner(triangulation.n_active_cells());
+    mpi_owner =
+      Utilities::MPI::this_mpi_process(triangulation.get_communicator());
+    data_out.add_data_vector(mpi_owner, "owner");
+
+    data_out.build_patches(mapping,
+                           fe.degree,
+                           DataOut<dim>::curved_inner_cells);
 
     const std::string filename = parameters.output_folder + "solution_" +
                                  Utilities::int_to_string(result_number, 3) +
@@ -774,6 +822,10 @@ namespace Heat_Transfer
 
     pcout << "Output @ " << time.current() << "s written to " << filename
           << std::endl;
+    // Compute error
+    testcase->initial_condition->set_time(time.current());
+    const auto error = compute_error(*(testcase->initial_condition), solution);
+    pcout << "Error: " << error << "\n" << std::endl;
   }
 
 
