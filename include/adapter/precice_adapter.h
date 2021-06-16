@@ -239,7 +239,8 @@ namespace Adapter
           parameters.write_mesh_name,
           dealii_boundary_interface_id,
           dof_index);
-    else if (parameters.write_data_specification == "values_on_other_mesh")
+    else if (parameters.write_data_specification == "values_on_other_mesh" ||
+             parameters.write_data_specification == "gradients_on_other_mesh")
       {
         writer = std::make_shared<
           ArbitraryInterface<dim, data_dim, VectorizedArrayType>>(

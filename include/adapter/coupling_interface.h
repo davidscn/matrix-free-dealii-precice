@@ -196,10 +196,14 @@ namespace Adapter
       write_data_type = WriteDataType::values_on_dofs;
     else if (write_data_specification == "values_on_other_mesh")
       write_data_type = WriteDataType::values_on_other_mesh;
+    else if (write_data_specification == "gradients_on_other_mesh")
+      write_data_type = WriteDataType::gradients_on_other_mesh;
     else if (write_data_specification == "values_on_quads")
       write_data_type = WriteDataType::values_on_quads;
     else if (write_data_specification == "normal_gradients_on_quads")
       write_data_type = WriteDataType::normal_gradients_on_quads;
+    else
+      AssertThrow(false, ExcMessage("Unknwon write data type."));
   }
 
 

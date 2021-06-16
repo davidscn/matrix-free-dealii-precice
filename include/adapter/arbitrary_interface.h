@@ -205,7 +205,6 @@ namespace Adapter
                              const size_t)> &         write_value) const
   {
     Assert(this->write_data_id != -1, ExcNotInitialized());
-    data_vector.update_ghost_values();
 
     FEPointEvaluation<data_dim, dim> fe_evaluator(
       *(this->mf_data->get_mapping_info().mapping),
