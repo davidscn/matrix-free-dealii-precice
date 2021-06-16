@@ -1,7 +1,9 @@
 # Set the name of the project and target:
-SET(TARGET "solid")
+SET(TARGET "matrix-free-dealii-precice")
+SET(SOLVER1 "solid")
+SET(SOLVER2 "heat")
 
-CMAKE_MINIMUM_REQUIRED(VERSION 3.1.0)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.10.2)
 
 # Disable in-source compilation
 IF (${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
@@ -64,6 +66,12 @@ MESSAGE(STATUS "Code version ${GIT_TAG}")
 CONFIGURE_FILE(${CMAKE_SOURCE_DIR}/src/version.cc.in
                ${CMAKE_CURRENT_BINARY_DIR}/version.cc)
 
+# Add a define for the preCICE development features
+OPTION(PRECICE_DEVELOP_MODE "Enable development features, which require non-default preCICE functionality.")
+IF(PRECICE_DEVELOP_MODE)
+    ADD_DEFINITIONS(-DPRECICE_DEVELOP_MODE)
+ENDIF(PRECICE_DEVELOP_MODE)
+
 PROJECT(${TARGET} LANGUAGES CXX)
 
 # This project requires c++17
@@ -78,21 +86,25 @@ FIND_PACKAGE(precice REQUIRED
   )
 MESSAGE(STATUS "Using the preCICE version found at ${precice_DIR}")
 
+# Build the version specific object
 ADD_LIBRARY(version OBJECT ${CMAKE_CURRENT_BINARY_DIR}/version.cc)
 
-ADD_EXECUTABLE(${TARGET}
-    src/${TARGET}.cc
+# Build the executables
+ADD_EXECUTABLE(${SOLVER1}
+    src/${SOLVER1}.cc
   )
 
-ADD_EXECUTABLE(heat
-    src/heat.cc
+ADD_EXECUTABLE(${SOLVER2}
+    src/${SOLVER2}.cc
   )
-DEAL_II_SETUP_TARGET(heat)
 
-DEAL_II_SETUP_TARGET(${TARGET})
+# Setup targets
+DEAL_II_SETUP_TARGET(${SOLVER1})
+DEAL_II_SETUP_TARGET(${SOLVER2})
 
-TARGET_LINK_LIBRARIES(${TARGET} version precice::precice)
-TARGET_LINK_LIBRARIES(heat version precice::precice)
+# Link targets to preCICE
+TARGET_LINK_LIBRARIES(${SOLVER1} version precice::precice)
+TARGET_LINK_LIBRARIES(${SOLVER2} version precice::precice)
 
 INCLUDE_DIRECTORIES (${CMAKE_CURRENT_BINARY_DIR}/include)
 
