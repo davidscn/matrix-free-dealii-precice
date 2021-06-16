@@ -1,4 +1,4 @@
-name: Backward compatibility
+name: deal.II v9.3
 
 on:
   push:
