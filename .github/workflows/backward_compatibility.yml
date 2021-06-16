@@ -1,4 +1,4 @@
-name: backward compatibility
+name: Backward compatibility
 
 on:
   push:
@@ -20,7 +20,7 @@ jobs:
                   cd matrix-free-dealii-precice && \
                   git fetch origin ${{ github.ref }} && \
                   git checkout FETCH_HEAD && \
-                  mkdir build && cd build \
+                  mkdir build && cd build && \
                   cmake .. && make all"; 
          
          echo $command

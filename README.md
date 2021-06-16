@@ -1,6 +1,6 @@
 # A matrix-free high performance solid solver for coupled fluid-structure interactions
 ![GitHub CI](https://github.com/DavidSCN/matrix-free-dealii-precice/workflows/GitHub%20CI/badge.svg)
-
+[![v9.3](https://github.com/DavidSCN/matrix-free-dealii-precice/actions/workflows/backward_compatibility.yml/badge.svg)](https://github.com/DavidSCN/matrix-free-dealii-precice/actions/workflows/backward_compatibility.yml)
 This project provides a matrix-free high performance solid solver for coupled fluid-structure interactions. It was primarily developed on the basis of the ['large-strain-matrix-free'](https://github.com/davydden/large-strain-matrix-free) project and the ['dealii-adapter'](https://github.com/precice/dealii-adapter) project. Special thanks goes to [@peterrum](https://github.com/peterrum/) for his valuable deal.II advice at all times.
 
 ## Description
