@@ -126,11 +126,12 @@ namespace Adapter
     Assert(this->mesh_id != -1, ExcNotInitialized());
     const auto &triangulation =
       this->mf_data->get_dof_handler().get_triangulation();
+    const unsigned int n_levels = triangulation.n_global_levels();
 
     const auto bounding_box = GridTools::compute_mesh_predicate_bounding_box(
       triangulation,
       IteratorFilters::LocallyOwnedCell(),
-      /*refinement-level*/ 1,
+      /*refinement-level*/ std::min(n_levels - 1, static_cast<unsigned int>(1)),
       /*merge*/ true,
       /*max-boxes*/ 1);
 
