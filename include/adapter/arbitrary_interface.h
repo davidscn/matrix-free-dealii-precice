@@ -1,6 +1,5 @@
 #pragma once
 
-#include <deal.II/grid/filtered_iterator.h>
 #include <deal.II/grid/grid_tools.h>
 #include <deal.II/grid/grid_tools_cache.h>
 
@@ -126,9 +125,17 @@ namespace Adapter
     Assert(this->mesh_id != -1, ExcNotInitialized());
     const auto &triangulation =
       this->mf_data->get_dof_handler().get_triangulation();
+    // Bounding box which filter according to locally owned interface cells
     const auto bounding_box_pair =
-      GridTools::compute_bounding_box(triangulation,
-                                      IteratorFilters::LocallyOwnedCell());
+      GridTools::compute_bounding_box(triangulation, [this](const auto &cell) {
+        bool cell_at_interface = false;
+        for (const auto &face : cell->face_iterators())
+          if (face->at_boundary() &&
+              face->boundary_id() == this->dealii_boundary_interface_id)
+            cell_at_interface = true;
+
+        return cell->is_locally_owned() && cell_at_interface;
+      });
 
     // In case a bounding box collection supposed to be used in the future
     std::vector<BoundingBox<dim>> bounding_box{
