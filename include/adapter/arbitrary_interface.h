@@ -126,26 +126,28 @@ namespace Adapter
     Assert(this->mesh_id != -1, ExcNotInitialized());
     const auto &triangulation =
       this->mf_data->get_dof_handler().get_triangulation();
-    const unsigned int n_levels = triangulation.n_global_levels();
+    const auto bounding_box_pair =
+      GridTools::compute_bounding_box(triangulation,
+                                      IteratorFilters::LocallyOwnedCell());
 
-    const auto bounding_box = GridTools::compute_mesh_predicate_bounding_box(
-      triangulation,
-      IteratorFilters::LocallyOwnedCell(),
-      /*refinement-level*/ std::min(n_levels - 1, static_cast<unsigned int>(1)),
-      /*merge*/ true,
-      /*max-boxes*/ 1);
-
+    // In case a bounding box collection supposed to be used in the future
+    std::vector<BoundingBox<dim>> bounding_box{
+      BoundingBox<dim>{bounding_box_pair}};
+    // Currently only one bounding box supported
+    Assert(bounding_box.size() <= 1, ExcInternalError());
     // min and max per dim
     std::vector<double> precice_bounding_box;
-    for (uint d = 0; d < dim; ++d)
-      {
-        precice_bounding_box.emplace_back(bounding_box[0].lower_bound(d));
-        precice_bounding_box.emplace_back(bounding_box[0].upper_bound(d));
-      }
-    Assert(precice_bounding_box.size() == (2 * dim), ExcInternalError());
+    for (const auto &box : bounding_box)
+      for (uint d = 0; d < dim; ++d)
+        {
+          // Emplace direction-wise
+          precice_bounding_box.emplace_back(box.lower_bound(d));
+          precice_bounding_box.emplace_back(box.upper_bound(d));
+        }
+
     this->precice->setBoundingBoxes(this->mesh_id,
                                     precice_bounding_box.data(),
-                                    1);
+                                    bounding_box.size());
   }
 
 
