@@ -286,6 +286,9 @@ namespace Adapter
   Adapter<dim, data_dim, VectorType, VectorizedArrayType>::initialize(
     const VectorType &dealii_to_precice)
   {
+    if (!dealii_to_precice.has_ghost_elements())
+      dealii_to_precice.update_ghost_values();
+
     reader->define_coupling_mesh();
     writer->define_coupling_mesh();
 
