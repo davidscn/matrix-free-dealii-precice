@@ -193,9 +193,9 @@ namespace Adapter
               fe_evaluator.evaluate(make_array_view(local_values),
                                     EvaluationFlags::gradients);
               const auto val = fe_evaluator.get_gradient(0);
-              this->precice->writeVectorData(this->write_data_id,
+              this->precice->writeScalarData(this->write_data_id,
                                              interface_nodes_ids[i],
-                                             val.begin_raw());
+                                             val[0]);
             });
           break;
         default:

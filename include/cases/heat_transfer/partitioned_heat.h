@@ -96,12 +96,26 @@ namespace TestCases
   {
     // The Dirichlet domain is located on the left, the Neumann domain is
     // located on the right
-    const double root_location = this->is_dirichlet ? 0 : 1;
-    Assert(dim == 2, ExcNotImplemented());
-    GridGenerator::hyper_rectangle(triangulation,
-                                   Point<dim>{0 + root_location, 0},
-                                   Point<dim>{1 + root_location, 1},
-                                   false);
+    const bool disable_precice = false;
+    if (disable_precice)
+      {
+        Assert(dim == 2, ExcNotImplemented());
+        GridGenerator::subdivided_hyper_rectangle(triangulation,
+                                                  std::vector<unsigned int>{2,
+                                                                            1},
+                                                  Point<dim>{0, 0},
+                                                  Point<dim>{2, 1},
+                                                  false);
+      }
+    else
+      {
+        const double root_location = this->is_dirichlet ? 0 : 1;
+        Assert(dim == 2, ExcNotImplemented());
+        GridGenerator::hyper_rectangle(triangulation,
+                                       Point<dim>{0 + root_location, 0},
+                                       Point<dim>{1 + root_location, 1},
+                                       false);
+      }
 
     const types::boundary_id dirichlet_id = 1;
 

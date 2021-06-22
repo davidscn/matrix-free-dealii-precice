@@ -373,6 +373,10 @@ namespace Heat_Transfer
     unsigned int        total_n_cg_solve;
 
     Time time;
+
+    std::ofstream      output_file;
+    ConditionalOStream bcout;
+    const bool         disable_precice = false;
   };
 
 
@@ -393,12 +397,15 @@ namespace Heat_Transfer
     , total_n_cg_iterations(0)
     , total_n_cg_solve(0)
     , time(parameters.end_time, parameters.delta_t)
-
+    , bcout(output_file, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
   {
     const int ierr = Utilities::create_directory(parameters.output_folder);
     (void)ierr;
     Assert(ierr == 0, ExcMessage("can't create: " + parameters.output_folder));
     Utilities::print_configuration(pcout);
+
+    output_file.open(parameters.output_folder + "output.txt",
+                     std::ofstream::out | std::ofstream::app);
   }
 
 
@@ -476,10 +483,15 @@ namespace Heat_Transfer
       // ... the second matrix-free operator for inhomogenous BCs
       AffineConstraints<double> no_constraints;
       no_constraints.close();
+      const std::vector<const AffineConstraints<double> *> constr = {
+        &no_constraints};
+      std::vector<Quadrature<1>> quadratures = {quadrature_1d,
+                                                QGauss<1>(fe.degree + 2)};
+
       std::shared_ptr<MatrixFree<dim, double>> matrix_free(
         new MatrixFree<dim, double>());
       matrix_free->reinit(
-        mapping, dof_handler, no_constraints, quadrature_1d, additional_data);
+        mapping, {&dof_handler}, constr, quadratures, additional_data);
       inhomogeneous_operator.initialize(matrix_free);
 
 
@@ -645,7 +657,8 @@ namespace Heat_Transfer
     // First, fill the constraint object with the constraints at the interface
     if (testcase->is_dirichlet)
       {
-        Assert((precice_adapter.get() != nullptr) || initialize,
+        Assert((precice_adapter.get() != nullptr) || initialize ||
+                 disable_precice,
                ExcNotInitialized());
         // That's a bit odd: we need to fill the constraint object at the
         // coupling interface initially in order to tell MatrixFree during the
@@ -656,13 +669,14 @@ namespace Heat_Transfer
         // dummy zero boundary condition, which is only relevant for the
         // initialization of MatrixFree. Afterwards, we use the adapter as
         // usual.
-        initialize ? VectorTools::interpolate_boundary_values(
-                       mapping,
-                       dof_handler,
-                       int(TestCases::TestCaseBase<dim>::interface_id),
-                       Functions::ZeroFunction<dim>(),
-                       constraints) :
-                     precice_adapter->apply_dirichlet_bcs(constraints);
+        if (!disable_precice)
+          initialize ? VectorTools::interpolate_boundary_values(
+                         mapping,
+                         dof_handler,
+                         int(TestCases::TestCaseBase<dim>::interface_id),
+                         Functions::ZeroFunction<dim>(),
+                         constraints) :
+                       precice_adapter->apply_dirichlet_bcs(constraints);
       }
 
     for (const auto &el : testcase->dirichlet)
@@ -766,7 +780,7 @@ namespace Heat_Transfer
     TimerOutput::Scope t(timer, "compute errors");
     double             errors_squared = 0;
     const auto         data = inhomogeneous_operator.get_matrix_free();
-    FECellIntegrator   phi(*data);
+    FECellIntegrator   phi(*data, 0, 1);
 
     for (unsigned int cell = 0; cell < data->n_cell_batches(); ++cell)
       {
@@ -831,7 +845,7 @@ namespace Heat_Transfer
     // Compute error
     testcase->initial_condition->set_time(time.current());
     const auto error = compute_error(*(testcase->initial_condition), solution);
-    pcout << "Error: " << error << "\n" << std::endl;
+    bcout << dof_handler.n_dofs() << "\t" << error << std::endl;
   }
 
 
@@ -898,50 +912,67 @@ namespace Heat_Transfer
     output_results(0);
     time.increment();
 
-    precice_adapter = std::make_unique<
-      Adapter::Adapter<dim, 1, VectorType, VectorizedArray<double>>>(
-      parameters,
-      int(TestCases::TestCaseBase<dim>::interface_id),
-      system_matrix.get_matrix_free(),
-      0 /*MF dof index*/,
-      0 /*MF quad index*/,
-      testcase->is_dirichlet);
-    precice_adapter->initialize(solution);
-
-    while (precice_adapter->is_coupling_ongoing())
+    if (!disable_precice)
       {
-        precice_adapter->save_current_state_if_required([&]() {});
+        precice_adapter = std::make_unique<
+          Adapter::Adapter<dim, 1, VectorType, VectorizedArray<double>>>(
+          parameters,
+          int(TestCases::TestCaseBase<dim>::interface_id),
+          system_matrix.get_matrix_free(),
+          0 /*MF dof index*/,
+          0 /*MF quad index*/,
+          testcase->is_dirichlet);
+        precice_adapter->initialize(solution);
+      }
+
+    while (time.current() < time.end())
+      {
+        if (!disable_precice)
+          precice_adapter->save_current_state_if_required([&]() {});
 
         assemble_rhs();
         solve();
-        {
-          TimerOutput::Scope t(timer, "advance preCICE");
-          if (testcase->is_dirichlet)
-            {
-              // We misuse the system_rhs in the flux evaluation
-              evaluate_boundary_flux();
-              precice_adapter->advance(system_rhs, time.get_delta_t());
-            }
-          else
-            precice_adapter->advance(solution, time.get_delta_t());
-        }
+
+        if (!disable_precice)
+          {
+            TimerOutput::Scope t(timer, "advance preCICE");
+            if (testcase->is_dirichlet)
+              {
+                // We misuse the system_rhs in the flux evaluation
+                evaluate_boundary_flux();
+                precice_adapter->advance(system_rhs, time.get_delta_t());
+              }
+            else
+              precice_adapter->advance(solution, time.get_delta_t());
+          }
         precice_adapter->reload_old_state_if_required(
           [&]() { solution = solution_old; });
 
-        if (precice_adapter->is_time_window_complete())
-          {
-            if (static_cast<int>(
-                  std::round(time.current() / parameters.output_tick)) !=
-                  static_cast<int>((time.current() - time.get_delta_t()) /
-                                   parameters.output_tick) ||
-                time.current() >= time.end() - 1e-12)
-              output_results(static_cast<unsigned int>(
-                std::round(time.current() / parameters.output_tick)));
-
-            // Increment and update
-            solution_old = solution;
-            time.increment();
-          }
+        {
+          if (disable_precice)
+            {
+              if (static_cast<int>(
+                    std::round(time.current() / parameters.output_tick)) !=
+                    static_cast<int>((time.current() - time.get_delta_t()) /
+                                     parameters.output_tick) ||
+                  time.current() >= time.end() - 1e-12)
+                output_results(static_cast<unsigned int>(
+                  std::round(time.current() / parameters.output_tick)));
+            }
+          else if (precice_adapter->is_time_window_complete())
+            {
+              if (static_cast<int>(
+                    std::round(time.current() / parameters.output_tick)) !=
+                    static_cast<int>((time.current() - time.get_delta_t()) /
+                                     parameters.output_tick) ||
+                  time.current() >= time.end() - 1e-12)
+                output_results(static_cast<unsigned int>(
+                  std::round(time.current() / parameters.output_tick)));
+              // Increment and update
+              solution_old = solution;
+              time.increment();
+            }
+        }
       }
     pcout << std::endl
           << "Average CG iter = " << (total_n_cg_iterations / total_n_cg_solve)
