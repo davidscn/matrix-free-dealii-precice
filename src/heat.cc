@@ -13,9 +13,9 @@ main(int argc, char *argv[])
 
       ParameterHandler prm;
 
-      FSI::Parameters::FESystem fesystem;
+      Parameters::FESystem fesystem;
       fesystem.add_parameters(prm);
-      FSI::Parameters::Geometry geometry;
+      Parameters::Geometry geometry;
       geometry.add_parameters(prm);
 
       prm.parse_input(parameter_filename, "", true);
@@ -36,8 +36,8 @@ main(int argc, char *argv[])
           // query the testcase
           TestCases::CaseSelector<2> selector;
           auto testcase = selector.get_test_case(case_name, "heat_transfer");
-          FSI::Parameters::AllParameters<2> parameters(parameter_filename);
-          LaplaceProblem<2>                 laplace_problem(parameters);
+          Parameters::HeatParameters<2> parameters(parameter_filename);
+          LaplaceProblem<2>             laplace_problem(parameters);
           laplace_problem.run(testcase);
         }
       else if (dim == 3)
@@ -45,8 +45,8 @@ main(int argc, char *argv[])
           // query the testcase
           TestCases::CaseSelector<3> selector;
           auto testcase = selector.get_test_case(case_name, "heat_transfer");
-          FSI::Parameters::AllParameters<3> parameters(parameter_filename);
-          LaplaceProblem<3>                 laplace_problem(parameters);
+          Parameters::HeatParameters<3> parameters(parameter_filename);
+          LaplaceProblem<3>             laplace_problem(parameters);
           laplace_problem.run(testcase);
         }
       else

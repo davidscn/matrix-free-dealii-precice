@@ -280,7 +280,7 @@ namespace Heat_Transfer
     using VectorType      = LinearAlgebra::distributed::Vector<double>;
     using LevelVectorType = LinearAlgebra::distributed::Vector<float>;
 
-    LaplaceProblem(const FSI::Parameters::AllParameters<dim> &parameters);
+    LaplaceProblem(const Parameters::HeatParameters<dim> &parameters);
     void
     run(std::shared_ptr<TestCases::TestCaseBase<dim>> testcase_);
 
@@ -331,7 +331,7 @@ namespace Heat_Transfer
     void
     output_results(const unsigned int result_number) const;
 
-    const FSI::Parameters::AllParameters<dim> &parameters;
+    const Parameters::HeatParameters<dim> &parameters;
 
     parallel::distributed::Triangulation<dim> triangulation;
 
@@ -375,7 +375,7 @@ namespace Heat_Transfer
 
   template <int dim>
   LaplaceProblem<dim>::LaplaceProblem(
-    const FSI::Parameters::AllParameters<dim> &parameters)
+    const Parameters::HeatParameters<dim> &parameters)
     : parameters(parameters)
     , triangulation(MPI_COMM_WORLD,
                     Triangulation<dim>::limit_level_difference_at_vertices,

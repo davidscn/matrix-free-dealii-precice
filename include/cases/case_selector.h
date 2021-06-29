@@ -53,8 +53,13 @@ namespace TestCases
           else if (testcase_name == "partitioned_heat_neumann")
             return std::make_shared<PartitionedHeat<dim>>(false);
         }
-      AssertThrow(false,
-                  ExcMessage("Unable to configure your case " + testcase_name));
+      AssertThrow(
+        false,
+        ExcMessage(
+          "Unable to configure your case \"" + testcase_name +
+          "\". Make sure you use the right executable for the selected case, "
+          "namely the \"solid\" executable for FSI cases and the \"heat\" "
+          "executable for heat transfer simulation."));
     }
   };
 } // namespace TestCases
