@@ -97,7 +97,7 @@ namespace FSI
     using FEFaceIntegrator =
       FEFaceIntegrators<dim, dim, Number, VectorizedArrayType>;
 
-    Solid(const Parameters::AllParameters<dim> &parameters);
+    Solid(const Parameters::FSIParameters<dim> &parameters);
 
     virtual ~Solid();
 
@@ -200,7 +200,7 @@ namespace FSI
 
     // Finally, some member variables that describe the current state: A
     // collection of the parameters used to describe the problem setup...
-    const Parameters::AllParameters<dim> &parameters;
+    const Parameters::FSIParameters<dim> &parameters;
 
     // ...the volume of the reference and current configurations...
     double vol_reference;
@@ -406,7 +406,7 @@ namespace FSI
 
   // We initialise the Solid class using data extracted from the parameter file.
   template <int dim, typename Number>
-  Solid<dim, Number>::Solid(const Parameters::AllParameters<dim> &parameters)
+  Solid<dim, Number>::Solid(const Parameters::FSIParameters<dim> &parameters)
     : mpi_communicator(MPI_COMM_WORLD)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(mpi_communicator) == 0)
     , parameters(parameters)
