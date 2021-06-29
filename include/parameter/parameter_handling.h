@@ -377,6 +377,10 @@ namespace Parameters
         {
           AssertThrow((owning_class->mesh_name != owning_class->read_mesh_name),
                       ExcMessage(error_message));
+          AssertThrow((owning_class->read_mesh_name == "default"),
+                      ExcMessage(error_message));
+          AssertThrow((owning_class->write_mesh_name == "default"),
+                      ExcMessage(error_message));
           owning_class->read_mesh_name  = owning_class->mesh_name;
           owning_class->write_mesh_name = owning_class->mesh_name;
         }

@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<precice-configuration>
+  <log>
+    <sink
+      filter="%Severity% > debug and %Rank% = 0"
+      format="---[precice] %ColorizedSeverity% %Message%"
+      enabled="true" />
+  </log>
+
+  <solver-interface dimensions="2">
+    <data:scalar name="Temperature" />
+    <data:scalar name="Heat-Flux" />
+
+    <mesh name="Dirichlet-read">
+      <use-data name="Temperature" />
+    </mesh>
+
+    <mesh name="Dirichlet-write">
+      <use-data name="Heat-Flux" />
+    </mesh>
+
+    <mesh name="Neumann-read">
+      <use-data name="Heat-Flux" />
+    </mesh>
+
+    <mesh name="Neumann-write">
+      <use-data name="Temperature" />
+    </mesh>
+
+    <participant name="Dirichlet">
+      <use-mesh name="Dirichlet-read" provide="yes" />
+      <use-mesh name="Dirichlet-write" provide="yes" />
+      <use-mesh name="Neumann-write" from="Neumann" />
+      <write-data name="Heat-Flux" mesh="Dirichlet-write" />
+      <read-data name="Temperature" mesh="Dirichlet-read" />
+      <mapping:rbf-thin-plate-splines
+        direction="read"
+        from="Neumann-write"
+        to="Dirichlet-read"
+        use-qr-decomposition="true"
+        constraint="consistent"
+        x-dead="true" />
+    </participant>
+
+    <participant name="Neumann">
+      <use-mesh name="Neumann-write" provide="yes" />
+      <use-mesh name="Neumann-read" provide="yes" />
+      <use-mesh name="Dirichlet-write" from="Dirichlet" />
+      <write-data name="Temperature" mesh="Neumann-write" />
+      <read-data name="Heat-Flux" mesh="Neumann-read" />
+      <export:vtk directory="out" />
+      <mapping:rbf-thin-plate-splines
+        direction="read"
+        from="Dirichlet-write"
+        to="Neumann-read"
+        use-qr-decomposition="true"
+        constraint="consistent"
+        x-dead="true" />
+    </participant>
+
+    <m2n:sockets from="Dirichlet" to="Neumann" />
+
+    <coupling-scheme:serial-implicit>
+      <participants first="Dirichlet" second="Neumann" />
+      <max-time value="1.0" />
+      <time-window-size value="0.1" />
+      <max-iterations value="100" />
+      <exchange data="Heat-Flux" mesh="Dirichlet-write" from="Dirichlet" to="Neumann" />
+      <exchange
+        data="Temperature"
+        mesh="Neumann-write"
+        from="Neumann"
+        to="Dirichlet"
+        initialize="true" />
+      <absolute-convergence-measure data="Heat-Flux" mesh="Dirichlet-write" limit="1e-10" />
+      <absolute-convergence-measure data="Temperature" mesh="Neumann-write" limit="1e-10" />
+      <acceleration:aitken>
+        <data mesh="Neumann-write" name="Temperature" />
+        <initial-relaxation value="0.5" />
+      </acceleration:aitken>
+    </coupling-scheme:serial-implicit>
+  </solver-interface>
+</precice-configuration>
