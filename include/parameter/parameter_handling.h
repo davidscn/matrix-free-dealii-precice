@@ -100,7 +100,7 @@ namespace Parameters
   {
     unsigned int dimension           = 2;
     unsigned int n_global_refinement = 0;
-    std::string  testcase            = "undefined";
+    std::string  testcase            = "turek_hron";
 
     void
     add_parameters(ParameterHandler &prm);
