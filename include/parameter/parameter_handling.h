@@ -34,7 +34,7 @@ namespace Parameters
       prm.declare_entry("Output folder",
                         "",
                         Patterns::Anything(),
-                        "Output folder (must exist)");
+                        "Output folder");
 
       prm.add_action("Output folder", [&](const std::string &value) {
         output_folder = value;
@@ -100,7 +100,7 @@ namespace Parameters
   {
     unsigned int dimension           = 2;
     unsigned int n_global_refinement = 0;
-    std::string  testcase            = "turek_hron";
+    std::string  testcase            = "undefined";
 
     void
     add_parameters(ParameterHandler &prm);

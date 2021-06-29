@@ -1,0 +1,137 @@
+# Listing of Parameters
+# ---------------------
+subsection Finite element system
+  # Displacement system polynomial order
+  set Polynomial degree = 2
+
+  # Gauss quadrature order
+  set Quadrature order  = 3
+end
+
+
+subsection Geometry
+  # Dimension of the problem
+  set Dimension         = 3
+
+  # Number of global refinements
+  set Global refinement = 3
+
+  # Testcase to compute
+  set Testcase          = bending_flap
+end
+
+
+subsection Linear solver
+  # Number of CG iterations to estimate condition number
+  set Condition number CG iterations           = 20
+
+  # Enable or disable condition estimate
+  set Estimate condition number                = true
+
+  # Use Chebyshev smoother as coarse level solver
+  set MF Chebyshev coarse                      = true
+
+  # Accurately estimate eigenvalues for coarse level Chebyshevsolver
+  set MF Chebyshev coarse accurate eigenvalues = true
+
+  # Number of CG iterations to estiamte condition number for Chebyshev
+  # smoother
+  set MF Chebyshev number CG iterations        = 30
+
+  # Type of caching for matrix-free operator
+  set MF caching                               = scalar_referential
+
+  # Linear solver iterations (multiples of the system matrix size)
+  set Max iteration multiplier                 = 1
+
+  # Preconditioner relaxation value
+  set Preconditioner relaxation                = 0.65
+
+  # Type of preconditioner
+  set Preconditioner type                      = gmg
+
+  # Linear solver residual (scaled by residual norm)
+  set Residual                                 = 1e-6
+end
+
+
+subsection Material properties
+  # Density
+  set Density         = 250
+
+  # Formulation of the energy function
+  set Formulation     = 1
+
+  # Poisson's ratio
+  set Poisson's ratio = 0.4
+
+  # Shear modulus
+  set Shear modulus   = 178.57
+end
+
+
+subsection Nonlinear solver
+  # Displacement update absolute tolerance
+  set Absolute tolerance displacement = 5e-15
+
+  # Force residual absolute tolerance
+  set Absolute tolerance force        = 2e-9
+
+  # Number of Newton-Raphson iterations allowed
+  set Max iterations Newton-Raphson   = 10
+
+  # Displacement error tolerance
+  set Tolerance displacement          = 1.0e-6
+
+  # Force residual tolerance
+  set Tolerance force                 = 1.0e-9
+end
+
+
+subsection Output
+  # Output folder
+  set Output folder   = dealii-output
+
+  # Points in undeformed configuration to output unknown fields
+  set Output points   = 0.6, 0.2, 0.0
+
+  # Output solution watchpoint
+  set Output solution = false
+
+  # At which time to write a vtu output file
+  set Output tick     = 0.2
+end
+
+
+subsection Time
+  # End time
+  set End time       = 1
+
+  # Time step size
+  set Time step size = 0.01
+end
+
+
+subsection precice configuration
+  # Name of the coupling mesh in the precice-config.xml file
+  set Mesh name                = dealii-mesh
+
+  # Name of the participant in the precice-config.xml file
+  set Participant name         = dealii
+
+  # Name of the read data in the precice-config.xml file
+  set Read data name           = Stress
+
+  # Name of the write data in the precice-config.xml file
+  set Write data name          = Displacement
+
+  # Specification of the write data location and the data typeAvailable
+  # options are: values_on_dofs, values_on_quads, normal_gradients_on_quads
+  set Write data specification = values_on_quads
+
+  # Index of the quadrature formula in MatrixFree used for initialization
+  set Write quadrature index   = 0
+
+  # Name of the precice configuration file
+  set precice config-file      = precice-config.xml
+end
