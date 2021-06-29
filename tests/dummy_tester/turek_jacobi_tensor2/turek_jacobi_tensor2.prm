@@ -28,7 +28,7 @@ subsection Geometry
   set Dimension          = 2
 
   # Number of global refinements
-  set Global refinement  = 4
+  set Global refinement  = 3
 
   # Testcase to compute
   set Testcase           = turek_hron
@@ -40,7 +40,7 @@ subsection Linear solver
   set Residual                  = 1e-6
 
   # Linear solver iterations (multiples of the system matrix size)
-  set Max iteration multiplier  = 1
+  set Max iteration multiplier  = 2
 
   # Preconditioner type
   set Preconditioner type        = jacobi
@@ -100,7 +100,7 @@ end
 
 subsection Time
   # End time
-  set End time       = 1
+  set End time       = 0.4
 
   # Time step size
   set Time step size = 0.2
