@@ -556,6 +556,7 @@ namespace Heat_Transfer
 
     //... and fill in the constraints into the solution vector (non-homogenous
     // part)
+    solution = 0;
     constraints.distribute(solution);
 
     // Compute effect of the non-homogenous boundary condition on the system_rhs
