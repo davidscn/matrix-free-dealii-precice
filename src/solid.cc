@@ -31,7 +31,7 @@ main(int argc, char *argv[])
         argc, argv, 1 /*dealii::numbers::invalid_unsigned_int*/);
 
       const unsigned int degree    = fesystem.poly_degree;
-      const unsigned int dim       = geometry.dim;
+      const unsigned int dim       = geometry.dimension;
       const std::string  case_name = geometry.testcase;
 
       if (degree == 0)
