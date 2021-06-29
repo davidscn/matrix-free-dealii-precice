@@ -98,7 +98,7 @@ namespace Parameters
   // Make adjustments to the problem geometry and its discretisation.
   struct Geometry
   {
-    unsigned int dim                 = 2;
+    unsigned int dimension           = 2;
     unsigned int n_global_refinement = 0;
     std::string  testcase            = "turek_hron";
 
@@ -117,7 +117,7 @@ namespace Parameters
                         Patterns::Integer(0));
 
       prm.add_parameter("Dimension",
-                        dim,
+                        dimension,
                         "Dimension of the problem",
                         Patterns::Integer(2, 3));
 
@@ -365,7 +365,7 @@ namespace Parameters
           throw;
         }
 
-      AssertDimension(dim, owning_class->dim);
+      AssertDimension(dim, owning_class->dimension);
       const std::string error_message(
         "Either specify a 'Mesh name', which will be applied to the read and write mesh (data location)"
         " or a separate 'Read Mesh name' and a 'Write mesh name' in order to enable more mapping frindly "

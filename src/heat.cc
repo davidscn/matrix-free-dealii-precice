@@ -24,7 +24,7 @@ main(int argc, char *argv[])
       Utilities::MPI::MPI_InitFinalize mpi_init(argc, argv, 1);
 
       const unsigned int degree    = fesystem.poly_degree;
-      const unsigned int dim       = geometry.dim;
+      const unsigned int dim       = geometry.dimension;
       const std::string  case_name = geometry.testcase;
 
 
