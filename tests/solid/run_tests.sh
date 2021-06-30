@@ -1,5 +1,4 @@
 #!/bin/bash
-set -e
 echo "Testing the solid mechanics"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -29,13 +28,14 @@ print_result() {
             echo -ne "${RED} failed ${NOCOLOR}\n"
             exit_code=$(( exit_code +1))
             cat "$@"
+	    exit 1
 	fi
 }
 
 test_name="building"
 print_start ${test_name}
 mkdir -p "${work_dir}"/build && cd "${work_dir}"/build
-(cmake ../../../ && make debug && make all) >${test_name}.log
+(cmake ../../../ && make debug && make solid) >${test_name}.log
  if [ $? -eq 0 ]
     then
     echo -ne "${GREEN} passed ${NOCOLOR}\n"

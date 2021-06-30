@@ -48,7 +48,6 @@
       <use-mesh name="Dirichlet-write" from="Dirichlet" />
       <write-data name="Temperature" mesh="Neumann-write" />
       <read-data name="Heat-Flux" mesh="Neumann-read" />
-      <export:vtk directory="out" />
       <mapping:rbf-thin-plate-splines
         direction="read"
         from="Dirichlet-write"
