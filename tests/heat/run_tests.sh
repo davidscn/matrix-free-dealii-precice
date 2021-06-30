@@ -1,5 +1,4 @@
 #!/bin/bash
-set -e
 echo "Testing the heat transfer"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -8,7 +7,7 @@ NOCOLOR='\033[0m'
 start_dir=$(pwd)
 
 # Change to the working directory
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 work_dir=$(pwd)
 
 # Declare test names
@@ -29,12 +28,13 @@ print_result() {
             echo -ne "${RED} failed ${NOCOLOR}\n"
             exit_code=$(( exit_code +1))
             cat "$@"
+	    exit 1
 	fi
 }
 
 test_name="building"
 print_start ${test_name}
-mkdir -p "${work_dir}"/build && cd "${work_dir}"/build
+mkdir -p "${work_dir}"/build && cd "${work_dir}"/build || exit 1
 (cmake ../../../ && make debug && make heat) >${test_name}.log
  if [ $? -eq 0 ]
     then
@@ -44,7 +44,7 @@ mkdir -p "${work_dir}"/build && cd "${work_dir}"/build
     exit 1
  fi
 
-cd "${work_dir}"
+cd "${work_dir}" || exit
 rm -fv ./heat
 cp ./build/heat .
 
@@ -68,7 +68,7 @@ for i in "${tests[@]}"
 done
 
 # Go back to initial to command directory
-cd "${start_dir}"
+cd "${start_dir}" || exit 1
 
 if [ $exit_code -eq 0 ]
 then
