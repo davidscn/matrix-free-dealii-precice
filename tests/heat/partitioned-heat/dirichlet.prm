@@ -1,0 +1,67 @@
+# Listing of Parameters
+# ---------------------
+subsection Finite element system
+  # Displacement system polynomial order
+  set Polynomial degree = 2
+
+  # Gauss quadrature order
+  set Quadrature order  = 3
+end
+
+
+subsection Geometry
+  # Dimension of the problem
+  set Dimension         = 2
+
+  # Number of global refinements
+  set Global refinement = 3
+
+  # Testcase to compute
+  set Testcase          = partitioned_heat_dirichlet
+end
+
+
+subsection Output
+  # Output folder
+  set Output folder   = ./partitioned-heat/dirichlet-output
+
+  # Output solution watchpoint
+  set Output solution = false
+
+  # At which time to write a vtu output file
+  set Output tick     = 0.1
+end
+
+
+subsection Time
+  # End time
+  set End time       = 1
+
+  # Time step size
+  set Time step size = 0.1
+end
+
+
+subsection precice configuration
+  # Name of the read coupling mesh in the precice-config.xml file
+  set Read mesh name           = Dirichlet-read
+  
+  # Name of the write coupling mesh in the precice-config.xml file
+  set Write mesh name          = Dirichlet-write
+
+  # Name of the participant in the precice-config.xml file
+  set Participant name         = Dirichlet
+
+  # Name of the read data in the precice-config.xml file
+  set Read data name           = Temperature
+
+  # Name of the write data in the precice-config.xml file
+  set Write data name          = Heat-Flux
+
+  # Specification of the write data location and the data typeAvailable
+  # options are: values_on_dofs, values_on_quads, normal_gradients_on_quads
+  set Write data specification = normal_gradients_on_quads
+
+  # Name of the precice configuration file
+  set precice config-file      = ./partitioned-heat/precice-config.xml
+end
