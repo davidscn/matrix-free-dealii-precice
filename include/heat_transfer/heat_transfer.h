@@ -33,6 +33,7 @@
 #include <base/fe_integrator.h>
 #include <base/time_handler.h>
 #include <base/utilities.h>
+#include <base/vector_tools_extension.h>
 #include <cases/case_selector.h>
 #include <parameter/parameter_handling.h>
 
@@ -330,6 +331,9 @@ namespace Heat_Transfer
      */
     void
     output_results(const unsigned int result_number) const;
+
+    void
+    evaluate_boundary_flux();
 
     const Parameters::HeatParameters<dim> &parameters;
 
@@ -832,16 +836,13 @@ namespace Heat_Transfer
 
 
   template <int dim>
-  LinearAlgebra::distributed::Vector<double>
-  LaplaceProblem<dim>::get_normal_flux_by_residual(const VectorType &solution,
-                                                   const VectorType &)
+  void
+  LaplaceProblem<dim>::evaluate_boundary_flux()
   {
-    // Allocate a global vector for the residual
-    VectorType flux(solution);
-    flux = 0;
+    // 1. Compute the residual
     // Contribution of the linear operator on the current solution, ignoring
     // constraints. Note that the sign is switched compared to the RHS assembly
-    inhomogeneous_operator.vmult(flux, solution);
+    inhomogeneous_operator.vmult(system_rhs, solution);
 
     Assert(testcase->heat_transfer_rhs.get() != nullptr, ExcNotInitialized());
     const auto       data = inhomogeneous_operator.get_matrix_free();
@@ -864,83 +865,17 @@ namespace Heat_Transfer
                                        phi.quadrature_point(q)))),
                              q);
           }
-        phi.integrate_scatter(EvaluationFlags::values, flux);
+        phi.integrate_scatter(EvaluationFlags::values, system_rhs);
       }
-    flux /= time.get_delta_t();
+    system_rhs /= time.get_delta_t();
 
-    // Do the actual projection step from the global vector to the boundary
-    // A dummy Function  object and the respective boundary_function variable
-    // required for the MatrixCreator::create_boundary_mass_matrix function
-    const Functions::ZeroFunction<dim>                  func(1);
-    std::map<types::boundary_id, const Function<dim> *> boundary_functions;
-    boundary_functions[TestCases::TestCaseBase<dim>::interface_id] = &func;
-
-    // a vector of size global dofs. However, all irrelevant DoFs (not located
-    // at the interface) are set to 'invalid_dof_index' and all other dofs are
-    // enumerated consecutively so that we obtain a mapping from global dofs,
-    // i.e., the iterator running through the std::vector, and the dof numbering
-    // in the local sub-problem dof_to_boundary_mapping[i]. Have a look at
-    // map_dof_to_boundary_indices for more information
-    std::vector<types::global_dof_index> dof_to_boundary_mapping;
-    // a set keeping the interface boundary_id
-    std::set<types::boundary_id> selected_boundary_components;
-    for (typename std::map<types::boundary_id,
-                           const Function<dim> *>::const_iterator i =
-           boundary_functions.begin();
-         i != boundary_functions.end();
-         ++i)
-      selected_boundary_components.insert(i->first);
-
-    DoFTools::map_dof_to_boundary_indices(dof_handler,
-                                          selected_boundary_components,
-                                          dof_to_boundary_mapping);
-
-    // Set up the sparsity pattern
-    DynamicSparsityPattern dsp(dof_handler.n_boundary_dofs(boundary_functions),
-                               dof_handler.n_boundary_dofs(boundary_functions));
-    DoFTools::make_boundary_sparsity_pattern(dof_handler,
-                                             boundary_functions,
-                                             dof_to_boundary_mapping,
-                                             dsp);
-    SparsityPattern sparsity;
-    sparsity.copy_from(dsp);
-    sparsity.compress();
-
-    // make mass matrix and right hand side. The RHS is just a dummy RHS and
-    // replaced down the line
-    SparseMatrix<double> mass_matrix(sparsity);
-    Vector<double>       rhs(sparsity.n_rows());
-    QGauss<dim - 1>      quadrature(parameters.quad_order);
-    MatrixCreator::create_boundary_mass_matrix(
-      dof_handler,
-      quadrature,
-      mass_matrix,
-      boundary_functions,
-      rhs,
-      dof_to_boundary_mapping,
-      static_cast<const Function<dim, double> *>(nullptr));
-
-    // Fill in the RHS with the residual values
-    for (unsigned int i = 0; i < dof_to_boundary_mapping.size(); ++i)
-      if (dof_to_boundary_mapping[i] != numbers::invalid_dof_index)
-        rhs(dof_to_boundary_mapping[i]) = flux(i);
-
-    // Solve the actual system using a CG solver and a SSOR preconditioner
-    Vector<double>   boundary_projection(rhs.size());
-    ReductionControl control(5 * rhs.size(), 0., 1e-12, false, false);
-    GrowingVectorMemory<Vector<double>>    memory;
-    SolverCG<Vector<double>>               cg(control, memory);
-    PreconditionSSOR<SparseMatrix<double>> prec;
-    prec.initialize(mass_matrix, 1.2);
-    cg.solve(mass_matrix, boundary_projection, rhs, prec);
-
-    // Scatter the computed boundary projection back into the global flux vector
-    for (unsigned int i = 0; i < dof_to_boundary_mapping.size(); ++i)
-      if (dof_to_boundary_mapping[i] != numbers::invalid_dof_index)
-        flux(i) = boundary_projection(dof_to_boundary_mapping[i]);
-
-    // Return the flux vector as a global vector
-    return flux;
+    // 2. Project the residual onto the boundary
+    VectorTools::project_boundary_values(
+      StaticMappingQ1<dim>::mapping,
+      system_matrix.get_matrix_free()->get_dof_handler(),
+      int(TestCases::TestCaseBase<dim>::interface_id),
+      system_rhs,
+      QGauss<dim - 1>(parameters.quad_order));
   }
 
 
@@ -979,8 +914,10 @@ namespace Heat_Transfer
         assemble_rhs();
         solve();
         {
+          // We misuse the system_rhs in the flux evaluation
+          evaluate_boundary_flux();
           TimerOutput::Scope t(timer, "advance preCICE");
-          precice_adapter->advance(solution, time.get_delta_t());
+          precice_adapter->advance(system_rhs, time.get_delta_t());
         }
         precice_adapter->reload_old_state_if_required(
           [&]() { solution = solution_old; });
