@@ -914,10 +914,15 @@ namespace Heat_Transfer
         assemble_rhs();
         solve();
         {
-          // We misuse the system_rhs in the flux evaluation
-          evaluate_boundary_flux();
           TimerOutput::Scope t(timer, "advance preCICE");
-          precice_adapter->advance(system_rhs, time.get_delta_t());
+          if (testcase->is_dirichlet)
+            {
+              // We misuse the system_rhs in the flux evaluation
+              evaluate_boundary_flux();
+              precice_adapter->advance(system_rhs, time.get_delta_t());
+            }
+          else
+            precice_adapter->advance(solution, time.get_delta_t());
         }
         precice_adapter->reload_old_state_if_required(
           [&]() { solution = solution_old; });
