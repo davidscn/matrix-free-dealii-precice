@@ -29,6 +29,7 @@
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/vector_tools.h>
 
+#include <adapter/boundary_mass_operator.h>
 #include <adapter/precice_adapter.h>
 #include <base/fe_integrator.h>
 #include <base/time_handler.h>
@@ -461,7 +462,8 @@ namespace Heat_Transfer
       // In both cases: define interface using FEEvaluation::quadrature_point()
       if (testcase->is_dirichlet)
         additional_data.mapping_update_flags_boundary_faces =
-          (update_gradients | update_normal_vectors | update_quadrature_points);
+          (update_values | update_JxW_values | update_gradients |
+           update_normal_vectors | update_quadrature_points);
       else
         additional_data.mapping_update_flags_boundary_faces =
           (update_values | update_JxW_values | update_quadrature_points);
@@ -869,13 +871,44 @@ namespace Heat_Transfer
       }
     system_rhs /= time.get_delta_t();
 
+    // TODO: Reset DoFs not affected
+    const IndexSet indices = (DoFTools::extract_boundary_dofs(
+                                dof_handler,
+                                ComponentMask(),
+                                std::set<types::boundary_id>{
+                                  TestCases::TestCaseBase<dim>::interface_id}) &
+                              dof_handler.locally_owned_dofs());
+
+
+    using MatrixType = MatrixFreeOperators::BoundaryMassOperator<dim, -1, 0, 1>;
+
+    MatrixType b_mass_matrix(int(TestCases::TestCaseBase<dim>::interface_id));
+    b_mass_matrix.initialize(data);
+
+    VectorType vec;
+    data->initialize_dof_vector(vec);
+
+    // Copy the relevant RHS entries into a zeroed vector
+    vec = 0;
+    for (const auto &i : indices)
+      vec[i] = system_rhs[i];
+    vec.update_ghost_values();
+
+    // And solver the system
+    ReductionControl control(
+      500 * system_rhs.size(), 0., 1e-8 * vec.l2_norm(), false, true);
+    SolverCG<VectorType> cg(control);
+
+    cg.solve(b_mass_matrix, system_rhs, vec, PreconditionIdentity());
+
+    system_rhs.update_ghost_values();
     // 2. Project the residual onto the boundary
-    VectorTools::project_boundary_values(
-      StaticMappingQ1<dim>::mapping,
-      system_matrix.get_matrix_free()->get_dof_handler(),
-      int(TestCases::TestCaseBase<dim>::interface_id),
-      system_rhs,
-      QGauss<dim - 1>(parameters.quad_order));
+    //    VectorTools::project_boundary_values(
+    //      StaticMappingQ1<dim>::mapping,
+    //      system_matrix.get_matrix_free()->get_dof_handler(),
+    //      int(TestCases::TestCaseBase<dim>::interface_id),
+    //      system_rhs,
+    //      QGauss<dim - 1>(parameters.quad_order));
   }
 
 
