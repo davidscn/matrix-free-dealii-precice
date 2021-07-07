@@ -20,8 +20,10 @@ namespace VectorTools
    * Similar to project_boundary_values, but instead of taking a function
    * describing the boundary, a global vector is passed into this function.
    * Furthermore, the projected boundary is expected to not contain any
-   * consstraints, since we want to evaluate the numerical flux across the
-   * boundary and do not want to pass the values in the actual system.
+   * constraints, since we want to evaluate the numerical flux across the
+   * coupling boundary and do not want to pass the values into the actual
+   * system. However, the function works only for serial Triangulations. For a
+   * parallel version, have a look at the BoundaryProjector class.
    *
    * The rhs_vector is assumed to contain the nodal function values. The result
    * of this operation is again filled into the rhs_vector.
@@ -34,6 +36,9 @@ namespace VectorTools
                           VectorType &                     rhs_vector,
                           const Quadrature<dim - 1> &      quadrature)
   {
+    Assert((dynamic_cast<const parallel::TriangulationBase<dim> *>(
+              &(dof_handler.get_triangulation())) == nullptr),
+           ExcNotImplemented());
     // Do the actual projection step from the global vector to the boundary
     // A dummy Function  object and the respective boundary_function variable
     // required for the MatrixCreator::create_boundary_mass_matrix function
