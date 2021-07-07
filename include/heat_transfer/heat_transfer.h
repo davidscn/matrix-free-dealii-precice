@@ -841,10 +841,11 @@ namespace Heat_Transfer
   void
   LaplaceProblem<dim>::evaluate_boundary_flux()
   {
+    VectorType &residual = system_rhs;
     // 1. Compute the residual
     // Contribution of the linear operator on the current solution, ignoring
     // constraints. Note that the sign is switched compared to the RHS assembly
-    inhomogeneous_operator.vmult(system_rhs, solution);
+    inhomogeneous_operator.vmult(residual, solution);
 
     Assert(testcase->heat_transfer_rhs.get() != nullptr, ExcNotInitialized());
     const auto       data = inhomogeneous_operator.get_matrix_free();
@@ -867,11 +868,11 @@ namespace Heat_Transfer
                                        phi.quadrature_point(q)))),
                              q);
           }
-        phi.integrate_scatter(EvaluationFlags::values, system_rhs);
+        phi.integrate_scatter(EvaluationFlags::values, residual);
       }
-    system_rhs /= time.get_delta_t();
+    residual.compress(VectorOperation::add);
+    residual /= time.get_delta_t();
 
-    // TODO: Reset DoFs not affected
     const IndexSet indices = (DoFTools::extract_boundary_dofs(
                                 dof_handler,
                                 ComponentMask(),
@@ -879,29 +880,28 @@ namespace Heat_Transfer
                                   TestCases::TestCaseBase<dim>::interface_id}) &
                               dof_handler.locally_owned_dofs());
 
-
     using MatrixType = MatrixFreeOperators::BoundaryMassOperator<dim, -1, 0, 1>;
 
     MatrixType b_mass_matrix(int(TestCases::TestCaseBase<dim>::interface_id));
     b_mass_matrix.initialize(data);
+    b_mass_matrix.compute_diagonal();
 
-    VectorType vec;
-    data->initialize_dof_vector(vec);
+    VectorType rhs;
+    data->initialize_dof_vector(rhs);
 
     // Copy the relevant RHS entries into a zeroed vector
-    vec = 0;
+    rhs = 0;
     for (const auto &i : indices)
-      vec[i] = system_rhs[i];
-    vec.update_ghost_values();
+      rhs[i] = residual[i];
 
     // And solver the system
-    ReductionControl control(
-      500 * system_rhs.size(), 0., 1e-8 * vec.l2_norm(), false, true);
+    ReductionControl     control(5 * rhs.size(), 0., 1e-12, false, false);
     SolverCG<VectorType> cg(control);
+    PreconditionJacobi<MatrixType> preconditioner;
+    preconditioner.initialize(b_mass_matrix, 0.8);
+    cg.solve(b_mass_matrix, residual, rhs, preconditioner);
+    residual.update_ghost_values();
 
-    cg.solve(b_mass_matrix, system_rhs, vec, PreconditionIdentity());
-
-    system_rhs.update_ghost_values();
     // 2. Project the residual onto the boundary
     //    VectorTools::project_boundary_values(
     //      StaticMappingQ1<dim>::mapping,
