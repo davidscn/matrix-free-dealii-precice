@@ -7,20 +7,22 @@
 #include <deal.II/matrix_free/matrix_free.h>
 #include <deal.II/matrix_free/operators.h>
 
+#include <base/fe_integrator.h>
+
 DEAL_II_NAMESPACE_OPEN
 
 namespace MatrixFreeOperators
 {
   /**
-   * This class implements the operation of the action of a mass matrix.
+   * This class implements the operation of the action of a mass matrix on a
+   * specified boundary ID. It is assumed that no constraints are relevant at
+   * this particular boundary.
    *
    * Note that this class only supports the non-blocked vector variant of the
    * Base operator because only a single FEEvaluation object is used in the
    * apply function.
    */
   template <int dim,
-            int fe_degree,
-            int n_q_points_1d   = fe_degree + 1,
             int n_components    = 1,
             typename VectorType = LinearAlgebra::distributed::Vector<double>,
             typename VectorizedArrayType =
@@ -41,6 +43,12 @@ namespace MatrixFreeOperators
       typename Base<dim, VectorType, VectorizedArrayType>::size_type;
 
     /**
+     * FEFaceIntegrator definition used from the header file
+     */
+    using FEFaceIntegrator =
+      FEFaceIntegrators<dim, n_components, value_type, VectorizedArrayType>;
+
+    /**
      * Constructor.
      */
     BoundaryMassOperator(const types::boundary_id interface_id);
@@ -54,9 +62,9 @@ namespace MatrixFreeOperators
 
   private:
     /**
-     * Applies the mass matrix operation on an input vector. It is
-     * assumed that the passed input and output vector are correctly initialized
-     * using initialize_dof_vector().
+     * Applies the mass matrix operation at the defined boundary on an input
+     * vector. It is assumed that the passed input and output vector are
+     * correctly initialized using initialize_dof_vector().
      */
     virtual void
     apply_add(VectorType &dst, const VectorType &src) const override;
@@ -73,17 +81,10 @@ namespace MatrixFreeOperators
 
 
   template <int dim,
-            int fe_degree,
-            int n_q_points_1d,
             int n_components,
             typename VectorType,
             typename VectorizedArrayType>
-  BoundaryMassOperator<dim,
-                       fe_degree,
-                       n_q_points_1d,
-                       n_components,
-                       VectorType,
-                       VectorizedArrayType>::
+  BoundaryMassOperator<dim, n_components, VectorType, VectorizedArrayType>::
     BoundaryMassOperator(const types::boundary_id interface_id)
     : Base<dim, VectorType, VectorizedArrayType>()
     , interface_id(interface_id)
@@ -92,21 +93,14 @@ namespace MatrixFreeOperators
 
 
   template <int dim,
-            int fe_degree,
-            int n_q_points_1d,
             int n_components,
             typename VectorType,
             typename VectorizedArrayType>
   void
-  BoundaryMassOperator<dim,
-                       fe_degree,
-                       n_q_points_1d,
-                       n_components,
-                       VectorType,
-                       VectorizedArrayType>::compute_diagonal()
+  BoundaryMassOperator<dim, n_components, VectorType, VectorizedArrayType>::
+    compute_diagonal()
   {
-    using Number =
-      typename Base<dim, VectorType, VectorizedArrayType>::value_type;
+    using Number = value_type;
     Assert((Base<dim, VectorType, VectorizedArrayType>::data.get() != nullptr),
            ExcNotInitialized());
 
@@ -140,33 +134,17 @@ namespace MatrixFreeOperators
 
 
   template <int dim,
-            int fe_degree,
-            int n_q_points_1d,
             int n_components,
             typename VectorType,
             typename VectorizedArrayType>
   void
-  BoundaryMassOperator<dim,
-                       fe_degree,
-                       n_q_points_1d,
-                       n_components,
-                       VectorType,
-                       VectorizedArrayType>::apply_add(VectorType &      dst,
-                                                       const VectorType &src)
-    const
+  BoundaryMassOperator<dim, n_components, VectorType, VectorizedArrayType>::
+    apply_add(VectorType &dst, const VectorType &src) const
   {
-    const auto data = Base<dim, VectorType, VectorizedArrayType>::data;
-    using Number =
-      typename Base<dim, VectorType, VectorizedArrayType>::value_type;
-    FEFaceEvaluation<dim,
-                     fe_degree,
-                     n_q_points_1d,
-                     n_components,
-                     Number,
-                     VectorizedArrayType>
-      phi(*data, true, this->selected_rows[0]);
-
+    const auto       data = Base<dim, VectorType, VectorizedArrayType>::data;
+    FEFaceIntegrator phi(*data, true, this->selected_rows[0]);
     src.update_ghost_values();
+
     for (unsigned int face = data->n_inner_face_batches();
          face < data->n_boundary_face_batches() + data->n_inner_face_batches();
          ++face)
