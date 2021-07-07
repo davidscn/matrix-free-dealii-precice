@@ -873,6 +873,7 @@ namespace Heat_Transfer
     residual.compress(VectorOperation::add);
     residual /= time.get_delta_t();
 
+    // 2. Solve the actual system
     const IndexSet indices = (DoFTools::extract_boundary_dofs(
                                 dof_handler,
                                 ComponentMask(),
@@ -880,7 +881,7 @@ namespace Heat_Transfer
                                   TestCases::TestCaseBase<dim>::interface_id}) &
                               dof_handler.locally_owned_dofs());
 
-    using MatrixType = MatrixFreeOperators::BoundaryMassOperator<dim, -1, 0, 1>;
+    using MatrixType = MatrixFreeOperators::BoundaryMassOperator<dim>;
 
     MatrixType b_mass_matrix(int(TestCases::TestCaseBase<dim>::interface_id));
     b_mass_matrix.initialize(data);
@@ -901,14 +902,6 @@ namespace Heat_Transfer
     preconditioner.initialize(b_mass_matrix, 0.8);
     cg.solve(b_mass_matrix, residual, rhs, preconditioner);
     residual.update_ghost_values();
-
-    // 2. Project the residual onto the boundary
-    //    VectorTools::project_boundary_values(
-    //      StaticMappingQ1<dim>::mapping,
-    //      system_matrix.get_matrix_free()->get_dof_handler(),
-    //      int(TestCases::TestCaseBase<dim>::interface_id),
-    //      system_rhs,
-    //      QGauss<dim - 1>(parameters.quad_order));
   }
 
 
