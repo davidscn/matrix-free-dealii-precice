@@ -29,12 +29,11 @@
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/vector_tools.h>
 
-#include <adapter/boundary_mass_operator.h>
+#include <adapter/boundary_projector.h>
 #include <adapter/precice_adapter.h>
 #include <base/fe_integrator.h>
 #include <base/time_handler.h>
 #include <base/utilities.h>
-#include <base/vector_tools_extension.h>
 #include <cases/case_selector.h>
 #include <parameter/parameter_handling.h>
 
@@ -873,35 +872,11 @@ namespace Heat_Transfer
     residual.compress(VectorOperation::add);
     residual /= time.get_delta_t();
 
-    // 2. Solve the actual system
-    const IndexSet indices = (DoFTools::extract_boundary_dofs(
-                                dof_handler,
-                                ComponentMask(),
-                                std::set<types::boundary_id>{
-                                  TestCases::TestCaseBase<dim>::interface_id}) &
-                              dof_handler.locally_owned_dofs());
+    BoundaryProjector<dim> projector(
+      int(TestCases::TestCaseBase<dim>::interface_id),
+      inhomogeneous_operator.get_matrix_free());
 
-    using MatrixType = MatrixFreeOperators::BoundaryMassOperator<dim>;
-
-    MatrixType b_mass_matrix(int(TestCases::TestCaseBase<dim>::interface_id));
-    b_mass_matrix.initialize(data);
-    b_mass_matrix.compute_diagonal();
-
-    VectorType rhs;
-    data->initialize_dof_vector(rhs);
-
-    // Copy the relevant RHS entries into a zeroed vector
-    rhs = 0;
-    for (const auto &i : indices)
-      rhs[i] = residual[i];
-
-    // And solver the system
-    ReductionControl     control(5 * rhs.size(), 0., 1e-12, false, false);
-    SolverCG<VectorType> cg(control);
-    PreconditionJacobi<MatrixType> preconditioner;
-    preconditioner.initialize(b_mass_matrix, 0.8);
-    cg.solve(b_mass_matrix, residual, rhs, preconditioner);
-    residual.update_ghost_values();
+    projector.project(residual);
   }
 
 
