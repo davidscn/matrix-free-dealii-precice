@@ -62,7 +62,7 @@ namespace MatrixFreeOperators
     apply_add(VectorType &dst, const VectorType &src) const override;
 
     virtual void
-    Tapply_add(VectorType &/*dst*/, const VectorType &/*src*/) const override
+    Tapply_add(VectorType & /*dst*/, const VectorType & /*src*/) const override
     {
       AssertThrow(false, ExcNotImplemented());
     }
@@ -110,8 +110,6 @@ namespace MatrixFreeOperators
     Assert((Base<dim, VectorType, VectorizedArrayType>::data.get() != nullptr),
            ExcNotInitialized());
 
-    Assert(false, ExcNotImplemented());
-
     this->inverse_diagonal_entries =
       std::make_shared<DiagonalMatrix<VectorType>>();
     this->diagonal_entries = std::make_shared<DiagonalMatrix<VectorType>>();
@@ -129,8 +127,11 @@ namespace MatrixFreeOperators
     const unsigned int locally_owned_size =
       inverse_diagonal_vector.locally_owned_size();
     for (unsigned int i = 0; i < locally_owned_size; ++i)
-      inverse_diagonal_vector.local_element(i) =
-        Number(1.) / inverse_diagonal_vector.local_element(i);
+      {
+        if (inverse_diagonal_vector.local_element(i) > 0)
+          inverse_diagonal_vector.local_element(i) =
+            Number(1.) / inverse_diagonal_vector.local_element(i);
+      }
 
     inverse_diagonal_vector.update_ghost_values();
     diagonal_vector.update_ghost_values();
@@ -164,6 +165,7 @@ namespace MatrixFreeOperators
                      Number,
                      VectorizedArrayType>
       phi(*data, true, this->selected_rows[0]);
+
     src.update_ghost_values();
     for (unsigned int face = data->n_inner_face_batches();
          face < data->n_boundary_face_batches() + data->n_inner_face_batches();
@@ -175,15 +177,12 @@ namespace MatrixFreeOperators
           continue;
 
         phi.reinit(face);
-        phi.read_dof_values(src);
-        phi.evaluate(EvaluationFlags::values);
+        phi.gather_evaluate(src, EvaluationFlags::values);
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           phi.submit_value(phi.get_value(q), q);
-        phi.integrate(EvaluationFlags::values);
-        phi.distribute_local_to_global(dst);
+        phi.integrate_scatter(EvaluationFlags::values, dst);
       }
     dst.compress(VectorOperation::add);
-    dst.update_ghost_values();
   }
 } // namespace MatrixFreeOperators
 
