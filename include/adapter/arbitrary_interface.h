@@ -11,8 +11,9 @@ namespace Adapter
 {
   using namespace dealii;
   /**
-   * Derived class of the CouplingInterface: where data is written on an
-   * arbitrary
+   * Derived class of the CouplingInterface, where data is written on an
+   * arbitrary interface defined by other participants. Using this interface
+   * requires a direct access to received meshes.
    */
   template <int dim, int data_dim, typename VectorizedArrayType>
   class ArbitraryInterface
@@ -31,35 +32,36 @@ namespace Adapter
     {}
 
     /**
-     * @brief define_mesh_vertices Define a region of interest this process
-     *        works on using bounding boxes.
+     * @brief define_mesh_vertices As opposed to the usual preCICE mappings
+     *        and meshes, this function defines just a region of interest
+     *        this process wants to access directly.
      */
     virtual void
     define_coupling_mesh() override;
 
     /**
-     * @brief process_coupling_mesh Compute the local partitioning
+     * @brief process_coupling_mesh This function is called after precice.initialize(),
+     *        i.e., after the communication was established and the meshes were
+     *        exchanged. Here, the relevant data of the received mesh is queried
+     *        so that we receive the data location and the corresponding data
+     *        IDs, which are required to write data to the received mesh. After
+     *        receiving the data, it is filtered to the according to the local
+     *        partition (see @ref filter_vertices_to_local_partition()) below.
      */
     virtual void
     process_coupling_mesh() override;
 
     /**
-     * @brief write_mapped_data Evaluates the given @param data at arbitrary
+     * @brief write_data Evaluates the given @param data_vector at arbitrary
      *        data points (defined by coupling participants) and passes them
      *        to preCICE
      *
-     * @param[in] data The global (distributed) data vector to be passed to
-     *            preCICE (absolute displacement for FSI)
+     * @param[in] data_vector The global (distributed) data vector containing
+     *            the relevant coupling data (absolute displacement for FSI)
      */
     virtual void
     write_data(
       const LinearAlgebra::distributed::Vector<double> &data_vector) override;
-
-    /**
-     * @brief finish_initialization Handles received vertices
-     */
-    void
-    finish_initialization();
 
   private:
     /**
@@ -69,7 +71,9 @@ namespace Adapter
      * @param[in] data_vector The data to be passed to preCICE (absolute
      *            displacement for FSI)
      * @param[in] flags UpdateFlags passed to the FEPointEvaluation object
-     * @param[in] write_value the local index when iterating over all values
+     * @param[in] write_value A function which finally calculates the desired
+     *            data and writes them to preCICE. Have a look at the examples
+     *            given below. local index when iterating over all values
      */
     void
     write_data_factory(
@@ -79,6 +83,10 @@ namespace Adapter
                                const Vector<double> &,
                                const size_t)> &         write_value) const;
 
+    /**
+     * @brief get_interface_type A function that returns a description of the
+     *        used interface, which is printed on the console
+     */
     virtual std::string
     get_interface_type() const override;
 
@@ -86,11 +94,18 @@ namespace Adapter
      * @brief filter_vertices_to_local_partition Given some arbitrary
      *        (coarse pre-filtered) vertices this function filters the given
      *        @param points_in according to the locally owned partition of the
-     *        triangulation. In case of parallel distributed computations, a
-     *        consensus algorithm is applied in order to ensure that only a
-     *        unique process works on a specific node (globally). The consensus
-     *        algorithm assigns always the lowest rank to vertices which might
-     *        be owned by more than one process
+     *        triangulation. For parallel computations, we need to make sure
+     *        that only a single process (globally) writes data to a specific
+     *        data point. However, preCICE might distribute points to multiple
+     *        processes depending on the defined bounding-box and the
+     *        safety-factor defined in the configuration file (overlapping
+     *        partitions are also required for some mappings, which can be
+     *        defined in addition to the direct access here). Therefore, this
+     *        function filteres the received vertices using a consensus
+     *        algorithm in order to ensure that only a unique process works on a
+     *        specific node (globally). The consensus algorithm assigns always
+     *        the lowest rank to vertices which might be owned by more than one
+     *        process.
      *
      * @param[in] mapping The underlying mapping.
      * @param[in] tria The underlying triangulation.
@@ -125,7 +140,9 @@ namespace Adapter
     Assert(this->mesh_id != -1, ExcNotInitialized());
     const auto &triangulation =
       this->mf_data->get_dof_handler().get_triangulation();
-    // Bounding box which filter according to locally owned interface cells
+
+    // Get a bounding box which filter according to locally owned interface
+    // cells
     const auto bounding_box_pair =
       GridTools::compute_bounding_box(triangulation, [this](const auto &cell) {
         bool cell_at_interface = false;
@@ -142,7 +159,7 @@ namespace Adapter
       BoundingBox<dim>{bounding_box_pair}};
     // Currently only one bounding box supported
     Assert(bounding_box.size() <= 1, ExcInternalError());
-    // min and max per dim
+    // Get the min and max per dim
     std::vector<double> precice_bounding_box;
     for (const auto &box : bounding_box)
       for (uint d = 0; d < dim; ++d)
@@ -152,6 +169,7 @@ namespace Adapter
           precice_bounding_box.emplace_back(box.upper_bound(d));
         }
 
+    // Finally pass the bounding box to preCICE
     this->precice->setBoundingBoxes(this->mesh_id,
                                     precice_bounding_box.data(),
                                     bounding_box.size());
@@ -164,6 +182,7 @@ namespace Adapter
   ArbitraryInterface<dim, data_dim, VectorizedArrayType>::write_data(
     const LinearAlgebra::distributed::Vector<double> &data_vector)
   {
+    // Write different data depending on the write_data_type
     switch (this->write_data_type)
       {
         case WriteDataType::values_on_other_mesh:
@@ -216,6 +235,7 @@ namespace Adapter
   {
     Assert(this->write_data_id != -1, ExcNotInitialized());
 
+    // This class allows to evaluate data at arbitrary points
     FEPointEvaluation<data_dim, dim> fe_evaluator(
       *(this->mf_data->get_mapping_info().mapping),
       this->mf_data->get_dof_handler().get_fe(),
@@ -227,6 +247,7 @@ namespace Adapter
     // TODO: We should combine multiple points belonging to the same cell here
     for (size_t i = 0; i < interface_nodes_ids.size(); ++i)
       {
+        // locally_relevant_points contains our filtered vertices
         AssertIndexRange(i, locally_relevant_points.size());
         const auto              point = locally_relevant_points[i];
         std::vector<Point<dim>> point_vec{point.second};
@@ -239,6 +260,7 @@ namespace Adapter
           point.first->index(),
           &(this->mf_data->get_dof_handler()));
 
+        // Get the relevant DoF values and write them to preCICE
         dof_cell->get_dof_values(data_vector, local_values);
         write_value(fe_evaluator, local_values, i);
       }
@@ -253,20 +275,22 @@ namespace Adapter
   {
     Assert(this->mesh_id != -1, ExcNotInitialized());
 
-    // For solver mapping
+    // Ask preCICE for the relevant mesh size we work (preliminary) on
     const int received_mesh_size =
       this->precice->getMeshVertexSize(this->mesh_id);
 
-    // Allocate a vector containing the vertices
+    // Allocate a vector for the vertices and the corresponding IDs
     std::vector<double> received_coordinates(received_mesh_size * dim);
     interface_nodes_ids.resize(received_mesh_size);
 
-    this->precice->getMeshVerticesWithIDs(this->mesh_id,
-                                          received_mesh_size,
-                                          interface_nodes_ids.data(),
-                                          received_coordinates.data());
+    // ... and let preCICE fill the data containers
+    this->precice->getMeshVerticesAndIDs(this->mesh_id,
+                                         received_mesh_size,
+                                         interface_nodes_ids.data(),
+                                         received_coordinates.data());
 
-    // Transform the received points into a vector of points
+    // Transform the received points into a more deal.II like format, which is
+    // vector of points
     std::vector<Point<dim>> received_points(received_mesh_size);
     for (int i = 0; i < received_mesh_size; ++i)
       for (int d = 0; d < dim; ++d)
@@ -276,11 +300,15 @@ namespace Adapter
         }
 
     // TODO: Maybe perform some coarse pre-filtering here
+    // Now filter the received points using the consensus algorithm (have a look
+    // at the description of the function)
     locally_relevant_points = filter_vertices_to_local_partition(
       *(this->mf_data->get_mapping_info().mapping),
       this->mf_data->get_dof_handler(0).get_triangulation(),
       received_points);
 
+    // Some consistency checks: we can only write data using this interface,
+    // reading doesn't make sense
     Assert(this->read_data_id == -1, ExcInternalError());
     Assert(this->write_data_id != -1, ExcInternalError());
 
@@ -311,6 +339,7 @@ namespace Adapter
       std::pair<typename Triangulation<dim>::active_cell_iterator, Point<dim>>>
       unique_points;
 
+    // Set up the relevant data objects
     GridTools::Cache<dim>                             cache(tria, mapping);
     typename Triangulation<dim>::active_cell_iterator cell_hint;
     const std::vector<bool>                           marked_vertices;
@@ -319,8 +348,10 @@ namespace Adapter
       Utilities::MPI::this_mpi_process(tria.get_communicator());
     std::vector<int> relevant_interface_ids;
 
+    // Loop over all received points
     for (size_t i = 0; i < points_in.size(); ++i)
       {
+        // First look for all cells around the given point
         const auto &point      = points_in[i];
         const auto  first_cell = GridTools::find_active_cell_around_point(
           cache, point, cell_hint, marked_vertices, tolerance);
@@ -340,9 +371,15 @@ namespace Adapter
 
         unsigned int lowest_rank = numbers::invalid_unsigned_int;
 
+        // Afterwards, compare the globally unique subdomain ID of all cells
+        // around this points in order to find the cell with the lowest
+        // subdomain_id, i.e. the lowest rank owning this cell
         for (const auto &cell : active_cells_around_point)
           lowest_rank = std::min(lowest_rank, cell.first->subdomain_id());
 
+        // If the current rank is the lowest rank, it works on this point (the
+        // point is added to the set), otherwise the point is skipped and
+        // filtered out
         if (lowest_rank != my_rank)
           continue;
 
@@ -354,6 +391,8 @@ namespace Adapter
               break;
             }
       }
+    // Finally, assign the relevant IDs to the class member and return the
+    // unique data set
     interface_nodes_ids = std::move(relevant_interface_ids);
     Assert(interface_nodes_ids.size() == unique_points.size(),
            ExcInternalError());
