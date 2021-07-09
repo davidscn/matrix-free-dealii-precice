@@ -61,9 +61,15 @@ in this directory to configure the problem. The explicit specification of the li
 
 ## How to run a simulation ?
 Compiling the program generates two executables: `solid` and `heat`. In order to run a simulation, add the location of your executable to your `PATH` environment variable or copy the executable directly into the simulation directory.  Afterwards, configure your case using the parameter file, e.g. `elasticity.prm` and start the case, e.g. using four processes, by running
+
 ```
 mpirun -np 4 ./solid elasticity.prm
 ```
+
+## How to visualize results ?
+The programs generates `vtu` output files after every `Output tick` of simulation time and stores them in the `Output folder`, which can be specified in the parameter file. The `vtu` format can be visualized with common visualization software supporting `vtk` files such as `ParaView` or `VisIt`. However, the results are written using [`higher_order_cells`](https://dealii.org/developer/doxygen/deal.II/structDataOutBase_1_1VtkFlags.html#aa9dd1830c0ff35a2431704c4d45453eb) by default and a sufficiently recent version of these software packages supporting the higher-order feature is required to visualize the files (e.g. starting from`Paraview` version 5.5.0). If necessary, writing higher-order cells can easily be disabled in the source code.
+
+
 ## How to add a test case ?
 All test cases are located in the (sub)directory `./include/cases/`. You can add your own case by copying one of the existing cases or editing the `./include/cases/case_template.h` file. Have a look at the description in the respective files for further information. Afterwards, you need to add your new case to the `./include/cases/case_selector.h` and recompile the program.
 
