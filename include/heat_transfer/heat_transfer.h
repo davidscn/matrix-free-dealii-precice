@@ -922,7 +922,18 @@ namespace Heat_Transfer
           0 /*MF dof index*/,
           0 /*MF quad index*/,
           testcase->is_dirichlet);
-        precice_adapter->initialize(solution);
+
+	if (!disable_precice)
+          {
+            if (testcase->is_dirichlet)
+              {
+                // We misuse the system_rhs in the flux evaluation
+                evaluate_boundary_flux();
+                precice_adapter->initialize(system_rhs);
+              }
+            else
+              precice_adapter->initialize(solution);
+          }
       }
 
     while (time.current() < time.end())
