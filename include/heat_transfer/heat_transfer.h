@@ -940,13 +940,14 @@ namespace Heat_Transfer
               {
                 // We misuse the system_rhs in the flux evaluation
                 evaluate_boundary_flux();
-                precice_adapter->advance(system_rhs, time.get_delta_t());
+                precice_adapter->advance(solution, time.get_delta_t());
               }
             else
               precice_adapter->advance(solution, time.get_delta_t());
+
+            precice_adapter->reload_old_state_if_required(
+              [&]() { solution = solution_old; });
           }
-        precice_adapter->reload_old_state_if_required(
-          [&]() { solution = solution_old; });
 
         {
           if (disable_precice)
@@ -958,6 +959,8 @@ namespace Heat_Transfer
                   time.current() >= time.end() - 1e-12)
                 output_results(static_cast<unsigned int>(
                   std::round(time.current() / parameters.output_tick)));
+              solution_old = solution;
+              time.increment();
             }
           else if (precice_adapter->is_time_window_complete())
             {

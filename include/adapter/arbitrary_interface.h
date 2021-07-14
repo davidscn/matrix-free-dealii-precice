@@ -261,7 +261,7 @@ namespace Adapter
     std::vector<double> received_coordinates(received_mesh_size * dim);
     interface_nodes_ids.resize(received_mesh_size);
 
-    this->precice->getMeshVerticesWithIDs(this->mesh_id,
+    this->precice->getMeshVerticesAndIDs(this->mesh_id,
                                           received_mesh_size,
                                           interface_nodes_ids.data(),
                                           received_coordinates.data());
