@@ -11,6 +11,7 @@
 
 #include <deal.II/lac/affine_constraints.h>
 #include <deal.II/lac/la_parallel_vector.h>
+#include <deal.II/lac/petsc_sparse_matrix.h>
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
 
@@ -36,6 +37,7 @@
 #include <base/utilities.h>
 #include <cases/case_selector.h>
 #include <parameter/parameter_handling.h>
+#include <solver/mg_solver.h>
 
 #include <fstream>
 #include <iostream>
@@ -92,6 +94,11 @@ namespace Heat_Transfer
 
     LaplaceOperator();
 
+    LaplaceOperator(const AffineConstraints<number> &constraints);
+
+    void
+    reinit(const AffineConstraints<number> &constraints);
+
     void
     clear() override;
 
@@ -106,6 +113,10 @@ namespace Heat_Transfer
 
     virtual void
     compute_diagonal() override;
+
+    const PETScWrappers::MPI::SparseMatrix &
+    get_system_matrix() const;
+
 
   private:
     virtual void
@@ -122,8 +133,11 @@ namespace Heat_Transfer
     void
     do_operation_on_cell(FECellIntegrator &phi) const;
 
-    Table<2, VectorizedArray<number>> coefficient;
-    double                            delta_t = 0;
+    Table<2, VectorizedArray<number>>        coefficient;
+    double                                   delta_t = 0;
+    AffineConstraints<number>                constraints;
+    bool                                     constraints_initialized = false;
+    mutable PETScWrappers::MPI::SparseMatrix system_matrix;
   };
 
 
@@ -133,6 +147,30 @@ namespace Heat_Transfer
     : MatrixFreeOperators::Base<dim,
                                 LinearAlgebra::distributed::Vector<number>>()
   {}
+
+
+
+  template <int dim, typename number>
+  LaplaceOperator<dim, number>::LaplaceOperator(
+    const AffineConstraints<number> &constraints)
+    : MatrixFreeOperators::Base<dim,
+                                LinearAlgebra::distributed::Vector<number>>()
+  {
+    reinit(constraints);
+  }
+
+
+
+  template <int dim, typename number>
+  void
+  LaplaceOperator<dim, number>::reinit(
+    const AffineConstraints<number> &constraints)
+  {
+    // Copy the constraints, since they might be needed for computation of the
+    // system matrix later on.
+    this->constraints.copy_from(constraints);
+    constraints_initialized = true;
+  }
 
 
 
@@ -248,6 +286,40 @@ namespace Heat_Transfer
       }
     phi.integrate(EvaluationFlags::values | EvaluationFlags::gradients);
   }
+
+
+
+  template <int dim, typename number>
+  const PETScWrappers::MPI::SparseMatrix &
+  LaplaceOperator<dim, number>::get_system_matrix() const
+  {
+    if (system_matrix.m() == 0 && system_matrix.n() == 0)
+      {
+        Assert(constraints_initialized, ExcNotInitialized());
+        const auto &dof_handler = this->data->get_dof_handler();
+        IndexSet    locally_relevant_dofs;
+        DoFTools::extract_locally_relevant_dofs(dof_handler,
+                                                locally_relevant_dofs);
+        DynamicSparsityPattern dsp(locally_relevant_dofs);
+        DoFTools::make_sparsity_pattern(dof_handler, dsp, constraints);
+
+        SparsityTools::distribute_sparsity_pattern(
+          dsp,
+          dof_handler.locally_owned_dofs(),
+          MPI_COMM_WORLD,
+          locally_relevant_dofs);
+
+        system_matrix.reinit(dsp);
+        MatrixFreeTools::compute_matrix(*(this->data),
+                                        constraints,
+                                        system_matrix,
+                                        &LaplaceOperator::do_operation_on_cell,
+                                        this);
+      }
+    return this->system_matrix;
+  }
+
+
 
   // Helper function in order to evaluate the vectorized point
   template <int dim, typename Number>
@@ -745,6 +817,16 @@ namespace Heat_Transfer
     SolverCG<VectorType> cg(solver_control);
 
     cg.solve(system_matrix, solution_update, system_rhs, preconditioner);
+
+    MultigridParameters mg_param;
+    solve_with_gmg(solver_control,
+                   system_matrix,
+                   solution_update,
+                   system_rhs,
+                   mg_param,
+                   mapping,
+                   dof_handler);
+
     // More or less a safety operation, as the constraints have already been
     // enforced
     constraints.set_zero(solution_update);
