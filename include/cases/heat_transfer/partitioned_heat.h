@@ -98,27 +98,48 @@ namespace TestCases
     // located on the right
     const double root_location = this->is_dirichlet ? 0 : 1;
     Assert(dim == 2, ExcNotImplemented());
-    GridGenerator::hyper_rectangle(triangulation,
-                                   Point<dim>{0 + root_location, 0},
-                                   Point<dim>{1 + root_location, 1},
-                                   false);
 
     const types::boundary_id dirichlet_id = 1;
 
-    const double tol_boundary = 1e-6;
-    for (const auto &cell : triangulation.active_cell_iterators())
-      for (const auto &face : cell->face_iterators())
-        if (face->at_boundary() == true)
-          {
-            const auto center = face->center();
-            // Boundaries for the interface at x = 1
-            if (center[0] >= (1 - tol_boundary) &&
-                center[0] <= (1 + tol_boundary))
-              face->set_boundary_id(this->interface_id);
-            else
-              // Boundaries for the dirichlet boundary
-              face->set_boundary_id(dirichlet_id);
-          }
+    const unsigned int mpi_size =
+      Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
+    auto construction_data = TriangulationDescription::Utilities::
+      create_description_from_triangulation_in_groups<dim, dim>(
+        [&](Triangulation<dim> &tria) {
+          Triangulation<dim> hex_tria;
+          GridGenerator::hyper_rectangle(hex_tria,
+                                         Point<dim>{0 + root_location, 0},
+                                         Point<dim>{1 + root_location, 1},
+                                         false);
+          GridGenerator::convert_hypercube_to_simplex_mesh(hex_tria, tria);
+          const double tol_boundary = 1e-6;
+          for (const auto &cell : tria.active_cell_iterators())
+            for (const auto &face : cell->face_iterators())
+              if (face->at_boundary() == true)
+                {
+                  const auto center = face->center();
+                  // Boundaries for the interface at x = 1
+                  if (center[0] >= (1 - tol_boundary) &&
+                      center[0] <= (1 + tol_boundary))
+                    face->set_boundary_id(this->interface_id);
+                  else
+                    // Boundaries for the dirichlet boundary
+                    face->set_boundary_id(dirichlet_id);
+                }
+
+          tria.refine_global(3);
+        },
+        [&](Triangulation<dim> &tria_serial,
+            const MPI_Comm /*mpi_comm*/,
+            const unsigned int /*group_size*/) {
+          GridTools::partition_triangulation(mpi_size, tria_serial);
+        },
+        MPI_COMM_WORLD,
+        1,
+        Triangulation<dim>::limit_level_difference_at_vertices,
+        TriangulationDescription::construct_multigrid_hierarchy);
+    triangulation.create_triangulation(construction_data);
+
 
     this->dirichlet_mask[dirichlet_id] = ComponentMask(1, true);
     this->dirichlet[dirichlet_id] =

@@ -4,7 +4,11 @@
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/base/timer.h>
 
+#include <deal.II/distributed/fully_distributed_tria.h>
+
 #include <deal.II/fe/fe_q.h>
+#include <deal.II/fe/fe_simplex_p.h>
+#include <deal.II/fe/mapping_fe.h>
 
 #include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/tria.h>
@@ -337,16 +341,16 @@ namespace Heat_Transfer
 
     const Parameters::HeatParameters<dim> &parameters;
 
-    parallel::distributed::Triangulation<dim> triangulation;
+    parallel::fullydistributed::Triangulation<dim> triangulation;
 
     // In order to hold the copy
     std::shared_ptr<TestCases::TestCaseBase<dim>> testcase;
 
-    FE_Q<dim>       fe;
-    const QGauss<1> quadrature_1d;
-    DoFHandler<dim> dof_handler;
+    FE_SimplexP<dim>       fe;
+    const QGaussSimplex<1> quadrature_1d;
+    DoFHandler<dim>        dof_handler;
 
-    MappingQ1<dim> mapping;
+    MappingFE<dim> mapping;
 
     AffineConstraints<double> constraints;
     using SystemMatrixType = LaplaceOperator<dim, double>;
@@ -381,13 +385,11 @@ namespace Heat_Transfer
   LaplaceProblem<dim>::LaplaceProblem(
     const Parameters::HeatParameters<dim> &parameters)
     : parameters(parameters)
-    , triangulation(MPI_COMM_WORLD,
-                    Triangulation<dim>::limit_level_difference_at_vertices,
-                    parallel::distributed::Triangulation<
-                      dim>::construct_multigrid_hierarchy)
+    , triangulation(MPI_COMM_WORLD)
     , fe(parameters.poly_degree)
     , quadrature_1d(parameters.quad_order)
     , dof_handler(triangulation)
+    , mapping(fe)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
     , timer(pcout, TimerOutput::never, TimerOutput::wall_times)
     , total_n_cg_iterations(0)
@@ -409,7 +411,7 @@ namespace Heat_Transfer
   {
     Assert(testcase.get() != nullptr, ExcInternalError());
     testcase->make_coarse_grid_and_bcs(triangulation);
-    triangulation.refine_global(parameters.n_global_refinement);
+    //    triangulation.refine_global(parameters.n_global_refinement);
   }
 
 
