@@ -13,6 +13,8 @@
 #include <deal.II/lac/la_parallel_vector.h>
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
+#include <deal.II/lac/trilinos_precondition.h>
+#include <deal.II/lac/trilinos_sparse_matrix.h>
 
 #include <deal.II/matrix_free/fe_evaluation.h>
 #include <deal.II/matrix_free/matrix_free.h>
@@ -92,6 +94,13 @@ namespace Heat_Transfer
 
     LaplaceOperator();
 
+
+    LaplaceOperator(const AffineConstraints<number> &constraints);
+
+    void
+    reinit(const AffineConstraints<number> &constraints);
+
+
     void
     clear() override;
 
@@ -106,6 +115,10 @@ namespace Heat_Transfer
 
     virtual void
     compute_diagonal() override;
+
+    const TrilinosWrappers::SparseMatrix &
+    get_system_matrix(const unsigned int level) const;
+
 
   private:
     virtual void
@@ -122,8 +135,11 @@ namespace Heat_Transfer
     void
     do_operation_on_cell(FECellIntegrator &phi) const;
 
-    Table<2, VectorizedArray<number>> coefficient;
-    double                            delta_t = 0;
+    Table<2, VectorizedArray<number>>      coefficient;
+    double                                 delta_t = 0;
+    AffineConstraints<number>              constraints;
+    bool                                   constraints_initialized = false;
+    mutable TrilinosWrappers::SparseMatrix system_matrix;
   };
 
 
@@ -133,6 +149,30 @@ namespace Heat_Transfer
     : MatrixFreeOperators::Base<dim,
                                 LinearAlgebra::distributed::Vector<number>>()
   {}
+
+
+
+  template <int dim, typename number>
+  LaplaceOperator<dim, number>::LaplaceOperator(
+    const AffineConstraints<number> &constraints)
+    : MatrixFreeOperators::Base<dim,
+                                LinearAlgebra::distributed::Vector<number>>()
+  {
+    reinit(constraints);
+  }
+
+
+
+  template <int dim, typename number>
+  void
+  LaplaceOperator<dim, number>::reinit(
+    const AffineConstraints<number> &constraints)
+  {
+    // Copy the constraints, since they might be needed for computation of the
+    // system matrix later on.
+    this->constraints.copy_from(constraints);
+    constraints_initialized = true;
+  }
 
 
 
@@ -249,6 +289,58 @@ namespace Heat_Transfer
     phi.integrate(EvaluationFlags::values | EvaluationFlags::gradients);
   }
 
+
+
+  template <int dim, typename number>
+  const TrilinosWrappers::SparseMatrix &
+  LaplaceOperator<dim, number>::get_system_matrix(
+    const unsigned int level) const
+  {
+    if (system_matrix.m() == 0 && system_matrix.n() == 0)
+      {
+        Assert(constraints_initialized, ExcNotInitialized());
+        const auto &dof_handler = this->data->get_dof_handler();
+
+        TrilinosWrappers::SparsityPattern dsp(
+          dof_handler.locally_owned_mg_dofs(level),
+          dof_handler.get_triangulation().get_communicator());
+
+        const types::global_dof_index n_dofs = dof_handler.n_dofs(level);
+        const bool                    keep_constrained_dofs = true;
+        Assert(dsp.n_rows() == n_dofs,
+               ExcDimensionMismatch(dsp.n_rows(), n_dofs));
+        Assert(dsp.n_cols() == n_dofs,
+               ExcDimensionMismatch(dsp.n_cols(), n_dofs));
+
+        const unsigned int dofs_per_cell =
+          dof_handler.get_fe().n_dofs_per_cell();
+        std::vector<types::global_dof_index> dofs_on_this_cell(dofs_per_cell);
+        typename DoFHandler<dim>::cell_iterator cell = dof_handler.begin(level),
+                                                endc = dof_handler.end(level);
+        for (; cell != endc; ++cell)
+          if (dof_handler.get_triangulation().locally_owned_subdomain() ==
+                numbers::invalid_subdomain_id ||
+              cell->level_subdomain_id() ==
+                dof_handler.get_triangulation().locally_owned_subdomain())
+            {
+              cell->get_mg_dof_indices(dofs_on_this_cell);
+              constraints.add_entries_local_to_global(dofs_on_this_cell,
+                                                      dsp,
+                                                      keep_constrained_dofs);
+            }
+        dsp.compress();
+        system_matrix.reinit(dsp);
+        MatrixFreeTools::compute_matrix(*(this->data),
+                                        constraints,
+                                        system_matrix,
+                                        &LaplaceOperator::do_operation_on_cell,
+                                        this);
+      }
+    return this->system_matrix;
+  }
+
+
+
   // Helper function in order to evaluate the vectorized point
   template <int dim, typename Number>
   VectorizedArray<Number>
@@ -279,7 +371,7 @@ namespace Heat_Transfer
       typename LaplaceOperator<dim, double>::FEFaceIntegrator;
 
     using VectorType      = LinearAlgebra::distributed::Vector<double>;
-    using LevelVectorType = LinearAlgebra::distributed::Vector<float>;
+    using LevelVectorType = LinearAlgebra::distributed::Vector<double>;
 
     LaplaceProblem(const Parameters::HeatParameters<dim> &parameters);
     void
@@ -356,7 +448,7 @@ namespace Heat_Transfer
     SystemMatrixType inhomogeneous_operator;
 
     MGConstrainedDoFs mg_constrained_dofs;
-    using LevelMatrixType = LaplaceOperator<dim, float>;
+    using LevelMatrixType = LaplaceOperator<dim, double>;
     MGLevelObject<LevelMatrixType> mg_matrices;
 
     VectorType solution;
@@ -527,14 +619,14 @@ namespace Heat_Transfer
           mg_constrained_dofs.get_boundary_indices(level));
         level_constraints.close();
 
-        typename MatrixFree<dim, float>::AdditionalData additional_data;
+        typename MatrixFree<dim, double>::AdditionalData additional_data;
         additional_data.tasks_parallel_scheme =
-          MatrixFree<dim, float>::AdditionalData::none;
+          MatrixFree<dim, double>::AdditionalData::none;
         additional_data.mapping_update_flags =
           (update_gradients | update_JxW_values | update_quadrature_points);
         additional_data.mg_level = level;
-        std::shared_ptr<MatrixFree<dim, float>> mg_mf_storage_level(
-          new MatrixFree<dim, float>());
+        std::shared_ptr<MatrixFree<dim, double>> mg_mf_storage_level(
+          new MatrixFree<dim, double>());
         mg_mf_storage_level->reinit(mapping,
                                     dof_handler,
                                     level_constraints,
@@ -544,6 +636,7 @@ namespace Heat_Transfer
         mg_matrices[level].initialize(mg_mf_storage_level,
                                       mg_constrained_dofs,
                                       level);
+        mg_matrices[level].reinit(level_constraints);
         mg_matrices[level].evaluate_coefficient(Coefficient<dim>());
         mg_matrices[level].set_delta_t(time.get_delta_t());
       }
@@ -690,38 +783,53 @@ namespace Heat_Transfer
   void
   LaplaceProblem<dim>::solve()
   {
-    TimerOutput::Scope               t(timer, "solve system");
-    MGTransferMatrixFree<dim, float> mg_transfer(mg_constrained_dofs);
+    TimerOutput::Scope                t(timer, "solve system");
+    MGTransferMatrixFree<dim, double> mg_transfer(mg_constrained_dofs);
     mg_transfer.build(dof_handler);
+
+    const int min_level = mg_matrices.min_level();
+    const int max_level = mg_matrices.max_level();
 
     using SmootherType =
       PreconditionChebyshev<LevelMatrixType, LevelVectorType>;
-    mg::SmootherRelaxation<SmootherType, LevelVectorType> mg_smoother;
-    MGLevelObject<typename SmootherType::AdditionalData>  smoother_data;
-    smoother_data.resize(0, triangulation.n_global_levels() - 1);
-    for (unsigned int level = 0; level < triangulation.n_global_levels();
-         ++level)
+    MGLevelObject<typename SmootherType::AdditionalData> smoother_data;
+    smoother_data.resize(min_level, max_level);
+    for (int level = min_level; level <= max_level; ++level)
       {
-        if (level > 0)
-          {
-            smoother_data[level].smoothing_range     = 15.;
-            smoother_data[level].degree              = 5;
-            smoother_data[level].eig_cg_n_iterations = 10;
-          }
-        else
-          {
-            smoother_data[0].smoothing_range = 1e-3;
-            smoother_data[0].degree          = numbers::invalid_unsigned_int;
-            smoother_data[0].eig_cg_n_iterations = mg_matrices[0].m();
-          }
+        smoother_data[level].smoothing_range     = 15.;
+        smoother_data[level].degree              = 5;
+        smoother_data[level].eig_cg_n_iterations = 10;
         mg_matrices[level].compute_diagonal();
         smoother_data[level].preconditioner =
           mg_matrices[level].get_matrix_diagonal_inverse();
       }
+
+    MGSmootherPrecondition<LevelMatrixType, SmootherType, LevelVectorType>
+      mg_smoother;
     mg_smoother.initialize(mg_matrices, smoother_data);
 
-    MGCoarseGridApplySmoother<LevelVectorType> mg_coarse;
-    mg_coarse.initialize(mg_smoother);
+    TrilinosWrappers::PreconditionAMG                 precondition_amg;
+    TrilinosWrappers::PreconditionAMG::AdditionalData amg_data;
+    amg_data.smoother_sweeps = 1;
+    amg_data.n_cycles        = 1;
+    const std::string type("ILU");
+    amg_data.smoother_type = type.c_str();
+
+    precondition_amg.initialize(
+      mg_matrices[min_level].get_system_matrix(min_level), amg_data);
+
+
+    ReductionControl coarse_grid_solver_control(
+      10000, 1e-20, 1e-4, false, false);
+    SolverCG<LevelVectorType> coarse_grid_solver(coarse_grid_solver_control);
+
+    MGCoarseGridIterativeSolver<LevelVectorType,
+                                SolverCG<LevelVectorType>,
+                                LevelMatrixType,
+                                TrilinosWrappers::PreconditionAMG>
+      mg_coarse_new(coarse_grid_solver,
+                    mg_matrices[min_level],
+                    precondition_amg);
 
     mg::Matrix<LevelVectorType> mg_matrix(mg_matrices);
 
@@ -734,10 +842,10 @@ namespace Heat_Transfer
     mg::Matrix<LevelVectorType> mg_interface(mg_interface_matrices);
 
     Multigrid<LevelVectorType> mg(
-      mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
+      mg_matrix, mg_coarse_new, mg_transfer, mg_smoother, mg_smoother);
     mg.set_edge_matrices(mg_interface, mg_interface);
 
-    PreconditionMG<dim, LevelVectorType, MGTransferMatrixFree<dim, float>>
+    PreconditionMG<dim, LevelVectorType, MGTransferMatrixFree<dim, double>>
       preconditioner(dof_handler, mg, mg_transfer);
 
 
