@@ -170,9 +170,8 @@ namespace Adapter
         }
 
     // Finally pass the bounding box to preCICE
-    this->precice->setBoundingBoxes(this->mesh_id,
-                                    precice_bounding_box.data(),
-                                    bounding_box.size());
+    this->precice->setMeshAccessRegion(this->mesh_id,
+                                       precice_bounding_box.data());
   }
 
 
