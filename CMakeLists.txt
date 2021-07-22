@@ -82,7 +82,7 @@ IF(NOT ${DEAL_II_WITH_CXX17})
 ENDIF()
 
 FIND_PACKAGE(precice REQUIRED
-  HINTS ${PRECICE_DIR} $ENV{precice_DIR}
+  HINTS ${PRECICE_DIR} $ENV{precice_DIR} $ENV{preCICE_DIR}
   )
 MESSAGE(STATUS "Using the preCICE version found at ${precice_DIR}")
 
