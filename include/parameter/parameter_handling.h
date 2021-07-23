@@ -365,6 +365,7 @@ namespace Parameters
           throw;
         }
 
+      (void)dim;
       AssertDimension(dim, owning_class->dimension);
       const std::string error_message(
         "Either specify a 'Mesh name', which will be applied to the read and write mesh (data location)"
