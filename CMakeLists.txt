@@ -81,6 +81,18 @@ IF(NOT ${DEAL_II_WITH_CXX17})
     SET(CMAKE_CXX_STANDARD_REQUIRED ON)
 ENDIF()
 
+# Build the version specific object
+ADD_LIBRARY(version OBJECT ${CMAKE_CURRENT_BINARY_DIR}/version.cc)
+
+# Build the executables
+ADD_EXECUTABLE(${SOLVER1}
+    src/${SOLVER1}.cc
+  )
+
+ADD_EXECUTABLE(${SOLVER2}
+    src/${SOLVER2}.cc
+  )
+
 # the environment variable precice_DIR is searched by default
 FIND_PACKAGE(precice 2.0
         HINTS ${precice_DIR} ${PRECICE_DIR} $ENV{PRECICE_DIR}
@@ -94,22 +106,6 @@ IF(NOT ${precice_FOUND})
     )
 ENDIF()
 MESSAGE(STATUS "Using the preCICE version found at ${precice_DIR}")
-
-# Build the version specific object
-ADD_LIBRARY(version OBJECT ${CMAKE_CURRENT_BINARY_DIR}/version.cc)
-
-# Build the executables
-ADD_EXECUTABLE(${SOLVER1}
-    src/${SOLVER1}.cc
-  )
-
-ADD_EXECUTABLE(${SOLVER2}
-    src/${SOLVER2}.cc
-  )
-
-# Setup targets
-DEAL_II_SETUP_TARGET(${SOLVER1})
-DEAL_II_SETUP_TARGET(${SOLVER2})
 
 # Link targets to preCICE
 TARGET_LINK_LIBRARIES(${SOLVER1} version precice::precice)
