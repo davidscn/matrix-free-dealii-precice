@@ -93,6 +93,10 @@ ADD_EXECUTABLE(${SOLVER2}
     src/${SOLVER2}.cc
   )
 
+# Setup targets
+DEAL_II_SETUP_TARGET(${SOLVER1})
+DEAL_II_SETUP_TARGET(${SOLVER2})
+
 # the environment variable precice_DIR is searched by default
 FIND_PACKAGE(precice 2.0
         HINTS ${precice_DIR} ${PRECICE_DIR} $ENV{PRECICE_DIR}
