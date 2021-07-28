@@ -34,8 +34,8 @@ FIND_PACKAGE(deal.II 9.3
   HINTS ${deal.II_DIR} ${DEAL_II_DIR} ../ ../../ $ENV{DEAL_II_DIR}
   )
 IF(NOT ${deal.II_FOUND})
-  MESSAGE(FATAL_ERROR "\n"
-    "*** Could not locate deal.II. ***\n\n"
+   MESSAGE(FATAL_ERROR "\n"
+    "*** Could not locate a (sufficiently recent) version of deal.II. ***\n\n"
     "You may want to either pass a flag -DDEAL_II_DIR=/path/to/deal.II to cmake\n"
     "or set an environment variable \"DEAL_II_DIR\" that contains this path."
     )
@@ -81,9 +81,18 @@ IF(NOT ${DEAL_II_WITH_CXX17})
     SET(CMAKE_CXX_STANDARD_REQUIRED ON)
 ENDIF()
 
-FIND_PACKAGE(precice REQUIRED
-  HINTS ${PRECICE_DIR} $ENV{precice_DIR} $ENV{preCICE_DIR}
+# the environment variable precice_DIR is searched by default
+FIND_PACKAGE(precice 2.0
+        HINTS ${precice_DIR} ${PRECICE_DIR} $ENV{PRECICE_DIR}
   )
+IF(NOT ${precice_FOUND})
+   MESSAGE(FATAL_ERROR "\n"
+    "*** Could not locate a (sufficiently recent) version of preCICE. ***\n\n"
+    "You may want to either pass a flag -Dprecice_DIR=/path/to/precice to cmake\n"
+    "(where the path points to the installation prefix or the build directory)\n"
+    " or set an environment variable \"precice_DIR\" that contains this path."
+    )
+ENDIF()
 MESSAGE(STATUS "Using the preCICE version found at ${precice_DIR}")
 
 # Build the version specific object
