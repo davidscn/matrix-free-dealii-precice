@@ -115,7 +115,7 @@ namespace Adapter
            std::set<types::boundary_id>{this->dealii_boundary_interface_id}) &
          this->mf_data->get_dof_handler(mf_dof_index).locally_owned_dofs());
 
-      Assert(indices.n_elements() ==
+      Assert(indices.n_elements() * data_dim ==
                this->mf_data->get_dof_handler(mf_dof_index)
                  .n_boundary_dofs(std::set<types::boundary_id>{
                    this->dealii_boundary_interface_id}),
