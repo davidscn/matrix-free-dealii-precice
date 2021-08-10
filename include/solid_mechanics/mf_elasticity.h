@@ -1063,11 +1063,12 @@ namespace FSI
   Solid<dim, Number>::setup_operator_cache(Operator &         nh_operator,
                                            const unsigned int level)
   {
-    timer.enter_subsection("Setup MF: cache() and diagonal()");
-
     // need to cache prior to diagonal computations:
+    timer.enter_subsection("Setup MF: cache()");
     nh_operator.cache();
-    nh_operator.compute_diagonal();
+    timer.leave_subsection();
+
+    nh_operator.compute_diagonal(timer);
 
     if (debug_level > 0)
       {
@@ -1089,7 +1090,6 @@ namespace FSI
                       mg_total_displacement[level].l2_norm())
                 << std::endl;
       }
-    timer.leave_subsection();
   }
 
 

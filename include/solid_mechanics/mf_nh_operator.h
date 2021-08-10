@@ -127,8 +127,9 @@ public:
       Material_Compressible_Neo_Hook_One_Field<dim, VectorizedArrayType>>
       material_inclusion);
 
+  template <typename Timer>
   void
-  compute_diagonal();
+  compute_diagonal(Timer &timer);
 
   unsigned int
   m() const;
@@ -205,7 +206,6 @@ private:
     material_inclusion;
 
   std::shared_ptr<DiagonalMatrix<VectorType>> inverse_diagonal_entries;
-  std::shared_ptr<DiagonalMatrix<VectorType>> diagonal_entries;
 
   Table<2, VectorizedArrayType>                          cached_scalar;
   Table<2, VectorizedArrayType>                          cached_second_scalar;
@@ -319,7 +319,6 @@ NeoHookOperator<dim, Number>::clear()
   data_in_use.reset();
 
   diagonal_is_available = false;
-  diagonal_entries.reset();
   inverse_diagonal_entries.reset();
 
   mf_caching = MFCaching::none;
@@ -339,6 +338,7 @@ NeoHookOperator<dim, Number>::initialize(
   data_current   = data_current_;
   data_reference = data_reference_;
   displacement   = &displacement_;
+  inverse_diagonal_entries.reset(new DiagonalMatrix<VectorType>());
 
   const unsigned int n_cells = data_reference_->n_cell_batches();
   FECellIntegrator   phi(*data_reference_);
@@ -1011,40 +1011,69 @@ NeoHookOperator<dim, Number>::do_operation_on_cell(FECellIntegrator &phi) const
 
 
 template <int dim, typename Number>
+template <typename Timer>
 void
-NeoHookOperator<dim, Number>::compute_diagonal()
+NeoHookOperator<dim, Number>::compute_diagonal(Timer &timer)
 {
-  inverse_diagonal_entries.reset(new DiagonalMatrix<VectorType>());
-  diagonal_entries.reset(new DiagonalMatrix<VectorType>());
   VectorType &inverse_diagonal_vector = inverse_diagonal_entries->get_vector();
-  VectorType &diagonal_vector         = diagonal_entries->get_vector();
-
-  MatrixFreeTools::compute_diagonal(*data_in_use,
-                                    diagonal_vector,
-                                    &NeoHookOperator::do_operation_on_cell,
-                                    this);
-
   data_in_use->initialize_dof_vector(inverse_diagonal_vector);
+  timer.enter_subsection("Tools: diagonal");
+
+  int dummy = 0;
+  data_in_use->template cell_loop<VectorType, int>(
+    [this](const auto &data, auto &dst, const auto &, const auto &cell_range) {
+      // Initialize data structures
+      const VectorizedArrayType one  = make_vectorized_array<Number>(1.);
+      const VectorizedArrayType zero = make_vectorized_array<Number>(0.);
+      FECellIntegrator          phi(data);
+      for (unsigned int cell = cell_range.first; cell < cell_range.second;
+           ++cell)
+        {
+          phi.reinit(cell);
+          AlignedVector<VectorizedArrayType> local_diagonal_vector(
+            phi.dofs_per_cell);
+          // Loop over all DoFs and set dof values to zero everywhere but i-th
+          // DoF. With this input (instead of read_dof_values()) we do the
+          // action and store the result in a diagonal vector
+          for (unsigned int i = 0; i < phi.dofs_per_cell; ++i)
+            {
+              for (unsigned int j = 0; j < phi.dofs_per_cell; ++j)
+                phi.begin_dof_values()[j] = zero;
+
+              phi.begin_dof_values()[i] = one;
+              do_operation_on_cell(phi);
+              local_diagonal_vector[i] = phi.begin_dof_values()[i];
+            }
+
+          // Cannot handle hanging nodes
+          for (unsigned int i = 0; i < phi.dofs_per_cell; ++i)
+            phi.begin_dof_values()[i] = local_diagonal_vector[i];
+          phi.distribute_local_to_global(dst);
+        }
+    },
+    inverse_diagonal_vector,
+    dummy);
+
+  timer.leave_subsection();
+
   // set_constrained_entries_to_one
   Assert(data_current->get_constrained_dofs().size() ==
            data_reference->get_constrained_dofs().size(),
          ExcInternalError());
   for (const auto dof : data_in_use->get_constrained_dofs())
-    diagonal_vector.local_element(dof) = 1.;
+    inverse_diagonal_vector.local_element(dof) = 1.;
 
   for (unsigned int i = 0; i < inverse_diagonal_vector.locally_owned_size();
        ++i)
     {
-      Assert(diagonal_vector.local_element(i) > 0.,
+      Assert(inverse_diagonal_vector.local_element(i) > 0.,
              ExcMessage("No diagonal entry in a positive definite operator "
                         "should be zero or negative"));
       inverse_diagonal_vector.local_element(i) =
-        1. / diagonal_vector.local_element(i);
+        1. / inverse_diagonal_vector.local_element(i);
     }
 
   inverse_diagonal_vector.update_ghost_values();
-  diagonal_vector.update_ghost_values();
-
   diagonal_is_available = true;
 }
 
@@ -1058,5 +1087,5 @@ NeoHookOperator<dim, Number>::el(const unsigned int row,
   Assert(row == col, ExcNotImplemented());
   (void)col;
   Assert(diagonal_is_available == true, ExcNotInitialized());
-  return diagonal_entries->get_vector()(row);
+  return 1. / inverse_diagonal_entries->get_vector()(row);
 }
