@@ -939,10 +939,12 @@ namespace Heat_Transfer
 
         if (precice_adapter->is_time_window_complete())
           {
-            if (static_cast<int>(
-                  std::round(time.current() / parameters.output_tick)) !=
-                  static_cast<int>((time.current() - time.get_delta_t()) /
-                                   parameters.output_tick) ||
+            if (static_cast<int>(Utilities::round_to_precision(
+                  time.current() / parameters.output_tick, 12)) !=
+                  static_cast<int>(Utilities::round_to_precision(
+                    (time.current() - time.get_delta_t()) /
+                      parameters.output_tick,
+                    12)) ||
                 time.current() >= time.end() - 1e-12)
               output_results(static_cast<unsigned int>(
                 std::round(time.current() / parameters.output_tick)));

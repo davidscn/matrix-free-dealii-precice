@@ -599,9 +599,12 @@ namespace FSI
             // Acceleration update is performed within the Newton loop
             update_velocity(delta_displacement);
 
-            if (static_cast<int>(time.current() / parameters.output_tick) !=
-                  static_cast<int>((time.current() - time.get_delta_t()) /
-                                   parameters.output_tick) ||
+            if (static_cast<int>(Utilities::round_to_precision(
+                  time.current() / parameters.output_tick, 12)) !=
+                  static_cast<int>(Utilities::round_to_precision(
+                    (time.current() - time.get_delta_t()) /
+                      parameters.output_tick,
+                    12)) ||
                 time.current() >= time.end() - 1e-12)
               output_results(static_cast<unsigned int>(
                 std::round(time.current() / parameters.output_tick)));

@@ -14,6 +14,14 @@ DEAL_II_NAMESPACE_OPEN
 
 namespace Utilities
 {
+  /**
+   * @brief Create a directory on the filesystem if the permission allows it
+   *
+   * @param[in] pathname Name of the path where the directory should be created
+   * @param[in] mode Mode used to create the directory
+   *
+   * @return int An integer which indicates if the creation was successfull (returns 0)
+   */
   int
   create_directory(std::string  pathname,
                    const mode_t mode = (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH |
@@ -47,6 +55,13 @@ namespace Utilities
   }
 
 
+
+  /**
+   * @brief Prints the configuration information the codes run with such as the
+   *        number of MPI ranks and the build mode
+   *
+   * @param[in] stream The output stream to which the information should be printed
+   */
   void
   print_configuration(ConditionalOStream &stream)
   {
@@ -85,6 +100,31 @@ namespace Utilities
       << "-----------------------------------------------------------------------------"
       << std::endl
       << std::endl;
+  }
+
+
+
+  /**
+   * @brief Rounds a given number up to a defined precision.
+   *        Example:
+   *        round_to_precision(9.99941, 3) would return 10 whereas
+   *        round_to_precision(9.99941, 4) would return 9.9994
+   *
+   * @tparam Number Type of the number to be rounded
+   *
+   * @param[in] number The number to be rounded
+   * @param[in] precision The precision up to which to round the number
+   *
+   * @return The rounded number
+   */
+  template <typename Number>
+  constexpr Number
+  round_to_precision(const Number number, const int precision)
+  {
+    Assert(precision > 0, ExcInternalError());
+    const std::size_t factor         = std::pow(10, precision);
+    const Number      rounded_number = std::round(number * factor) / factor;
+    return rounded_number;
   }
 } // namespace Utilities
 
