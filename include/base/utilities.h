@@ -60,7 +60,8 @@ namespace Utilities
    * @brief Prints the configuration information the codes run with such as the
    *        number of MPI ranks and the build mode
    *
-   * @param[in] stream The output stream to which the information should be printed
+   * @param[in] stream The output stream to which the information should be
+   *            printed
    */
   void
   print_configuration(ConditionalOStream &stream)
