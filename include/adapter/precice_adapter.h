@@ -8,7 +8,7 @@
 #include <deal.II/fe/mapping_q_generic.h>
 
 #include <deal.II/matrix_free/matrix_free.h>
-#ifdef PRECICE_DEVELOP_MODE
+#if PRECICE_EXPERIMENTAL
 #  include <adapter/arbitrary_interface.h>
 #endif
 #include <adapter/dof_interface.h>
@@ -240,7 +240,7 @@ namespace Adapter
           parameters.write_mesh_name,
           dealii_boundary_interface_id,
           dof_index);
-#ifdef PRECICE_DEVELOP_MODE
+#if PRECICE_EXPERIMENTAL
     else if (parameters.write_data_specification == "values_on_other_mesh" ||
              parameters.write_data_specification == "gradients_on_other_mesh")
       {

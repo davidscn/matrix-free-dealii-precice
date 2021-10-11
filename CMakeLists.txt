@@ -66,12 +66,6 @@ MESSAGE(STATUS "Code version ${GIT_TAG}")
 CONFIGURE_FILE(${CMAKE_SOURCE_DIR}/src/version.cc.in
                ${CMAKE_CURRENT_BINARY_DIR}/version.cc)
 
-# Add a define for the preCICE development features
-OPTION(PRECICE_DEVELOP_MODE "Enable development features, which require non-default preCICE functionality.")
-IF(PRECICE_DEVELOP_MODE)
-    ADD_DEFINITIONS(-DPRECICE_DEVELOP_MODE)
-ENDIF(PRECICE_DEVELOP_MODE)
-
 PROJECT(${TARGET} LANGUAGES CXX)
 
 # This project requires c++17
@@ -109,7 +103,17 @@ IF(NOT ${precice_FOUND})
     " or set an environment variable \"precice_DIR\" that contains this path."
     )
 ENDIF()
-MESSAGE(STATUS "Using the preCICE version found at ${precice_DIR}")
+MESSAGE(STATUS "Found preCICE version ${precice_VERSION} at ${precice_DIR}")
+
+# Add a define for experimental preCICE features
+IF(${precice_VERSION} GREATER_EQUAL "2.3.0")
+  SET(SUPPORT_EXPERIMENTAL ON)
+ELSE()
+  SET(SUPPORT_EXPERIMENTAL OFF)
+ENDIF()
+OPTION(PRECICE_EXPERIMENTAL "Enable experimental preCICE (>=v2.3.0) features, which require the \"experimental\" tag within the preCICE configuration file." ${SUPPORT_EXPERIMENTAL})
+ADD_DEFINITIONS(-DPRECICE_EXPERIMENTAL=${PRECICE_EXPERIMENTAL})
+MESSAGE(STATUS "Support for experimental preCICE features: ${PRECICE_EXPERIMENTAL}")
 
 # Link targets to preCICE
 TARGET_LINK_LIBRARIES(${SOLVER1} version precice::precice)
