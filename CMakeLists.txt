@@ -128,6 +128,7 @@ ELSE()
   SET(_make_command " $ make")
 ENDIF()
 
+INSTALL(TARGETS ${SOLVER1} ${SOLVER2} DESTINATION bin)
 #
 # Custom "debug" and "release" make targets:
 #
