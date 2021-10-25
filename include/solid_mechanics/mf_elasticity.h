@@ -430,7 +430,8 @@ namespace FSI
             TimerOutput::summary,
             TimerOutput::wall_times)
     , bcout(blessed_output_file,
-            Utilities::MPI::this_mpi_process(mpi_communicator) == 0)
+            (Utilities::MPI::this_mpi_process(mpi_communicator) == 0) &&
+              parameters.output_solution)
     ,
     // The Finite Element System is composed of dim continuous displacement
     // DOFs.
