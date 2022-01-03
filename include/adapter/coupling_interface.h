@@ -103,15 +103,15 @@ namespace Adapter
     apply_Dirichlet_bcs(AffineConstraints<double> &constraints) const;
 
     /**
-     * @brief add_read_data
+     * @brief Queries data IDs from preCICE for the given read data name
      * @param read_data_name
      */
     void
     add_read_data(const std::string &read_data_name);
 
     /**
-     * @brief add_read_data
-     * @param read_data_name
+     * @brief Queries data IDs from preCICE for the given write data name
+     * @param write_data_name
      */
     void
     add_write_data(const std::string &write_data_name,
@@ -119,11 +119,11 @@ namespace Adapter
 
   protected:
     /**
-     * @brief print_info
+     * @brief Print information of the current setup
      *
-     * @param reader Boolean in order to decide if we want read or write
-     *        data information
-     * @param local_size The number of element the local process works on
+     * @param[in] reader Boolean in order to decide if we want read or write
+     *            data information
+     * @param[in] local_size The number of element the local process works on
      */
     void
     print_info(const bool reader, const unsigned int local_size) const;
