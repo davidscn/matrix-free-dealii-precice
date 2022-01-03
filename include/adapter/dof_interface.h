@@ -23,10 +23,10 @@ namespace Adapter
   public:
     DoFInterface(
       std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
-      const std::shared_ptr<precice::SolverInterface> &precice,
-      const std::string &                              mesh_name,
-      const types::boundary_id                         interface_id,
-      const int                                        mf_dof_index)
+      std::shared_ptr<precice::SolverInterface> precice,
+      std::string                               mesh_name,
+      types::boundary_id                        interface_id,
+      int                                       mf_dof_index)
       : CouplingInterface<dim, data_dim, VectorizedArrayType>(data,
                                                               precice,
                                                               mesh_name,
@@ -34,12 +34,6 @@ namespace Adapter
       , mf_dof_index(mf_dof_index)
     {}
 
-    ~DoFInterface() = default;
-
-    /// Alias for the face integrator
-    using FEFaceIntegrator =
-      FEFaceIntegrators<dim, data_dim, double, VectorizedArrayType>;
-    using value_type = typename FEFaceIntegrator::value_type;
     /**
      * @brief define_mesh_vertices Define a vertex coupling mesh for preCICE
      *        coupling the classical preCICE way
@@ -143,7 +137,7 @@ namespace Adapter
     component_mask.set(0, true);
 
     DoFTools::map_boundary_dofs_to_support_points(
-      StaticMappingQ1<dim>::mapping,
+      *(this->mf_data->get_mapping_info().mapping),
       this->mf_data->get_dof_handler(mf_dof_index),
       support_points,
       component_mask,

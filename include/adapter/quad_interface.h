@@ -22,11 +22,11 @@ namespace Adapter
   public:
     QuadInterface(
       std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
-      const std::shared_ptr<precice::SolverInterface> &precice,
-      const std::string &                              mesh_name,
-      const types::boundary_id                         interface_id,
-      const int                                        mf_dof_index,
-      const int                                        mf_quad_index)
+      std::shared_ptr<precice::SolverInterface> precice,
+      std::string                               mesh_name,
+      types::boundary_id                        interface_id,
+      int                                       mf_dof_index,
+      int                                       mf_quad_index)
       : CouplingInterface<dim, data_dim, VectorizedArrayType>(data,
                                                               precice,
                                                               mesh_name,
@@ -35,12 +35,13 @@ namespace Adapter
       , mf_quad_index(mf_quad_index)
     {}
 
-    ~QuadInterface() = default;
-
-    /// Alias for the face integrator
+    /// Alias as defined in the base class
     using FEFaceIntegrator =
-      FEFaceIntegrators<dim, data_dim, double, VectorizedArrayType>;
-    using value_type = typename FEFaceIntegrator::value_type;
+      typename CouplingInterface<dim, data_dim, VectorizedArrayType>::
+        FEFaceIntegrator;
+    using value_type =
+      typename CouplingInterface<dim, data_dim, VectorizedArrayType>::
+        value_type;
     /**
      * @brief define_mesh_vertices Define a vertex coupling mesh for preCICE
      *        coupling the classical preCICE way

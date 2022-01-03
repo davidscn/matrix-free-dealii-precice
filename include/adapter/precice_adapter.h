@@ -35,7 +35,7 @@ namespace Adapter
   {
   public:
     using value_type =
-      typename FEFaceIntegrators<dim, data_dim, double, VectorizedArrayType>::
+      typename CouplingInterface<dim, data_dim, VectorizedArrayType>::
         value_type;
     /**
      * @brief      Constructor, which sets up the precice Solverinterface

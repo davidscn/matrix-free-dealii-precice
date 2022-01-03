@@ -37,15 +37,16 @@ namespace Adapter
   public:
     CouplingInterface(
       std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
-      const std::shared_ptr<precice::SolverInterface> &precice,
-      const std::string &                              mesh_name,
-      const types::boundary_id                         interface_id);
+      std::shared_ptr<precice::SolverInterface> precice,
+      std::string                               mesh_name,
+      types::boundary_id                        interface_id);
 
     virtual ~CouplingInterface() = default;
 
-    using value_type =
-      typename FEFaceIntegrators<dim, data_dim, double, VectorizedArrayType>::
-        value_type;
+    /// Alias for the face integrator
+    using FEFaceIntegrator =
+      FEFaceIntegrators<dim, data_dim, double, VectorizedArrayType>;
+    using value_type = typename FEFaceIntegrator::value_type;
     /**
      * @brief define_coupling_mesh Define the coupling mesh associated to the
      *        data points
@@ -154,8 +155,8 @@ namespace Adapter
   template <int dim, int data_dim, typename VectorizedArrayType>
   CouplingInterface<dim, data_dim, VectorizedArrayType>::CouplingInterface(
     std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
-    const std::shared_ptr<precice::SolverInterface> &                   precice,
-    const std::string &      mesh_name,
+    std::shared_ptr<precice::SolverInterface>                           precice,
+    std::string              mesh_name,
     const types::boundary_id interface_id)
     : mf_data(data)
     , precice(precice)

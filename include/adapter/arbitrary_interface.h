@@ -23,8 +23,8 @@ namespace Adapter
     ArbitraryInterface(
       std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
       std::shared_ptr<precice::SolverInterface> precice,
-      const std::string                         mesh_name,
-      const types::boundary_id                  interface_id)
+      std::string                               mesh_name,
+      types::boundary_id                        interface_id)
       : CouplingInterface<dim, data_dim, VectorizedArrayType>(data,
                                                               precice,
                                                               mesh_name,
