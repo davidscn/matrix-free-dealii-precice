@@ -1018,6 +1018,7 @@ NeoHookOperator<dim, Number>::compute_diagonal()
   diagonal_entries.reset(new DiagonalMatrix<VectorType>());
   VectorType &inverse_diagonal_vector = inverse_diagonal_entries->get_vector();
   VectorType &diagonal_vector         = diagonal_entries->get_vector();
+  data_in_use->initialize_dof_vector(diagonal_vector);
 
   MatrixFreeTools::compute_diagonal(*data_in_use,
                                     diagonal_vector,
