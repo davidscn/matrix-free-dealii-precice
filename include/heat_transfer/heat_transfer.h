@@ -851,11 +851,12 @@ namespace Heat_Transfer
     FECellIntegrator phi(*data);
     const auto       dt = make_vectorized_array<double>(time.get_delta_t());
 
+    solution_old.update_ghost_values();
     // Now loop over all cells
     for (unsigned int cell = 0; cell < data->n_cell_batches(); ++cell)
       {
         // Read in the solution of the old timestep as this is the relevant
-        // data, again ignoring constraints here as they are inhomogenious
+        // data, again ignoring constraints here as they are inhomogeneous
         phi.reinit(cell);
         phi.gather_evaluate(solution_old, EvaluationFlags::values);
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
