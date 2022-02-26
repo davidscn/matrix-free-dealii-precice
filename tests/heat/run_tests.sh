@@ -1,5 +1,8 @@
 #!/bin/bash
+
+set -e -u
 echo "Testing the heat transfer"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NOCOLOR='\033[0m'
@@ -11,7 +14,7 @@ cd "$(dirname "$0")" || exit 1
 work_dir=$(pwd)
 
 # Declare test names
-declare -a tests=("partitioned-heat")
+declare -a tests=("partitioned-heat" "partitioned-heat-direct-access")
 
 exit_code=0
 
