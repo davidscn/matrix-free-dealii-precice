@@ -59,14 +59,14 @@ for i in "${tests[@]}"
     ./heat "$i"/dirichlet.prm > "$i"/dirichlet.log & ./heat "$i"/neumann.prm > "$i"/neumann.log
     grep 'Error' "$i"/dirichlet.log > "$i"/output
     grep 'Error' "$i"/neumann.log >> "$i"/output
-    numdiff --absolute-tolerance=6e-14 "$i"/output "$i"/"${test_name}".output > "$i"/"${test_name}".diff
+    numdiff --absolute-tolerance=9e-14 "$i"/output "$i"/"${test_name}".output > "$i"/"${test_name}".diff
     print_result "$i"/"${test_name}".diff
     test_name="${i}_parallel"
     print_start "${test_name}"
     mpirun --oversubscribe -np 4 ./heat "$i"/dirichlet.prm > "$i"/dirichlet.log & mpirun --oversubscribe -np 4 ./heat "$i"/neumann.prm > "$i"/neumann.log
     grep 'Error' "$i"/dirichlet.log > "$i"/output
     grep 'Error' "$i"/neumann.log >> "$i"/output
-    numdiff --absolute-tolerance=5e-14 "$i"/output "$i"/"${test_name}".output > "$i"/"${test_name}".diff
+    numdiff --absolute-tolerance=6e-14 "$i"/output "$i"/"${test_name}".output > "$i"/"${test_name}".diff
     print_result "$i"/"${test_name}".diff
 done
 
