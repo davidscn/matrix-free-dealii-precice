@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e -u
+set -u
 echo "Testing the solid mechanics"
 
 RED='\033[0;31m'

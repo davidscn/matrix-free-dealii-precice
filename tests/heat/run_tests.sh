@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e -u
+set -u
 echo "Testing the heat transfer"
 
 RED='\033[0;31m'
