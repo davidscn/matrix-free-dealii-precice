@@ -50,8 +50,8 @@
     <m2n:sockets from="dealii" to="tester" />
 
     <coupling-scheme:serial-explicit>
-      <time-window-size value="0.2" />
-      <max-time value="0.4" />
+      <time-window-size value="0.1" />
+      <max-time value="0.2" />
       <participants first="dealii" second="tester" />
       <exchange data="Displacement" mesh="dealii-mesh" from="dealii" to="tester" />
       <exchange data="Stress" mesh="tester-mesh" from="tester" to="dealii" initialize="true" />
