@@ -42,6 +42,9 @@ namespace TestCases
     const types::boundary_id clamped_mesh_id              = 1;
     const types::boundary_id out_of_plane_clamped_mesh_id = 2;
 
+
+    this->body_force = std::make_unique<Functions::ConstantFunction<dim>>(
+      std::vector<double>{0, -0.5});
     // Set boundary conditions
     // Fix all boundary components
     this->dirichlet_mask[clamped_mesh_id] = ComponentMask(dim, true);

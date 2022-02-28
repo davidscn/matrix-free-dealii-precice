@@ -99,7 +99,7 @@ namespace FSI
 
     Solid(const Parameters::FSIParameters<dim> &parameters);
 
-    virtual ~Solid();
+    ~Solid();
 
     void
     run(std::shared_ptr<TestCases::TestCaseBase<dim>> testcase_);
@@ -267,6 +267,8 @@ namespace FSI
     std::shared_ptr<
       Material_Compressible_Neo_Hook_One_Field<dim, LevelVectorizedArrayType>>
       material_inclusion_level;
+
+    std::unique_ptr<Function<dim>> body_force;
 
     std::unique_ptr<Adapter::Adapter<dim, dim, VectorType, VectorizedArrayType>>
       precice_adapter;
@@ -636,6 +638,13 @@ namespace FSI
     testcase->make_coarse_grid_and_bcs(triangulation);
     triangulation.refine_global(parameters.n_global_refinement);
 
+    if (testcase->body_force.get() == nullptr)
+      testcase->body_force =
+        std::make_unique<Functions::ZeroFunction<dim>>(dim);
+
+    AssertDimension(testcase->body_force->n_components, dim);
+    AssertThrow(testcase->body_force_is_spatially_constant,
+                ExcNotImplemented());
     vol_reference = GridTools::volume(triangulation);
     vol_current   = vol_reference;
     pcout << "--     . Reference volume: " << vol_reference << std::endl;
@@ -1581,6 +1590,28 @@ namespace FSI
   }
 
 
+
+  // Helper function in order to evaluate the vectorized point
+  template <int dim, typename VectorizedArrayType, int n_components = dim>
+  Tensor<1, n_components, VectorizedArrayType>
+  evaluate_function(const Function<dim> &                  function,
+                    const Point<dim, VectorizedArrayType> &p_vectorized)
+  {
+    AssertDimension(function.n_components, n_components);
+    Tensor<1, n_components, VectorizedArrayType> result;
+    for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
+      {
+        Point<dim> p;
+        for (unsigned int d = 0; d < dim; ++d)
+          p[d] = p_vectorized[d][v];
+        for (unsigned int d = 0; d < n_components; ++d)
+          result[d][v] = function.value(p, d);
+      }
+    return result;
+  }
+
+
+
   // Note that we must ensure that
   // the matrix is reset before any assembly operations can occur.
   template <int dim, typename Number>
@@ -1600,9 +1631,16 @@ namespace FSI
     // stage.
     const bool assemble_fast = it_nr < 5;
 
+    Assert(testcase->body_force.get() != nullptr, ExcNotInitialized());
+    testcase->body_force->set_time(time.current());
+
     // The usual assembly strategy
     if (!assemble_fast)
       {
+        Tensor<1, dim> constant_body_force;
+        for (uint d = 0; d < dim; ++d)
+          constant_body_force[d] = testcase->body_force->value(Point<dim>(), d);
+
         Vector<double>                       cell_rhs(dofs_per_cell);
         std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
@@ -1682,7 +1720,9 @@ namespace FSI
                         cell_rhs(j) -=
                           fe_values[u_fe].value(j, q_point) * cell_mat->rho *
                           fe_values[u_fe].value(i, q_point) *
-                          local_acceleration[q_point][component_j] * JxW;
+                          (local_acceleration[q_point][component_j] -
+                           constant_body_force[component_j]) *
+                          JxW;
                     }
 
                 } // end loop over quadrature points
@@ -1693,6 +1733,10 @@ namespace FSI
       }
     else
       {
+        Tensor<1, dim, VectorizedArrayType> constant_body_force;
+        constant_body_force = evaluate_function<dim, VectorizedArrayType, dim>(
+          *testcase->body_force.get(), Point<dim, VectorizedArrayType>());
+
         // The FEEvaluation objects
         FECellIntegrator   phi_reference(*mf_data_reference);
         FECellIntegrator   phi_acc(phi_reference);
@@ -1758,7 +1802,8 @@ namespace FSI
                   Tensor<2, dim, VectorizedArrayType>(tau);
 
                 phi_reference.submit_gradient(-res * transpose(F_inv), q_point);
-                phi_acc.submit_value(-phi_acc.get_value(q_point) *
+                phi_acc.submit_value((-phi_acc.get_value(q_point) +
+                                      constant_body_force) *
                                        cell_mat->rho,
                                      q_point);
               } // end loop over quadrature points

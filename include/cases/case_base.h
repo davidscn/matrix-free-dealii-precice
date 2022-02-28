@@ -26,8 +26,11 @@ namespace TestCases
     // Optional TODO in case of more involved BCs: use FunctionParser
     std::map<types::boundary_id, std::unique_ptr<Function<dim>>> dirichlet;
     std::map<types::boundary_id, ComponentMask>                  dirichlet_mask;
+    std::unique_ptr<Function<dim>>                               body_force;
     std::unique_ptr<Function<dim>> initial_condition;
     std::unique_ptr<Function<dim>> heat_transfer_rhs;
+
+    bool body_force_is_spatially_constant = true;
     // Boolean for the simulation type (only used for heat transfer).
     // is_dirichlet = true reads and applys Dirichlet boundary condition,
     // is_dirichlet = false reads and applys Neumann boundary condition

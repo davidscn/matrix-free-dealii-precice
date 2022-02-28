@@ -23,6 +23,7 @@ namespace TestCases
     // distributing the boundary IDs.
     // Dirichlet boundary conditions are applied through this->dirichlet and
     // this->dirichlet_mask. Have a look at other cases.
+    // Body forces can be added through this->body_force
 
     // material_id 2 is currently used for the inclusion material, which is
     // 100 x stiffer (mu) than the usual material. Other IDs are used for the
