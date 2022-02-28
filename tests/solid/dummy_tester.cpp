@@ -198,7 +198,7 @@ main()
   for (uint i = 0; i < dummy_stress.size() / dim; ++i)
     {
       dummy_stress[2 * i]     = 0;
-      dummy_stress[2 * i + 1] = -8;
+      dummy_stress[2 * i + 1] = -4;
     }
 
   if (precice.isActionRequired(precice::constants::actionWriteInitialData()))

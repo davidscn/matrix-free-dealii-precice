@@ -2,18 +2,18 @@
 --     . dim       = 2
 --     . fe_degree = 1
 --     . 1d_quad   = 2
---     . Number of active cells: 1280
---     . Number of degrees of freedom: 2754
+--     . Number of active cells: 320
+--     . Number of degrees of freedom: 738
 
 
-Timestep 1 @ 0.2s
+Timestep 1 @ 0.1s
+Converged in 4 Newton iterations
+Solution @ 0.6 0.2
+  displacement: -1.27711e-05 -0.00293181
+
+Timestep 2 @ 0.2s
 Converged in 5 Newton iterations
 Solution @ 0.6 0.2
-  displacement: -0.000117854 -0.00865183
+  displacement: -0.000309807 -0.0140037
 
-Timestep 2 @ 0.4s
-Converged in 6 Newton iterations
-Solution @ 0.6 0.2
-  displacement: -0.00166811 -0.0320072
-
-Average CG iter = 36
+Average CG iter = 30

@@ -100,10 +100,10 @@ end
 
 subsection Time
   # End time
-  set End time       = 0.4
+  set End time       = 0.2
 
   # Time step size
-  set Time step size = 0.2
+  set Time step size = 0.1
 end
 
 subsection precice configuration
