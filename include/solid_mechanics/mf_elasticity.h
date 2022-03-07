@@ -60,6 +60,7 @@ static const unsigned int debug_level = 0;
 #include <deal.II/physics/elasticity/standard_tensors.h>
 
 #include <adapter/precice_adapter.h>
+#include <base/checkpoint.h>
 #include <base/fe_integrator.h>
 #include <base/q_equidistant.h>
 #include <base/time_handler.h>
@@ -79,8 +80,6 @@ using namespace dealii;
 // into it:
 namespace FSI
 {
-  using namespace dealii;
-
   // The Solid class is the central class.
   template <int dim, typename Number>
   class Solid
@@ -145,6 +144,9 @@ namespace FSI
 
     void
     output_results(const unsigned int result_number) const;
+
+    void
+    write_checkpoint();
 
     // Set up an Additional data object
     template <typename AdditionalData>
@@ -572,6 +574,8 @@ namespace FSI
       int(TestCases::TestCaseBase<dim>::interface_id),
       mf_data_reference);
     precice_adapter->initialize(total_displacement);
+
+    write_checkpoint();
 
     // At the beginning, we reset the solution update for this time step...
     while (precice_adapter->is_coupling_ongoing())
@@ -2040,6 +2044,26 @@ namespace FSI
 
     return std::make_tuple(lin_it, lin_res, cond_number);
   }
+
+
+
+  template <int dim, typename Number>
+  void
+  Solid<dim, Number>::write_checkpoint()
+  {
+    // pcout << "checkpoint computation";
+
+    Utilities::create_checkpoint<dim, VectorType>(triangulation,
+                                                  dof_handler,
+                                                  {&total_displacement,
+                                                   &velocity},
+                                                  "test",
+                                                  time.current()
+                                                  );
+    // pcout << "resume interrupted computation";
+  }
+
+
 
   template <int dim, typename Number>
   void
