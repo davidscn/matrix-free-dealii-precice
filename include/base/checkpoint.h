@@ -62,28 +62,28 @@ namespace Utilities
    * @param name
    * @param t
    */
-  // template <int dim, typename VectorType>
-  // void
-  // load_checkpoint(
-  //   const dealii::parallel::distributed::Triangulation<dim> &triangulation,
-  //   const dealii::DoFHandler<dim> &                          dof_handler,
-  //   const std::vector<VectorType *> &                        vectors,
-  //   const std::string &                                      name,
-  //   const double                                             t)
-  // {
-  //   parallel::distributed::SolutionTransfer<dim, VectorType> solution_transfer(
-  //     dof_handler);
+  template <int dim, typename VectorType>
+  void
+  load_checkpoint(
+    const dealii::DoFHandler<dim> &                    dof_handler,
+    std::vector<VectorType *> &                        vectors,
+    const std::string &                                name,
+    double &                                           t)
+  {
+    // triangulation.load(name + "-checkpoint.mesh");
+    dealii::parallel::distributed::SolutionTransfer<dim, VectorType>
+      solution_transfer(dof_handler);
 
-  //   solution_transfer.deserialize(vectors);
+    solution_transfer.deserialize(vectors);
 
-  //   for (auto &it : vectors)
-  //     it.update_ghost_values();
+    for (auto &it : vectors)
+      it->update_ghost_values();
 
-  //   std::ifstream file(name + "-checkpoint.metadata", std::ios::binary);
+    std::ifstream file(name + "-checkpoint.metadata", std::ios::binary);
 
-  //   boost::archive::binary_iarchive ia(file);
-  //   ia >> t;
-  // }
+    boost::archive::binary_iarchive ia(file);
+    ia >> t;
+  }
 } // namespace Utilities
 
 DEAL_II_NAMESPACE_CLOSE

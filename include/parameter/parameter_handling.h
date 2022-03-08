@@ -311,8 +311,9 @@ namespace Parameters
   // Set the timestep size $ \varDelta t $ and the simulation end-time.
   struct Time
   {
-    double delta_t  = 0.1;
-    double end_time = 1.;
+    double delta_t         = 0.1;
+    double end_time        = 1.;
+    bool   read_checkpoint = false;
 
     void
     add_parameters(ParameterHandler &prm);
@@ -329,6 +330,10 @@ namespace Parameters
                         delta_t,
                         "Time step size",
                         Patterns::Double(0.));
+      prm.add_parameter("Resume checkpoint",
+                        read_checkpoint,
+                        "Resume from a checkpoint",
+                        Patterns::Bool());
     }
     prm.leave_subsection();
   }

@@ -148,6 +148,10 @@ namespace FSI
     void
     write_checkpoint();
 
+
+    void
+    load_checkpoint();
+
     // Set up an Additional data object
     template <typename AdditionalData>
     void
@@ -575,7 +579,10 @@ namespace FSI
       mf_data_reference);
     precice_adapter->initialize(total_displacement);
 
-    write_checkpoint();
+    if (parameters.read_checkpoint)
+      load_checkpoint();
+    else
+      write_checkpoint();
 
     // At the beginning, we reset the solution update for this time step...
     while (precice_adapter->is_coupling_ongoing())
@@ -618,6 +625,8 @@ namespace FSI
             time.increment();
           }
       }
+    write_checkpoint();
+
 
     // for post-processing, print average CG iterations over the whole run:
     timer_out << std::endl
@@ -639,7 +648,11 @@ namespace FSI
   {
     Assert(testcase.get() != nullptr, ExcInternalError());
     testcase->make_coarse_grid_and_bcs(triangulation);
-    triangulation.refine_global(parameters.n_global_refinement);
+
+    if (parameters.read_checkpoint)
+      triangulation.load("test-checkpoint.mesh");
+    else
+      triangulation.refine_global(parameters.n_global_refinement);
 
     if (testcase->body_force.get() == nullptr)
       testcase->body_force =
@@ -2051,16 +2064,62 @@ namespace FSI
   void
   Solid<dim, Number>::write_checkpoint()
   {
-    // pcout << "checkpoint computation";
+    pcout << "checkpoint computation"
+          << "\n";
+    std::vector<const VectorType *> in_vectors({&total_displacement,
+                                                &velocity,
+                                                &acceleration,
+                                                &old_displacement,
+                                                &velocity_old,
+                                                &acceleration_old});
 
-    Utilities::create_checkpoint<dim, VectorType>(triangulation,
-                                                  dof_handler,
-                                                  {&total_displacement,
-                                                   &velocity},
-                                                  "test",
-                                                  time.current()
-                                                  );
-    // pcout << "resume interrupted computation";
+    Utilities::create_checkpoint<dim, VectorType>(
+      triangulation, dof_handler, in_vectors, "test", time.current());
+  }
+
+
+
+  template <int dim, typename Number>
+  void
+  Solid<dim, Number>::load_checkpoint()
+  {
+    std::vector<VectorType *> in_vectors({&total_displacement,
+                                          &velocity,
+                                          &acceleration,
+                                          &old_displacement,
+                                          &velocity_old,
+                                          &acceleration_old});
+
+    auto partitioner = std::make_shared<Utilities::MPI::Partitioner>(
+      dof_handler.locally_owned_dofs(),
+      locally_relevant_dofs,
+      mpi_communicator);
+
+    // We need something temporarily because the reloading doesn't allow for
+    // ghosted vectors
+    std::vector<VectorType>   tmp_vectors(in_vectors.size());
+    std::vector<VectorType *> tmp_vectors_ptr;
+
+    for (auto &vec : tmp_vectors)
+      {
+        vec.reinit(partitioner);
+        tmp_vectors_ptr.emplace_back(&vec);
+      }
+
+    double new_time = 0;
+    Utilities::load_checkpoint<dim, VectorType>(dof_handler,
+                                                tmp_vectors_ptr,
+                                                "test",
+                                                new_time);
+
+
+    for (unsigned int i = 0; i < tmp_vectors_ptr.size(); ++i)
+      {
+        in_vectors[i]->copy_locally_owned_data_from(*(tmp_vectors_ptr[i]));
+        in_vectors[i]->update_ghost_values();
+      }
+
+    pcout << "resume interrupted computation at t = " << new_time << "\n";
   }
 
 
