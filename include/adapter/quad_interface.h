@@ -199,7 +199,8 @@ namespace Adapter
       {
         case WriteDataType::values_on_quads:
           write_data_factory(data_vector,
-                             EvaluationFlags::values,
+                             EvaluationFlags::values |
+                               EvaluationFlags::gradients,
                              [](auto &phi, auto q_point) {
                                return phi.get_value(q_point);
                              });
@@ -260,6 +261,7 @@ namespace Adapter
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           {
             const auto local_data = get_write_value(phi, q);
+            const auto gradient   = phi.get_gradient(q);
             Assert(index != interface_nodes_ids.end(), ExcInternalError());
 
             // Constexpr evaluation required in order to comply with the
@@ -283,6 +285,24 @@ namespace Adapter
                                                     active_faces,
                                                     index->data(),
                                                     &local_data[0]);
+
+                std::array<double, VectorizedArrayType::size()> x_derivative;
+                std::array<double, VectorizedArrayType::size()> y_derivative;
+                std::array<double, VectorizedArrayType::size()> z_derivative;
+
+                for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
+                  {
+                    x_derivative[v] = 0;//-gradient[0][v];
+                    y_derivative[v] = gradient[1][v];
+                    z_derivative[v] = 0;
+                  }
+
+                this->precice->writeBlockScalarGradientData(
+                  this->write_data_id,
+                  active_faces,
+                  index->data(),
+                  x_derivative.begin(),
+                  y_derivative.begin());
               }
             ++index;
           }
