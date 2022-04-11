@@ -9,11 +9,11 @@
 Timestep 1 @ 0.1s
 Converged in 4 Newton iterations
 Solution @ 0.6 0.2
-  displacement: -1.27711e-05 -0.00293181
+  displacement: -1.29017e-05 -0.00293199
 
 Timestep 2 @ 0.2s
-Converged in 5 Newton iterations
+Converged in 4 Newton iterations
 Solution @ 0.6 0.2
-  displacement: -0.000309807 -0.0140037
+  displacement: -0.000310726 -0.0140092
 
-Average CG iter = 714
+Average CG iter = 701
