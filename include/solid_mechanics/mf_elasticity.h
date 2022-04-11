@@ -58,7 +58,6 @@ static const unsigned int debug_level = 0;
 
 #include <deal.II/physics/elasticity/kinematics.h>
 #include <deal.II/physics/elasticity/standard_tensors.h>
-#include <deal.II/physics/transformations.h>
 
 #include <adapter/precice_adapter.h>
 #include <base/fe_integrator.h>
@@ -1843,11 +1842,21 @@ namespace FSI
             const auto F =
               Physics::Elasticity::Kinematics::F(phi.get_gradient(q));
             // Get the value from preCICE
-            const auto traction =
+            auto traction =
               precice_adapter->read_on_quadrature_point(q_index, active_faces);
+
+            // pull-back the traction
+            const auto N = phi.get_normal_vector(q);
+
+            // da/dA * N = det F F^{-T} * N := n_star
+            // -> da/dA = n_star.norm()
+            const auto n_star = determinant(F) * transpose(invert(F)) * N;
+
+            // t_0 = da/dA * t
+            traction *= n_star.norm();
+
             // Perform pull-back operation and submit value
-            phi.submit_value(
-              Physics::Transformations::Covariant::pull_back(traction, F), q);
+            phi.submit_value(traction, q);
             ++q_index;
           }
         // Integrate the result and write into the rhs vector
