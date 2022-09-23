@@ -329,8 +329,7 @@ namespace Adapter
     const VectorType &dealii_to_precice,
     const double      computed_timestep_length)
   {
-    if (precice->isWriteDataRequired(computed_timestep_length))
-      writer->write_data(dealii_to_precice);
+    writer->write_data(dealii_to_precice);
     // Here, we need to specify the computed time step length and pass it to
     // preCICE
     precice->advance(computed_timestep_length);
