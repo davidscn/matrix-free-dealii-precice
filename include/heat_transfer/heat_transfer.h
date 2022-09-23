@@ -803,7 +803,11 @@ namespace Heat_Transfer
     DataOut<dim> data_out;
 
     DataOutBase::VtkFlags flags;
-    flags.compression_level        = DataOutBase::CompressionLevel::best_speed;
+#if DEAL_II_VERSION_GTE(9, 5, 0)
+    flags.compression_level = DataOutBase::CompressionLevel::best_speed;
+#else
+    flags.compression_level = DataOutBase::VtkFlags::best_speed;
+#endif
     flags.write_higher_order_cells = true;
     data_out.set_flags(flags);
 
