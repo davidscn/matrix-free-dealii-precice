@@ -286,21 +286,22 @@ namespace Heat_Transfer
     run(std::shared_ptr<TestCases::TestCaseBase<dim>> testcase_);
 
   private:
-    /**
-     * @brief make_grid Creates the grid and the boundary conditions of the problem
-     */
+    /// @brief make_grid Creates the grid and the boundary conditions of the problem
     void
     make_grid();
-    /**
-     * @brief setup_system Initialize required data structures (MG and MF)
-     */
+
+    /// @brief setup_system Initialize required data structures (MG and MF)
     void
     setup_system();
-    /**
-     * @brief assemble_rhs Assemble the RHS vector in each time step.
-     */
+
+    /// @brief setup the gmg data structures
+    void
+    setup_gmg();
+
+    /// @brief assemble_rhs Assemble the RHS vector in each time step.
     void
     assemble_rhs();
+
     /**
      * @brief apply_boundary_condition Fill the constraint object in order to apply
      *        Dirichlet boundary condition.
@@ -311,11 +312,16 @@ namespace Heat_Transfer
      */
     void
     apply_boundary_condition(const bool initialize);
-    /**
-     * @brief solve Solve the assembled system.
-     */
+
+
+    /// @brief solve Solve the assembled system.
     void
     solve();
+
+    /// @brief solve using the gmg preconditioner
+    void
+    solve_gmg_preconditioner(SolverControl &solver_control);
+
     /**
      * @brief compute_error
      * @return error
@@ -371,6 +377,9 @@ namespace Heat_Transfer
     mutable TimerOutput timer;
     unsigned long int   total_n_cg_iterations;
     unsigned int        total_n_cg_solve;
+
+    // Valid options are none, jacobi and gmg
+    std::string preconditioner_type = "gmg";
 
     Time time;
   };
@@ -491,6 +500,16 @@ namespace Heat_Transfer
     system_matrix.initialize_dof_vector(solution_update);
     system_matrix.initialize_dof_vector(system_rhs);
 
+    if (preconditioner_type == "gmg")
+      setup_gmg();
+  }
+
+
+
+  template <int dim>
+  void
+  LaplaceProblem<dim>::setup_gmg()
+  {
     const unsigned int nlevels = triangulation.n_global_levels();
     mg_matrices.resize(0, nlevels - 1);
     mg_constrained_dofs.initialize(dof_handler);
@@ -685,12 +704,54 @@ namespace Heat_Transfer
   }
 
 
-
   template <int dim>
   void
   LaplaceProblem<dim>::solve()
   {
-    TimerOutput::Scope               t(timer, "solve system");
+    TimerOutput::Scope t(timer, "solve system");
+
+    SolverControl solver_control(system_rhs.size(),
+                                 1e-12 * system_rhs.l2_norm());
+    if (preconditioner_type == "jacobi")
+      {
+        // FIXME: Leads currently to more iterations compared to "none"
+        SolverCG<VectorType>                 cg(solver_control);
+        PreconditionJacobi<SystemMatrixType> preconditioner;
+        double                               relaxation = .7;
+        preconditioner.initialize(system_matrix, relaxation);
+        system_matrix.compute_diagonal();
+        cg.solve(system_matrix, solution_update, system_rhs, preconditioner);
+      }
+    else if (preconditioner_type == "none")
+      {
+        SolverCG<VectorType> cg(solver_control);
+        cg.solve(system_matrix,
+                 solution_update,
+                 system_rhs,
+                 PreconditionIdentity());
+      }
+    else if (preconditioner_type == "gmg")
+      {
+        solve_gmg_preconditioner(solver_control);
+      }
+    else
+      AssertThrow(false, ExcNotImplemented());
+
+    // More or less a safety operation, as the constraints have already been
+    // enforced
+    constraints.set_zero(solution_update);
+    // and update the complete solution = non-homogenous part + homogenous part
+    solution += solution_update;
+    solution.update_ghost_values();
+    total_n_cg_iterations += solver_control.last_step();
+    ++total_n_cg_solve;
+  }
+
+
+  template <int dim>
+  void
+  LaplaceProblem<dim>::solve_gmg_preconditioner(SolverControl &solver_control)
+  {
     MGTransferMatrixFree<dim, float> mg_transfer(mg_constrained_dofs);
     mg_transfer.build(dof_handler);
 
@@ -740,21 +801,9 @@ namespace Heat_Transfer
     PreconditionMG<dim, LevelVectorType, MGTransferMatrixFree<dim, float>>
       preconditioner(dof_handler, mg, mg_transfer);
 
-
-    SolverControl        solver_control(100, 1e-12 * system_rhs.l2_norm());
     SolverCG<VectorType> cg(solver_control);
-
     cg.solve(system_matrix, solution_update, system_rhs, preconditioner);
-    // More or less a safety operation, as the constraints have already been
-    // enforced
-    constraints.set_zero(solution_update);
-    // and update the complete solution = non-homogenous part + homogenous part
-    solution += solution_update;
-    solution.update_ghost_values();
-    total_n_cg_iterations += solver_control.last_step();
-    ++total_n_cg_solve;
   }
-
 
 
   template <int dim>
