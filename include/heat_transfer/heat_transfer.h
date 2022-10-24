@@ -376,6 +376,9 @@ namespace Heat_Transfer
     unsigned long int   total_n_cg_iterations;
     unsigned int        total_n_cg_solve;
 
+  // Valid options are none, jacobi and gmg
+    std::string preconditioner_type = "gmg";
+
     Time time;
   };
 
@@ -694,12 +697,12 @@ namespace Heat_Transfer
   LaplaceProblem<dim>::solve()
   {
     TimerOutput::Scope t(timer, "solve system");
-    SolverControl      solver_control(100, 1e-12 * system_rhs.l2_norm());
 
-    std::string preconditioner_type = "gmg";
     if (preconditioner_type == "jacobi")
       {
         // FIXME: Leads currently to more iterations compared to "none"
+        SolverControl                        solver_control(system_rhs.size(),
+                                     1e-12 * system_rhs.l2_norm());
         SolverCG<VectorType>                 cg(solver_control);
         PreconditionJacobi<SystemMatrixType> preconditioner;
         double                               relaxation = .7;
@@ -709,6 +712,8 @@ namespace Heat_Transfer
       }
     else if (preconditioner_type == "none")
       {
+        SolverControl        solver_control(system_rhs.size(),
+                                     1e-12 * system_rhs.l2_norm());
         SolverCG<VectorType> cg(solver_control);
         cg.solve(system_matrix,
                  solution_update,
@@ -717,6 +722,7 @@ namespace Heat_Transfer
       }
     else if (preconditioner_type == "gmg")
       {
+        SolverControl solver_control(100, 1e-12 * system_rhs.l2_norm());
         solve_gmg_preconditioner(solver_control);
       }
     else
