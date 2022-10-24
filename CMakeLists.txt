@@ -69,7 +69,7 @@ CONFIGURE_FILE(${CMAKE_SOURCE_DIR}/src/version.cc.in
 PROJECT(${TARGET} LANGUAGES CXX)
 
 # This project requires c++17
-IF(NOT ${DEAL_II_WITH_CXX17})
+IF(NOT ${DEAL_II_WITH_CXX17} AND NOT ${DEAL_II_WITH_CUDA})
     SET(CMAKE_CXX_STANDARD 17)
     SET(CMAKE_CXX_EXTENSIONS OFF)
     SET(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -83,9 +83,16 @@ ADD_EXECUTABLE(${SOLVER1}
     src/${SOLVER1}.cc
   )
 
-ADD_EXECUTABLE(${SOLVER2}
-    src/${SOLVER2}.cc
-  )
+# Build the cuda version in case we have cuda support
+IF(${DEAL_II_WITH_CUDA})
+  ADD_EXECUTABLE(${SOLVER2}
+      src/${SOLVER2}.cu
+    )
+ELSE()
+  ADD_EXECUTABLE(${SOLVER2}
+      src/${SOLVER2}.cc
+    )
+ENDIF()
 
 # Setup targets
 DEAL_II_SETUP_TARGET(${SOLVER1})
