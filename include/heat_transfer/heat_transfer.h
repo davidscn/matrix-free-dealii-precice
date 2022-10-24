@@ -710,11 +710,11 @@ namespace Heat_Transfer
   {
     TimerOutput::Scope t(timer, "solve system");
 
+    SolverControl solver_control(system_rhs.size(),
+                                 1e-12 * system_rhs.l2_norm());
     if (preconditioner_type == "jacobi")
       {
         // FIXME: Leads currently to more iterations compared to "none"
-        SolverControl                        solver_control(system_rhs.size(),
-                                     1e-12 * system_rhs.l2_norm());
         SolverCG<VectorType>                 cg(solver_control);
         PreconditionJacobi<SystemMatrixType> preconditioner;
         double                               relaxation = .7;
@@ -724,8 +724,6 @@ namespace Heat_Transfer
       }
     else if (preconditioner_type == "none")
       {
-        SolverControl        solver_control(system_rhs.size(),
-                                     1e-12 * system_rhs.l2_norm());
         SolverCG<VectorType> cg(solver_control);
         cg.solve(system_matrix,
                  solution_update,
@@ -734,7 +732,6 @@ namespace Heat_Transfer
       }
     else if (preconditioner_type == "gmg")
       {
-        SolverControl solver_control(100, 1e-12 * system_rhs.l2_norm());
         solve_gmg_preconditioner(solver_control);
       }
     else
