@@ -78,17 +78,17 @@ namespace Heat_Transfer
   }
 
 
-  template <int dim, typename number>
+  template <int dim, typename number, typename MemorySpace = MemorySpace::Host>
   class LaplaceOperator
     : public MatrixFreeOperators::
-        Base<dim, LinearAlgebra::distributed::Vector<number>>
+        Base<dim, LinearAlgebra::distributed::Vector<number, MemorySpace>>
   {
   public:
-    using value_type = number;
     using FECellIntegrator =
       FECellIntegrators<dim, 1, number, VectorizedArray<number>>;
     using FEFaceIntegrator =
       FEFaceIntegrators<dim, 1, number, VectorizedArray<number>>;
+    using VectorType = LinearAlgebra::distributed::Vector<number, MemorySpace>;
 
     LaplaceOperator();
 
@@ -109,14 +109,12 @@ namespace Heat_Transfer
 
   private:
     virtual void
-    apply_add(
-      LinearAlgebra::distributed::Vector<number> &      dst,
-      const LinearAlgebra::distributed::Vector<number> &src) const override;
+    apply_add(VectorType &dst, const VectorType &src) const override;
 
     void
-    local_apply(const MatrixFree<dim, number> &                   data,
-                LinearAlgebra::distributed::Vector<number> &      dst,
-                const LinearAlgebra::distributed::Vector<number> &src,
+    local_apply(const MatrixFree<dim, number> &              data,
+                VectorType &                                 dst,
+                const VectorType &                           src,
                 const std::pair<unsigned int, unsigned int> &cell_range) const;
 
     void
@@ -128,28 +126,26 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, typename number>
-  LaplaceOperator<dim, number>::LaplaceOperator()
-    : MatrixFreeOperators::Base<dim,
-                                LinearAlgebra::distributed::Vector<number>>()
+  template <int dim, typename number, typename MemorySpace>
+  LaplaceOperator<dim, number, MemorySpace>::LaplaceOperator()
+    : MatrixFreeOperators::Base<dim, VectorType>()
   {}
 
 
 
-  template <int dim, typename number>
+  template <int dim, typename number, typename MemorySpace>
   void
-  LaplaceOperator<dim, number>::clear()
+  LaplaceOperator<dim, number, MemorySpace>::clear()
   {
     coefficient.reinit(0, 0);
-    MatrixFreeOperators::Base<dim, LinearAlgebra::distributed::Vector<number>>::
-      clear();
+    MatrixFreeOperators::Base<dim, VectorType>::clear();
   }
 
 
 
-  template <int dim, typename number>
+  template <int dim, typename number, typename MemorySpace>
   void
-  LaplaceOperator<dim, number>::evaluate_coefficient(
+  LaplaceOperator<dim, number, MemorySpace>::evaluate_coefficient(
     const Coefficient<dim> &coefficient_function)
   {
     const unsigned int n_cells = this->data->n_cell_batches();
@@ -167,13 +163,13 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, typename number>
+  template <int dim, typename number, typename MemorySpace>
   void
-  LaplaceOperator<dim, number>::local_apply(
-    const MatrixFree<dim, number> &                   data,
-    LinearAlgebra::distributed::Vector<number> &      dst,
-    const LinearAlgebra::distributed::Vector<number> &src,
-    const std::pair<unsigned int, unsigned int> &     cell_range) const
+  LaplaceOperator<dim, number, MemorySpace>::local_apply(
+    const MatrixFree<dim, number> &              data,
+    VectorType &                                 dst,
+    const VectorType &                           src,
+    const std::pair<unsigned int, unsigned int> &cell_range) const
   {
     FECellIntegrator phi(data);
 
@@ -191,25 +187,23 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, typename number>
+  template <int dim, typename number, typename MemorySpace>
   void
-  LaplaceOperator<dim, number>::apply_add(
-    LinearAlgebra::distributed::Vector<number> &      dst,
-    const LinearAlgebra::distributed::Vector<number> &src) const
+  LaplaceOperator<dim, number, MemorySpace>::apply_add(
+    VectorType &      dst,
+    const VectorType &src) const
   {
     this->data->cell_loop(&LaplaceOperator::local_apply, this, dst, src);
   }
 
 
 
-  template <int dim, typename number>
+  template <int dim, typename number, typename MemorySpace>
   void
-  LaplaceOperator<dim, number>::compute_diagonal()
+  LaplaceOperator<dim, number, MemorySpace>::compute_diagonal()
   {
-    this->inverse_diagonal_entries.reset(
-      new DiagonalMatrix<LinearAlgebra::distributed::Vector<number>>());
-    LinearAlgebra::distributed::Vector<number> &inverse_diagonal =
-      this->inverse_diagonal_entries->get_vector();
+    this->inverse_diagonal_entries.reset(new DiagonalMatrix<VectorType>());
+    VectorType &inverse_diagonal = this->inverse_diagonal_entries->get_vector();
     this->data->initialize_dof_vector(inverse_diagonal);
 
     MatrixFreeTools::compute_diagonal(*(this->data),
@@ -231,9 +225,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, typename number>
+  template <int dim, typename number, typename MemorySpace>
   void
-  LaplaceOperator<dim, number>::do_operation_on_cell(
+  LaplaceOperator<dim, number, MemorySpace>::do_operation_on_cell(
     FECellIntegrator &phi) const
   {
     Assert(delta_t > 0, ExcNotInitialized());
