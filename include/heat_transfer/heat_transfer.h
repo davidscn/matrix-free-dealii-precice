@@ -35,6 +35,7 @@
 #include <base/time_handler.h>
 #include <base/utilities.h>
 #include <cases/case_selector.h>
+#include <heat_transfer/cuda_laplace_operator.h>
 #include <heat_transfer/laplace_operator.h>
 #include <parameter/parameter_handling.h>
 

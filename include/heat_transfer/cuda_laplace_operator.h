@@ -1,11 +1,16 @@
 #pragma once
 
-#include <deal.II/matrix_free/fe_evaluation.h>
-#include <deal.II/matrix_free/matrix_free.h>
-#include <deal.II/matrix_free/operators.h>
-#include <deal.II/matrix_free/tools.h>
+#ifdef DEAL_II_COMPILER_CUDA_AWARE
 
-#include <base/fe_integrator.h>
+#  include <deal.II/matrix_free/cuda_fe_evaluation.h>
+#  include <deal.II/matrix_free/cuda_matrix_free.h>
+#  include <deal.II/matrix_free/fe_evaluation.h>
+#  include <deal.II/matrix_free/matrix_free.h>
+#  include <deal.II/matrix_free/operators.h>
+#  include <deal.II/matrix_free/tools.h>
+
+#  include <base/fe_integrator.h>
+
 namespace Heat_Transfer
 {
   using namespace dealii;
@@ -197,3 +202,5 @@ namespace Heat_Transfer
     return result;
   }
 } // namespace Heat_Transfer
+
+#endif
