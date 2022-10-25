@@ -263,7 +263,7 @@ namespace Heat_Transfer
 
 
 
-  template <int dim>
+  template <int dim, typename MemorySpace = MemorySpace::Host>
   class LaplaceProblem
   {
   public:
@@ -380,8 +380,8 @@ namespace Heat_Transfer
 
 
 
-  template <int dim>
-  LaplaceProblem<dim>::LaplaceProblem(
+  template <int dim, typename MemorySpace>
+  LaplaceProblem<dim, MemorySpace>::LaplaceProblem(
     const Parameters::HeatParameters<dim> &parameters)
     : parameters(parameters)
     , triangulation(MPI_COMM_WORLD,
@@ -406,9 +406,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim>
+  template <int dim, typename MemorySpace>
   void
-  LaplaceProblem<dim>::make_grid()
+  LaplaceProblem<dim, MemorySpace>::make_grid()
   {
     Assert(testcase.get() != nullptr, ExcInternalError());
     testcase->make_coarse_grid_and_bcs(triangulation);
@@ -417,9 +417,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim>
+  template <int dim, typename MemorySpace>
   void
-  LaplaceProblem<dim>::setup_system()
+  LaplaceProblem<dim, MemorySpace>::setup_system()
   {
     system_matrix.clear();
     mg_matrices.clear_elements();
@@ -500,9 +500,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim>
+  template <int dim, typename MemorySpace>
   void
-  LaplaceProblem<dim>::setup_gmg()
+  LaplaceProblem<dim, MemorySpace>::setup_gmg()
   {
     const unsigned int nlevels = triangulation.n_global_levels();
     mg_matrices.resize(0, nlevels - 1);
@@ -564,9 +564,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim>
+  template <int dim, typename MemorySpace>
   void
-  LaplaceProblem<dim>::assemble_rhs()
+  LaplaceProblem<dim, MemorySpace>::assemble_rhs()
   {
     TimerOutput::Scope t(timer, "assemble rhs");
 
@@ -645,9 +645,10 @@ namespace Heat_Transfer
 
 
 
-  template <int dim>
+  template <int dim, typename MemorySpace>
   void
-  LaplaceProblem<dim>::apply_boundary_condition(const bool initialize)
+  LaplaceProblem<dim, MemorySpace>::apply_boundary_condition(
+    const bool initialize)
   {
     // Update the constraints object
     constraints.clear();
@@ -698,9 +699,9 @@ namespace Heat_Transfer
   }
 
 
-  template <int dim>
+  template <int dim, typename MemorySpace>
   void
-  LaplaceProblem<dim>::solve()
+  LaplaceProblem<dim, MemorySpace>::solve()
   {
     TimerOutput::Scope t(timer, "solve system");
 
@@ -742,9 +743,10 @@ namespace Heat_Transfer
   }
 
 
-  template <int dim>
+  template <int dim, typename MemorySpace>
   void
-  LaplaceProblem<dim>::solve_gmg_preconditioner(SolverControl &solver_control)
+  LaplaceProblem<dim, MemorySpace>::solve_gmg_preconditioner(
+    SolverControl &solver_control)
   {
     MGTransferMatrixFree<dim, float> mg_transfer(mg_constrained_dofs);
     mg_transfer.build(dof_handler);
@@ -800,9 +802,9 @@ namespace Heat_Transfer
   }
 
 
-  template <int dim>
+  template <int dim, typename MemorySpace>
   double
-  LaplaceProblem<dim>::compute_error(
+  LaplaceProblem<dim, MemorySpace>::compute_error(
     const Function<dim> &                             function,
     const LinearAlgebra::distributed::Vector<double> &solution) const
   {
@@ -837,9 +839,10 @@ namespace Heat_Transfer
 
 
 
-  template <int dim>
+  template <int dim, typename MemorySpace>
   void
-  LaplaceProblem<dim>::output_results(const unsigned int result_number) const
+  LaplaceProblem<dim, MemorySpace>::output_results(
+    const unsigned int result_number) const
   {
     TimerOutput::Scope t(timer, "output");
 
@@ -883,9 +886,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim>
+  template <int dim, typename MemorySpace>
   void
-  LaplaceProblem<dim>::evaluate_boundary_flux()
+  LaplaceProblem<dim, MemorySpace>::evaluate_boundary_flux()
   {
     VectorType &residual = system_rhs;
     // 1. Compute the residual
@@ -928,9 +931,9 @@ namespace Heat_Transfer
   }
 
 
-  template <int dim>
+  template <int dim, typename MemorySpace>
   void
-  LaplaceProblem<dim>::run(
+  LaplaceProblem<dim, MemorySpace>::run(
     std::shared_ptr<TestCases::TestCaseBase<dim>> testcase_)
   {
     testcase = testcase_;
