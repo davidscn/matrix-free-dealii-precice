@@ -69,7 +69,9 @@ CONFIGURE_FILE(${CMAKE_SOURCE_DIR}/src/version.cc.in
 PROJECT(${TARGET} LANGUAGES CXX)
 
 # This project requires c++17
-IF(NOT ${DEAL_II_WITH_CXX17} AND NOT ${DEAL_II_WITH_CUDA})
+# Even though we have DEAL_II_WITH_CUDA we will set the CXX flag to c++17
+# otherwise we will get warnings
+IF(NOT ${DEAL_II_WITH_CXX17})
     SET(CMAKE_CXX_STANDARD 17)
     SET(CMAKE_CXX_EXTENSIONS OFF)
     SET(CMAKE_CXX_STANDARD_REQUIRED ON)

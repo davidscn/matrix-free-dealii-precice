@@ -35,7 +35,7 @@ main(int argc, char *argv[])
         {
           // query the testcase
           TestCases::CaseSelector<2> selector;
-          auto testcase = selector.get_test_case(case_name, "heat_transfer");
+          auto testcase = selector.get_heat_transfer_test_case(case_name);
           Parameters::HeatParameters<2> parameters(parameter_filename);
           LaplaceProblem<2>             laplace_problem(parameters);
           laplace_problem.run(testcase);
@@ -44,7 +44,7 @@ main(int argc, char *argv[])
         {
           // query the testcase
           TestCases::CaseSelector<3> selector;
-          auto testcase = selector.get_test_case(case_name, "heat_transfer");
+          auto testcase = selector.get_heat_transfer_test_case(case_name);
           Parameters::HeatParameters<3> parameters(parameter_filename);
           LaplaceProblem<3>             laplace_problem(parameters);
           laplace_problem.run(testcase);
