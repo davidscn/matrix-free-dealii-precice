@@ -71,8 +71,8 @@
         from="Neumann"
         to="Dirichlet"
         initialize="true" />
-      <absolute-convergence-measure data="Heat-Flux" mesh="Dirichlet-write" limit="1e-10" />
-      <absolute-convergence-measure data="Temperature" mesh="Neumann-write" limit="1e-10" />
+      <absolute-convergence-measure data="Heat-Flux" mesh="Dirichlet-write" limit="1e-8" />
+      <absolute-convergence-measure data="Temperature" mesh="Neumann-write" limit="1e-8" />
       <acceleration:aitken>
         <data mesh="Neumann-write" name="Temperature" />
         <initial-relaxation value="0.5" />

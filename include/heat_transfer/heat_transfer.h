@@ -92,6 +92,9 @@ namespace Heat_Transfer
     using VectorType      = LinearAlgebra::distributed::Vector<double>;
     using LevelVectorType = LinearAlgebra::distributed::Vector<float>;
 
+    using DeviceVector =
+      LinearAlgebra::distributed::Vector<double, ::dealii::MemorySpace::CUDA>;
+
     LaplaceProblem(const Parameters::HeatParameters<dim> &parameters);
     void
     run(std::shared_ptr<TestCases::TestCaseBase<dim>> testcase_);
@@ -184,13 +187,15 @@ namespace Heat_Transfer
       Adapter::Adapter<dim, 1, VectorType, VectorizedArray<double>>>
       precice_adapter;
 
+    std::unique_ptr<CUDALaplaceOperator<dim, double>> cuda_operator;
+
     ConditionalOStream  pcout;
     mutable TimerOutput timer;
     unsigned long int   total_n_cg_iterations;
     unsigned int        total_n_cg_solve;
 
     // Valid options are none, jacobi and gmg
-    std::string preconditioner_type = "gmg";
+    std::string preconditioner_type = "none";
 
     Time time;
   };
@@ -292,6 +297,10 @@ namespace Heat_Transfer
       system_matrix.initialize(system_mf_storage);
       system_matrix.evaluate_coefficient(Coefficient<dim>());
       system_matrix.set_delta_t(time.get_delta_t());
+
+      cuda_operator.reset(new CUDALaplaceOperator<dim, double>());
+      cuda_operator->initialize(dof_handler, constraints);
+      cuda_operator->set_delta_t(time.get_delta_t());
 
       // ... the second matrix-free operator for inhomogenous BCs
       AffineConstraints<double> no_constraints;
@@ -536,11 +545,23 @@ namespace Heat_Transfer
       }
     else if (preconditioner_type == "none")
       {
-        SolverCG<VectorType> cg(solver_control);
-        cg.solve(system_matrix,
-                 solution_update,
-                 system_rhs,
-                 PreconditionIdentity());
+        SolverCG<DeviceVector> cg(solver_control);
+        DeviceVector           update, rhs;
+        cuda_operator->initialize_dof_vector(update);
+        cuda_operator->initialize_dof_vector(rhs);
+        update = 0;
+
+        LinearAlgebra::ReadWriteVector<double> rw_vector(
+          dof_handler.locally_owned_dofs());
+        constraints.set_zero(system_rhs);
+
+        rw_vector.import(system_rhs, VectorOperation::insert);
+        rhs.import(rw_vector, VectorOperation::insert);
+
+        cg.solve(*cuda_operator.get(), update, rhs, PreconditionIdentity());
+
+        rw_vector.import(update, VectorOperation::insert);
+        solution_update.import(rw_vector, VectorOperation::insert);
       }
     else if (preconditioner_type == "gmg")
       {
