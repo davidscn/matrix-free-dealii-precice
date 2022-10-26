@@ -474,7 +474,8 @@ namespace Heat_Transfer
            update_normal_vectors | update_quadrature_points);
       else
         additional_data.mapping_update_flags_boundary_faces =
-          (update_values | update_JxW_values | update_quadrature_points);
+          (update_values | update_gradients | update_JxW_values |
+           update_quadrature_points);
 
       system_mf_storage->reinit(
         mapping, dof_handler, constraints, quadrature_1d, additional_data);

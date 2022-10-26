@@ -222,18 +222,29 @@ namespace Adapter
   void
   QuadInterface<dim, data_dim, VectorizedArrayType>::write_data_factory(
     const LinearAlgebra::distributed::Vector<double> &data_vector,
-    const EvaluationFlags::EvaluationFlags            flags,
+    EvaluationFlags::EvaluationFlags                  flags,
     const std::function<value_type(FEFaceIntegrator &, unsigned int)>
       &get_write_value)
   {
     Assert(this->write_data_id != -1, ExcNotInitialized());
     Assert(interface_is_defined, ExcNotInitialized());
+
+    // Check requirement for gradient data
+    const bool requiresGradients =
+      this->precice->isGradientDataRequired(this->write_data_id);
+
+    if (requiresGradients)
+      flags = flags | EvaluationFlags::gradients;
+
     // Similar as in define_coupling_mesh
     FEFaceIntegrator phi(*this->mf_data, true, mf_dof_index, mf_quad_index);
 
     // In order to unroll the vectorization
     std::array<double, data_dim * VectorizedArrayType::size()>
       unrolled_local_data;
+    std::array<double, dim * data_dim * VectorizedArrayType::size()>
+      unrolled_local_gradient;
+
     (void)unrolled_local_data;
 
     auto index = interface_nodes_ids.begin();
@@ -257,7 +268,7 @@ namespace Adapter
         const int active_faces =
           this->mf_data->n_active_entries_per_face_batch(face);
 
-        for (unsigned int q = 0; q < phi.n_q_points; ++q)
+        for (unsigned int q = 0; q < phi.n_q_points; ++q, ++index)
           {
             const auto local_data = get_write_value(phi, q);
             Assert(index != interface_nodes_ids.end(), ExcInternalError());
@@ -276,6 +287,29 @@ namespace Adapter
                                                     active_faces,
                                                     index->data(),
                                                     unrolled_local_data.data());
+
+                if (requiresGradients)
+                  {
+                    // Vectorized rank 2 tensor
+                    const auto gradient = phi.get_gradient(q);
+
+                    // Transform Tensor<2,dim,VectorizedArrayType> into preCICE
+                    // conform format
+                    for (int dir = 0; dir < dim; ++dir)
+                      for (int comp = 0; comp < dim; ++comp)
+                        for (unsigned int v = 0;
+                             v < VectorizedArrayType::size();
+                             ++v)
+                          unrolled_local_gradient[dir + comp * dim +
+                                                  dim * dim * v] =
+                            gradient[comp][dir][v];
+
+                    this->precice->writeBlockVectorGradientData(
+                      this->write_data_id,
+                      active_faces,
+                      index->data(),
+                      unrolled_local_gradient.begin());
+                  }
               }
             else
               {
@@ -283,8 +317,25 @@ namespace Adapter
                                                     active_faces,
                                                     index->data(),
                                                     &local_data[0]);
+                if (requiresGradients)
+                  {
+                    // Vectorized rank 1 tensor
+                    const auto gradient = phi.get_gradient(q);
+
+                    // Transform Tensor<1,dim,VectorizedArrayType> into preCICE
+                    // conform format
+                    for (int d = 0; d < dim; ++d)
+                      for (unsigned int v = 0; v < VectorizedArrayType::size();
+                           ++v)
+                        unrolled_local_gradient[d + dim * v] = gradient[d][v];
+
+                    this->precice->writeBlockScalarGradientData(
+                      this->write_data_id,
+                      active_faces,
+                      index->data(),
+                      unrolled_local_gradient.begin());
+                  }
               }
-            ++index;
           }
       }
   }
