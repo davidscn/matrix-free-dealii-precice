@@ -73,7 +73,7 @@ namespace Heat_Transfer
   }
   template <int dim>
   double
-  Coefficient<dim>::value(const Point<dim> & p,
+  Coefficient<dim>::value(const Point<dim>  &p,
                           const unsigned int component) const
   {
     return value<double>(p, component);
@@ -142,7 +142,7 @@ namespace Heat_Transfer
      */
     double
     compute_error(
-      const Function<dim> &                             function,
+      const Function<dim>                              &function,
       const LinearAlgebra::distributed::Vector<double> &solution) const;
     /**
      * @brief output_results Output the generated results.
@@ -187,7 +187,7 @@ namespace Heat_Transfer
       Adapter::Adapter<dim, 1, VectorType, VectorizedArray<double>>>
       precice_adapter;
 
-    std::unique_ptr<CUDALaplaceOperator<dim, double>> cuda_operator;
+    std::unique_ptr<CUDALaplaceOperator<dim, 1, double>> cuda_operator;
 
     ConditionalOStream  pcout;
     mutable TimerOutput timer;
@@ -298,7 +298,7 @@ namespace Heat_Transfer
       system_matrix.evaluate_coefficient(Coefficient<dim>());
       system_matrix.set_delta_t(time.get_delta_t());
 
-      cuda_operator.reset(new CUDALaplaceOperator<dim, double>());
+      cuda_operator.reset(new CUDALaplaceOperator<dim, 1, double>());
       cuda_operator->initialize(dof_handler, constraints);
       cuda_operator->set_delta_t(time.get_delta_t());
 
@@ -643,7 +643,7 @@ namespace Heat_Transfer
   template <int dim, typename MemorySpace>
   double
   LaplaceProblem<dim, MemorySpace>::compute_error(
-    const Function<dim> &                             function,
+    const Function<dim>                              &function,
     const LinearAlgebra::distributed::Vector<double> &solution) const
   {
     TimerOutput::Scope t(timer, "compute errors");
