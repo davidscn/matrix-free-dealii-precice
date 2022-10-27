@@ -345,9 +345,9 @@ namespace Heat_Transfer
     }
 
     if constexpr (use_cuda)
-        inhomogeneous_operator.initialize_dof_vector(solution);
+      inhomogeneous_operator.initialize_dof_vector(solution);
     else
-        system_matrix.initialize_dof_vector(solution);
+      system_matrix.initialize_dof_vector(solution);
 
     solution_old.reinit(solution);
     solution_update.reinit(solution);
