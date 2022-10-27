@@ -105,9 +105,9 @@ namespace Heat_Transfer
     operator()(
       const unsigned int                                          cell,
       const typename CUDAWrappers::MatrixFree<dim, number>::Data *gpu_data,
-      CUDAWrappers::SharedData<dim, number>                      *shared_data,
-      const double                                               *src,
-      double                                                     *dst) const;
+      CUDAWrappers::SharedData<dim, number> *                     shared_data,
+      const double *                                              src,
+      double *                                                    dst) const;
 
     static const unsigned int n_dofs_1d    = fe_degree + 1;
     static const unsigned int n_local_dofs = Utilities::pow(fe_degree + 1, dim);
@@ -124,9 +124,9 @@ namespace Heat_Transfer
   LocalLaplaceOperator<dim, fe_degree, number>::operator()(
     const unsigned int                                          cell,
     const typename CUDAWrappers::MatrixFree<dim, number>::Data *gpu_data,
-    CUDAWrappers::SharedData<dim, number>                      *shared_data,
-    const double                                               *src,
-    double                                                     *dst) const
+    CUDAWrappers::SharedData<dim, number> *                     shared_data,
+    const double *                                              src,
+    double *                                                    dst) const
   {
     const unsigned int pos = CUDAWrappers::local_q_point_id<dim, number>(
       cell, gpu_data, n_dofs_1d, n_q_points);
@@ -153,7 +153,7 @@ namespace Heat_Transfer
 
     // and initialize the coefficient
     void
-    initialize(const DoFHandler<dim>     &dof_handler,
+    initialize(const DoFHandler<dim> &    dof_handler,
                AffineConstraints<double> &constraints);
 
     void
@@ -176,7 +176,7 @@ namespace Heat_Transfer
   template <int dim, int fe_degree, typename number>
   void
   CUDALaplaceOperator<dim, fe_degree, number>::initialize(
-    const DoFHandler<dim>     &dof_handler,
+    const DoFHandler<dim> &    dof_handler,
     AffineConstraints<double> &constraints)
   {
     MappingQ<dim> mapping(fe_degree);
@@ -214,7 +214,7 @@ namespace Heat_Transfer
   template <int dim, int fe_degree, typename number>
   void
   CUDALaplaceOperator<dim, fe_degree, number>::vmult(
-    VectorType       &dst,
+    VectorType &      dst,
     const VectorType &src) const
   {
     dst = 0.;

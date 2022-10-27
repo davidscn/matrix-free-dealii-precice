@@ -142,7 +142,7 @@ namespace Heat_Transfer
      */
     double
     compute_error(
-      const Function<dim>                              &function,
+      const Function<dim> &                             function,
       const LinearAlgebra::distributed::Vector<double> &solution) const;
     /**
      * @brief output_results Output the generated results.
@@ -310,7 +310,6 @@ namespace Heat_Transfer
       matrix_free->reinit(
         mapping, dof_handler, no_constraints, quadrature_1d, additional_data);
       inhomogeneous_operator.initialize(matrix_free);
-
 
       inhomogeneous_operator.evaluate_coefficient(Coefficient<dim>());
       inhomogeneous_operator.set_delta_t(time.get_delta_t());
@@ -637,13 +636,15 @@ namespace Heat_Transfer
 
     SolverCG<VectorType> cg(solver_control);
     cg.solve(system_matrix, solution_update, system_rhs, preconditioner);
+
+    return solver_control.last_step();
   }
 
 
   template <int dim, typename MemorySpace>
   double
   LaplaceProblem<dim, MemorySpace>::compute_error(
-    const Function<dim>                              &function,
+    const Function<dim> &                             function,
     const LinearAlgebra::distributed::Vector<double> &solution) const
   {
     TimerOutput::Scope t(timer, "compute errors");
