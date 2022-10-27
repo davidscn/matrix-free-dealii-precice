@@ -153,7 +153,7 @@ namespace Heat_Transfer
 
     // and initialize the coefficient
     void
-    initialize();
+    initialize(std::shared_ptr<CUDAWrappers::MatrixFree<dim, number>> data);
 
     void
     evaluate_coefficient();
@@ -167,18 +167,29 @@ namespace Heat_Transfer
     void
     initialize_dof_vector(VectorType &vec) const;
 
+    void
+    clear();
+
   private:
-    CUDAWrappers::MatrixFree<dim, number>       mf_data;
-    LinearAlgebra::CUDAWrappers::Vector<number> coef;
-    double                                      delta_t;
+    std::shared_ptr<CUDAWrappers::MatrixFree<dim, number>> mf_data;
+    LinearAlgebra::CUDAWrappers::Vector<number>            coef;
+    double                                                 delta_t;
   };
 
 
 
   template <int dim, int fe_degree, typename number>
   void
-  CUDALaplaceOperator<dim, fe_degree, number>::initialize()
-  {}
+  CUDALaplaceOperator<dim, fe_degree, number>::initialize(
+    std::shared_ptr<CUDAWrappers::MatrixFree<dim, number>> data)
+  {
+    mf_data = data;
+
+    AssertThrow(
+      fe_degree == mf_data->get_dof_handler().get_fe().degree,
+      ExcMessage(
+        "The configured degree was not compiled into the cuda laplace operator."));
+  }
 
 
 
@@ -188,13 +199,13 @@ namespace Heat_Transfer
   {
     const unsigned int n_owned_cells =
       dynamic_cast<const parallel::TriangulationBase<dim> *>(
-        &dof_handler.get_triangulation())
+        &(mf_data->get_dof_handler().get_triangulation()))
         ->n_locally_owned_active_cells();
     coef.reinit(Utilities::pow(fe_degree + 1, dim) * n_owned_cells);
 
     const VaryingCoefficientFunctor<dim, fe_degree, number> functor(
       coef.get_values());
-    mf_data.evaluate_coefficients(functor);
+    mf_data->evaluate_coefficients(functor);
   }
 
   template <int dim, int fe_degree, typename number>
@@ -214,10 +225,10 @@ namespace Heat_Transfer
     dst = 0.;
     LocalLaplaceOperator<dim, fe_degree, number> local_operator(
       coef.get_values(), delta_t);
-    mf_data.cell_loop(local_operator, src, dst);
+    mf_data->cell_loop(local_operator, src, dst);
     // We handle here only homogeneous constraints, so the copy here can
     // probably ne omitted
-    mf_data.copy_constrained_values(src, dst);
+    mf_data->copy_constrained_values(src, dst);
   }
 
 
@@ -226,7 +237,16 @@ namespace Heat_Transfer
   CUDALaplaceOperator<dim, fe_degree, number>::initialize_dof_vector(
     VectorType &vec) const
   {
-    mf_data.initialize_dof_vector(vec);
+    mf_data->initialize_dof_vector(vec);
+  }
+
+
+  template <int dim, int fe_degree, typename number>
+  void
+  CUDALaplaceOperator<dim, fe_degree, number>::clear()
+  {
+    coef = 0;
+    mf_data.reset();
   }
 } // namespace Heat_Transfer
 

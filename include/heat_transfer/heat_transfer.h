@@ -295,34 +295,36 @@ namespace Heat_Transfer
 
       // Set up two matrix-free objects: one for the homogenous part and one for
       // the inhomogenous part (without any constraints)
+      typename MatrixFree<dim, double>::AdditionalData additional_data_cpu;
+      additional_data_cpu.tasks_parallel_scheme =
+        MatrixFree<dim, double>::AdditionalData::none;
+      additional_data_cpu.mapping_update_flags =
+        (update_values | update_gradients | update_JxW_values |
+         update_quadrature_points);
+
+      // FIXME: The boundary face flag is only for the RHS assembly required in
+      // order to apply the coupling data. Here, only the second MatrixFree
+      // object is required. In order to ensure compatibility of the global
+      // vectors, we initialize both MatrixFree objects with the same
+      // AdditionalData
+      // For Dirichlet: write gradients (maybe normal gradients)
+      // For Neumann: write values and integrate them during assembly
+      // In both cases: define interface using FEEvaluation::quadrature_point()
+      if (testcase->is_dirichlet)
+        additional_data_cpu.mapping_update_flags_boundary_faces =
+          (update_values | update_JxW_values | update_gradients |
+           update_normal_vectors | update_quadrature_points);
+      else
+        additional_data_cpu.mapping_update_flags_boundary_faces =
+          (update_values | update_JxW_values | update_quadrature_points);
+
+
       typename MatrixFreeStorage::AdditionalData additional_data;
 
       additional_data.mapping_update_flags =
-        (update_values | update_gradients | update_JxW_values |
-         update_quadrature_points);
+        additional_data_cpu.mapping_update_flags;
       std::shared_ptr<MatrixFreeStorage> system_mf_storage(
         new MatrixFreeStorage);
-
-      if constexpr (!use_cuda)
-        {
-          additional_data.tasks_parallel_scheme =
-            MatrixFreeStorage::AdditionalData::none;
-          // FIXME: The boundary face flag is only for the RHS assembly required
-          // in order to apply the coupling data. Here, only the second
-          // MatrixFree object is required. In order to ensure compatibility of
-          // the global vectors, we initialize both MatrixFree objects with the
-          // same AdditionalData For Dirichlet: write gradients (maybe normal
-          // gradients) For Neumann: write values and integrate them during
-          // assembly In both cases: define interface using
-          // FEEvaluation::quadrature_point()
-          if (testcase->is_dirichlet)
-            additional_data.mapping_update_flags_boundary_faces =
-              (update_values | update_JxW_values | update_gradients |
-               update_normal_vectors | update_quadrature_points);
-          else
-            additional_data.mapping_update_flags_boundary_faces =
-              (update_values | update_JxW_values | update_quadrature_points);
-        }
 
       system_mf_storage->reinit(
         mapping, dof_handler, constraints, quadrature_1d, additional_data);
@@ -336,8 +338,11 @@ namespace Heat_Transfer
       no_constraints.close();
       std::shared_ptr<MatrixFree<dim, double>> matrix_free(
         new MatrixFree<dim, double>());
-      matrix_free->reinit(
-        mapping, dof_handler, no_constraints, quadrature_1d, additional_data);
+      matrix_free->reinit(mapping,
+                          dof_handler,
+                          no_constraints,
+                          quadrature_1d,
+                          additional_data_cpu);
 
       inhomogeneous_operator.initialize(matrix_free);
       inhomogeneous_operator.evaluate_coefficient();
