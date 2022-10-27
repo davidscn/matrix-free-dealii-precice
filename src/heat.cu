@@ -65,7 +65,7 @@ main(int argc, char *argv[])
           TestCases::CaseSelector<2> selector;
           auto testcase = selector.get_heat_transfer_test_case(case_name);
           Parameters::HeatParameters<2> parameters(parameter_filename);
-          LaplaceProblem<2>             laplace_problem(parameters);
+          LaplaceProblem<2, true>       laplace_problem(parameters);
           laplace_problem.run(testcase);
         }
       else if (dim == 3)
@@ -74,7 +74,7 @@ main(int argc, char *argv[])
           TestCases::CaseSelector<3> selector;
           auto testcase = selector.get_heat_transfer_test_case(case_name);
           Parameters::HeatParameters<3> parameters(parameter_filename);
-          LaplaceProblem<3>             laplace_problem(parameters);
+          LaplaceProblem<3, true>       laplace_problem(parameters);
           laplace_problem.run(testcase);
         }
       else

@@ -80,6 +80,7 @@ namespace Heat_Transfer
   }
 
   // Forward declarations in case we don't have any CUDA support
+#ifndef DEAL_II_COMPILER_CUDA_AWARE
   template <int dim, int fe_degree, typename number>
   class CUDALaplaceOperator;
 
@@ -88,13 +89,12 @@ namespace Heat_Transfer
     template <int dim, typename number>
     class MatrixFree;
   }
+#endif
 
-  template <int dim, typename MemorySpace = MemorySpace::Host>
+  template <int dim, bool use_cuda = false>
   class LaplaceProblem
   {
   public:
-    static constexpr bool use_cuda =
-      std::is_same<MemorySpace, ::dealii::MemorySpace::CUDA>::value;
     using FECellIntegrator =
       typename LaplaceOperator<dim, double>::FECellIntegrator;
     using FEFaceIntegrator =
@@ -227,8 +227,8 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, typename MemorySpace>
-  LaplaceProblem<dim, MemorySpace>::LaplaceProblem(
+  template <int dim, bool use_cuda>
+  LaplaceProblem<dim, use_cuda>::LaplaceProblem(
     const Parameters::HeatParameters<dim> &parameters)
     : parameters(parameters)
     , triangulation(MPI_COMM_WORLD,
@@ -253,9 +253,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, typename MemorySpace>
+  template <int dim, bool use_cuda>
   void
-  LaplaceProblem<dim, MemorySpace>::make_grid()
+  LaplaceProblem<dim, use_cuda>::make_grid()
   {
     Assert(testcase.get() != nullptr, ExcInternalError());
     testcase->make_coarse_grid_and_bcs(triangulation);
@@ -264,9 +264,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, typename MemorySpace>
+  template <int dim, bool use_cuda>
   void
-  LaplaceProblem<dim, MemorySpace>::setup_system()
+  LaplaceProblem<dim, use_cuda>::setup_system()
   {
     system_matrix.clear();
     dof_handler.distribute_dofs(fe);
@@ -364,9 +364,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, typename MemorySpace>
+  template <int dim, bool use_cuda>
   void
-  LaplaceProblem<dim, MemorySpace>::setup_gmg()
+  LaplaceProblem<dim, use_cuda>::setup_gmg()
   {
     mg_matrices.clear_elements();
     dof_handler.distribute_mg_dofs();
@@ -431,9 +431,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, typename MemorySpace>
+  template <int dim, bool use_cuda>
   void
-  LaplaceProblem<dim, MemorySpace>::assemble_rhs()
+  LaplaceProblem<dim, use_cuda>::assemble_rhs()
   {
     TimerOutput::Scope t(timer, "assemble rhs");
 
@@ -512,10 +512,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, typename MemorySpace>
+  template <int dim, bool use_cuda>
   void
-  LaplaceProblem<dim, MemorySpace>::apply_boundary_condition(
-    const bool initialize)
+  LaplaceProblem<dim, use_cuda>::apply_boundary_condition(const bool initialize)
   {
     // Update the constraints object
     constraints.clear();
@@ -567,9 +566,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, typename MemorySpace>
+  template <int dim, bool use_cuda>
   unsigned int
-  LaplaceProblem<dim, MemorySpace>::cpu_solve()
+  LaplaceProblem<dim, use_cuda>::cpu_solve()
   {
     unsigned int n_iterations = 0;
 
@@ -610,9 +609,9 @@ namespace Heat_Transfer
 
   // The code here is not compiled in case we don't have GPU support due to the
   // constexpr below
-  template <int dim, typename MemorySpace>
+  template <int dim, bool use_cuda>
   unsigned int
-  LaplaceProblem<dim, MemorySpace>::cuda_solve()
+  LaplaceProblem<dim, use_cuda>::cuda_solve()
   {
     unsigned int n_iterations = 0;
     if (preconditioner_type == "none")
@@ -653,9 +652,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, typename MemorySpace>
+  template <int dim, bool use_cuda>
   void
-  LaplaceProblem<dim, MemorySpace>::solve()
+  LaplaceProblem<dim, use_cuda>::solve()
   {
     TimerOutput::Scope t(timer, "solve system");
 
@@ -674,9 +673,9 @@ namespace Heat_Transfer
   }
 
 
-  template <int dim, typename MemorySpace>
+  template <int dim, bool use_cuda>
   unsigned int
-  LaplaceProblem<dim, MemorySpace>::solve_gmg_preconditioner()
+  LaplaceProblem<dim, use_cuda>::solve_gmg_preconditioner()
   {
     SolverControl solver_control(100, 1e-12 * system_rhs.l2_norm());
 
@@ -736,9 +735,9 @@ namespace Heat_Transfer
   }
 
 
-  template <int dim, typename MemorySpace>
+  template <int dim, bool use_cuda>
   double
-  LaplaceProblem<dim, MemorySpace>::compute_error(
+  LaplaceProblem<dim, use_cuda>::compute_error(
     const Function<dim> &                             function,
     const LinearAlgebra::distributed::Vector<double> &solution) const
   {
@@ -773,9 +772,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, typename MemorySpace>
+  template <int dim, bool use_cuda>
   void
-  LaplaceProblem<dim, MemorySpace>::output_results(
+  LaplaceProblem<dim, use_cuda>::output_results(
     const unsigned int result_number) const
   {
     TimerOutput::Scope t(timer, "output");
@@ -820,9 +819,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim, typename MemorySpace>
+  template <int dim, bool use_cuda>
   void
-  LaplaceProblem<dim, MemorySpace>::evaluate_boundary_flux()
+  LaplaceProblem<dim, use_cuda>::evaluate_boundary_flux()
   {
     VectorType &residual = system_rhs;
     // 1. Compute the residual
@@ -865,9 +864,9 @@ namespace Heat_Transfer
   }
 
 
-  template <int dim, typename MemorySpace>
+  template <int dim, bool use_cuda>
   void
-  LaplaceProblem<dim, MemorySpace>::run(
+  LaplaceProblem<dim, use_cuda>::run(
     std::shared_ptr<TestCases::TestCaseBase<dim>> testcase_)
   {
     testcase = testcase_;
