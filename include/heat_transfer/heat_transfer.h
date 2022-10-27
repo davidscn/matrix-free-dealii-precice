@@ -79,14 +79,22 @@ namespace Heat_Transfer
     return value<double>(p, component);
   }
 
-  // Forward declaration in case we don't have any CUDA support
+  // Forward declarations in case we don't have any CUDA support
   template <int dim, int fe_degree, typename number>
   class CUDALaplaceOperator;
+
+  namespace CUDAWrappers
+  {
+    template <int dim, typename number>
+    class MatrixFree;
+  }
 
   template <int dim, typename MemorySpace = MemorySpace::Host>
   class LaplaceProblem
   {
   public:
+    static constexpr bool use_cuda =
+      std::is_same<MemorySpace, ::dealii::MemorySpace::CUDA>::value;
     using FECellIntegrator =
       typename LaplaceOperator<dim, double>::FECellIntegrator;
     using FEFaceIntegrator =
@@ -99,10 +107,8 @@ namespace Heat_Transfer
     using CPUSystemMatrixType  = LaplaceOperator<dim, double>;
     using CUDASystemMatrixType = CUDALaplaceOperator<dim, 1, double>;
 
-    using SystemMatrixType = std::conditional_t<
-      std::is_same<MemorySpace, ::dealii::MemorySpace::Host>::value,
-      CPUSystemMatrixType,
-      CUDASystemMatrixType>;
+    using SystemMatrixType =
+      std::conditional_t<use_cuda, CUDASystemMatrixType, CPUSystemMatrixType>;
 
     using DeviceVector =
       LinearAlgebra::distributed::Vector<double, ::dealii::MemorySpace::CUDA>;
@@ -282,41 +288,48 @@ namespace Heat_Transfer
     // interface
     apply_boundary_condition(true);
     {
+      using MatrixFreeStorage =
+        std::conditional_t<use_cuda,
+                           CUDAWrappers::MatrixFree<dim, double>,
+                           MatrixFree<dim, double>>;
+
       // Set up two matrix-free objects: one for the homogenous part and one for
       // the inhomogenous part (without any constraints)
-      typename MatrixFree<dim, double>::AdditionalData additional_data;
-      additional_data.tasks_parallel_scheme =
-        MatrixFree<dim, double>::AdditionalData::none;
+      typename MatrixFreeStorage::AdditionalData additional_data;
+
       additional_data.mapping_update_flags =
         (update_values | update_gradients | update_JxW_values |
          update_quadrature_points);
-      std::shared_ptr<MatrixFree<dim, double>> system_mf_storage(
-        new MatrixFree<dim, double>());
-      // FIXME: The boundary face flag is only for the RHS assembly required in
-      // order to apply the coupling data. Here, only the second MatrixFree
-      // object is required. In order to ensure compatibility of the global
-      // vectors, we initialize both MatrixFree objects with the same
-      // AdditionalData
-      // For Dirichlet: write gradients (maybe normal gradients)
-      // For Neumann: write values and integrate them during assembly
-      // In both cases: define interface using FEEvaluation::quadrature_point()
-      if (testcase->is_dirichlet)
-        additional_data.mapping_update_flags_boundary_faces =
-          (update_values | update_JxW_values | update_gradients |
-           update_normal_vectors | update_quadrature_points);
-      else
-        additional_data.mapping_update_flags_boundary_faces =
-          (update_values | update_JxW_values | update_quadrature_points);
+      std::shared_ptr<MatrixFreeStorage> system_mf_storage(
+        new MatrixFreeStorage);
+
+      if constexpr (!use_cuda)
+        {
+          additional_data.tasks_parallel_scheme =
+            MatrixFreeStorage::AdditionalData::none;
+          // FIXME: The boundary face flag is only for the RHS assembly required
+          // in order to apply the coupling data. Here, only the second
+          // MatrixFree object is required. In order to ensure compatibility of
+          // the global vectors, we initialize both MatrixFree objects with the
+          // same AdditionalData For Dirichlet: write gradients (maybe normal
+          // gradients) For Neumann: write values and integrate them during
+          // assembly In both cases: define interface using
+          // FEEvaluation::quadrature_point()
+          if (testcase->is_dirichlet)
+            additional_data.mapping_update_flags_boundary_faces =
+              (update_values | update_JxW_values | update_gradients |
+               update_normal_vectors | update_quadrature_points);
+          else
+            additional_data.mapping_update_flags_boundary_faces =
+              (update_values | update_JxW_values | update_quadrature_points);
+        }
 
       system_mf_storage->reinit(
         mapping, dof_handler, constraints, quadrature_1d, additional_data);
-      system_matrix.initialize(system_mf_storage);
-      system_matrix.evaluate_coefficient(Coefficient<dim>());
-      system_matrix.set_delta_t(time.get_delta_t());
 
-      cuda_operator.reset(new CUDALaplaceOperator<dim, 1, double>());
-      cuda_operator->initialize(dof_handler, constraints);
-      cuda_operator->set_delta_t(time.get_delta_t());
+      system_matrix.initialize(system_mf_storage);
+      system_matrix.evaluate_coefficient();
+      system_matrix.set_delta_t(time.get_delta_t());
 
       // ... the second matrix-free operator for inhomogenous BCs
       AffineConstraints<double> no_constraints;
@@ -325,15 +338,20 @@ namespace Heat_Transfer
         new MatrixFree<dim, double>());
       matrix_free->reinit(
         mapping, dof_handler, no_constraints, quadrature_1d, additional_data);
-      inhomogeneous_operator.initialize(matrix_free);
 
-      inhomogeneous_operator.evaluate_coefficient(Coefficient<dim>());
+      inhomogeneous_operator.initialize(matrix_free);
+      inhomogeneous_operator.evaluate_coefficient();
       inhomogeneous_operator.set_delta_t(time.get_delta_t());
     }
-    system_matrix.initialize_dof_vector(solution);
-    system_matrix.initialize_dof_vector(solution_old);
-    system_matrix.initialize_dof_vector(solution_update);
-    system_matrix.initialize_dof_vector(system_rhs);
+
+    if constexpr (use_cuda)
+        inhomogeneous_operator.initialize_dof_vector(solution);
+    else
+        system_matrix.initialize_dof_vector(solution);
+
+    solution_old.reinit(solution);
+    solution_update.reinit(solution);
+    system_rhs.reinit(solution);
 
     if (preconditioner_type == "gmg")
       setup_gmg();
@@ -401,7 +419,7 @@ namespace Heat_Transfer
         mg_matrices[level].initialize(mg_mf_storage_level,
                                       mg_constrained_dofs,
                                       level);
-        mg_matrices[level].evaluate_coefficient(Coefficient<dim>());
+        mg_matrices[level].evaluate_coefficient();
         mg_matrices[level].set_delta_t(time.get_delta_t());
       }
   }
@@ -636,10 +654,10 @@ namespace Heat_Transfer
   {
     TimerOutput::Scope t(timer, "solve system");
 
-    if constexpr (std::is_same<MemorySpace, ::dealii::MemorySpace::Host>::value)
-      total_n_cg_iterations += cpu_solve();
-    else
+    if constexpr (use_cuda)
       total_n_cg_iterations += cuda_solve();
+    else
+      total_n_cg_iterations += cpu_solve();
 
     // More or less a safety operation, as the constraints have already been
     // enforced
@@ -864,7 +882,7 @@ namespace Heat_Transfer
       Adapter::Adapter<dim, 1, VectorType, VectorizedArray<double>>>(
       parameters,
       int(TestCases::TestCaseBase<dim>::interface_id),
-      system_matrix.get_matrix_free(),
+      inhomogeneous_operator.get_matrix_free(),
       0 /*MF dof index*/,
       0 /*MF quad index*/,
       testcase->is_dirichlet);

@@ -32,7 +32,7 @@ namespace Heat_Transfer
     clear() override;
 
     void
-    evaluate_coefficient(const Coefficient<dim> &coefficient_function);
+    evaluate_coefficient();
 
     void
     set_delta_t(const double delta_t_)
@@ -81,9 +81,9 @@ namespace Heat_Transfer
 
   template <int dim, typename number, typename MemorySpace>
   void
-  LaplaceOperator<dim, number, MemorySpace>::evaluate_coefficient(
-    const Coefficient<dim> &coefficient_function)
+  LaplaceOperator<dim, number, MemorySpace>::evaluate_coefficient()
   {
+    Coefficient<dim>   coefficient_function;
     const unsigned int n_cells = this->data->n_cell_batches();
     FECellIntegrator   phi(*this->data);
 

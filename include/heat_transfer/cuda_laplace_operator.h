@@ -153,8 +153,10 @@ namespace Heat_Transfer
 
     // and initialize the coefficient
     void
-    initialize(const DoFHandler<dim> &    dof_handler,
-               AffineConstraints<double> &constraints);
+    initialize();
+
+    void
+    evaluate_coefficient();
 
     void
     set_delta_t(double dt);
@@ -175,22 +177,15 @@ namespace Heat_Transfer
 
   template <int dim, int fe_degree, typename number>
   void
-  CUDALaplaceOperator<dim, fe_degree, number>::initialize(
-    const DoFHandler<dim> &    dof_handler,
-    AffineConstraints<double> &constraints)
+  CUDALaplaceOperator<dim, fe_degree, number>::initialize()
+  {}
+
+
+
+  template <int dim, int fe_degree, typename number>
+  void
+  CUDALaplaceOperator<dim, fe_degree, number>::evaluate_coefficient()
   {
-    MappingQ<dim> mapping(fe_degree);
-    typename CUDAWrappers::MatrixFree<dim, number>::AdditionalData
-      additional_data;
-
-    additional_data.mapping_update_flags =
-      (update_values | update_JxW_values | update_gradients |
-       update_normal_vectors | update_quadrature_points);
-
-    const QGauss<1> quad(fe_degree + 1);
-    mf_data.reinit(mapping, dof_handler, constraints, quad, additional_data);
-
-
     const unsigned int n_owned_cells =
       dynamic_cast<const parallel::TriangulationBase<dim> *>(
         &dof_handler.get_triangulation())
@@ -201,7 +196,6 @@ namespace Heat_Transfer
       coef.get_values());
     mf_data.evaluate_coefficients(functor);
   }
-
 
   template <int dim, int fe_degree, typename number>
   void
