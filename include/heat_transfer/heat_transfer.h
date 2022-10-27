@@ -73,12 +73,15 @@ namespace Heat_Transfer
   }
   template <int dim>
   double
-  Coefficient<dim>::value(const Point<dim>  &p,
+  Coefficient<dim>::value(const Point<dim> & p,
                           const unsigned int component) const
   {
     return value<double>(p, component);
   }
 
+  // Forward declaration in case we don't have any CUDA support
+  template <int dim, int fe_degree, typename number>
+  class CUDALaplaceOperator;
 
   template <int dim, typename MemorySpace = MemorySpace::Host>
   class LaplaceProblem
@@ -92,10 +95,20 @@ namespace Heat_Transfer
     using VectorType      = LinearAlgebra::distributed::Vector<double>;
     using LevelVectorType = LinearAlgebra::distributed::Vector<float>;
 
+    // TODO: Find a solution for the Fe degree
+    using CPUSystemMatrixType  = LaplaceOperator<dim, double>;
+    using CUDASystemMatrixType = CUDALaplaceOperator<dim, 1, double>;
+
+    using SystemMatrixType = std::conditional_t<
+      std::is_same<MemorySpace, ::dealii::MemorySpace::Host>::value,
+      CPUSystemMatrixType,
+      CUDASystemMatrixType>;
+
     using DeviceVector =
       LinearAlgebra::distributed::Vector<double, ::dealii::MemorySpace::CUDA>;
 
     LaplaceProblem(const Parameters::HeatParameters<dim> &parameters);
+
     void
     run(std::shared_ptr<TestCases::TestCaseBase<dim>> testcase_);
 
@@ -132,9 +145,17 @@ namespace Heat_Transfer
     void
     solve();
 
-    /// @brief solve using the gmg preconditioner
-    void
-    solve_gmg_preconditioner(SolverControl &solver_control);
+    /// @brief solve using no preconditioner and cuda, returns the number of CG iterations
+    unsigned int
+    cuda_solve();
+
+    /// @brief solve using the usual CPU options, returns the number of CG iterations
+    unsigned int
+    cpu_solve();
+
+    /// @brief solve using the gmg preconditioner (CPU), returns the number of CG iterations
+    unsigned int
+    solve_gmg_preconditioner();
 
     /**
      * @brief compute_error
@@ -169,11 +190,11 @@ namespace Heat_Transfer
     MappingQ1<dim> mapping;
 
     AffineConstraints<double> constraints;
-    using SystemMatrixType = LaplaceOperator<dim, double>;
+
     SystemMatrixType system_matrix;
     // In order to operate with the non-homogenous Dirichlet BCs
     // TODO: use one operator with different constraint objects instead
-    SystemMatrixType inhomogeneous_operator;
+    CPUSystemMatrixType inhomogeneous_operator;
 
     MGConstrainedDoFs mg_constrained_dofs;
     using LevelMatrixType = LaplaceOperator<dim, float>;
@@ -187,15 +208,13 @@ namespace Heat_Transfer
       Adapter::Adapter<dim, 1, VectorType, VectorizedArray<double>>>
       precice_adapter;
 
-    std::unique_ptr<CUDALaplaceOperator<dim, 1, double>> cuda_operator;
-
     ConditionalOStream  pcout;
     mutable TimerOutput timer;
     unsigned long int   total_n_cg_iterations;
     unsigned int        total_n_cg_solve;
 
     // Valid options are none, jacobi and gmg
-    std::string preconditioner_type = "none";
+    std::string preconditioner_type = "gmg";
 
     Time time;
   };
@@ -244,10 +263,7 @@ namespace Heat_Transfer
   LaplaceProblem<dim, MemorySpace>::setup_system()
   {
     system_matrix.clear();
-    mg_matrices.clear_elements();
-
     dof_handler.distribute_dofs(fe);
-    dof_handler.distribute_mg_dofs();
 
     std::locale s = pcout.get_stream().getloc();
     pcout.get_stream().imbue(std::locale(""));
@@ -329,6 +345,9 @@ namespace Heat_Transfer
   void
   LaplaceProblem<dim, MemorySpace>::setup_gmg()
   {
+    mg_matrices.clear_elements();
+    dof_handler.distribute_mg_dofs();
+
     const unsigned int nlevels = triangulation.n_global_levels();
     mg_matrices.resize(0, nlevels - 1);
     mg_constrained_dofs.initialize(dof_handler);
@@ -524,50 +543,103 @@ namespace Heat_Transfer
   }
 
 
-  template <int dim, typename MemorySpace>
-  void
-  LaplaceProblem<dim, MemorySpace>::solve()
-  {
-    TimerOutput::Scope t(timer, "solve system");
 
-    SolverControl solver_control(system_rhs.size(),
-                                 1e-12 * system_rhs.l2_norm());
+  template <int dim, typename MemorySpace>
+  unsigned int
+  LaplaceProblem<dim, MemorySpace>::cpu_solve()
+  {
+    unsigned int n_iterations = 0;
+
     if (preconditioner_type == "jacobi")
       {
         // FIXME: Leads currently to more iterations compared to "none"
+        SolverControl                        solver_control(system_rhs.size(),
+                                     1e-12 * system_rhs.l2_norm());
         SolverCG<VectorType>                 cg(solver_control);
         PreconditionJacobi<SystemMatrixType> preconditioner;
         double                               relaxation = .7;
         preconditioner.initialize(system_matrix, relaxation);
         system_matrix.compute_diagonal();
         cg.solve(system_matrix, solution_update, system_rhs, preconditioner);
+        n_iterations += solver_control.last_step();
       }
     else if (preconditioner_type == "none")
       {
-        SolverCG<DeviceVector> cg(solver_control);
-        DeviceVector           update, rhs;
-        cuda_operator->initialize_dof_vector(update);
-        cuda_operator->initialize_dof_vector(rhs);
-        update = 0;
-
-        LinearAlgebra::ReadWriteVector<double> rw_vector(
-          dof_handler.locally_owned_dofs());
-        constraints.set_zero(system_rhs);
-
-        rw_vector.import(system_rhs, VectorOperation::insert);
-        rhs.import(rw_vector, VectorOperation::insert);
-
-        cg.solve(*cuda_operator.get(), update, rhs, PreconditionIdentity());
-
-        rw_vector.import(update, VectorOperation::insert);
-        solution_update.import(rw_vector, VectorOperation::insert);
+        SolverControl        solver_control(system_rhs.size(),
+                                     1e-12 * system_rhs.l2_norm());
+        SolverCG<VectorType> cg(solver_control);
+        cg.solve(system_matrix,
+                 solution_update,
+                 system_rhs,
+                 PreconditionIdentity());
+        n_iterations += solver_control.last_step();
       }
     else if (preconditioner_type == "gmg")
       {
-        solve_gmg_preconditioner(solver_control);
+        n_iterations += solve_gmg_preconditioner();
       }
     else
       AssertThrow(false, ExcNotImplemented());
+
+    return n_iterations;
+  }
+
+
+  // The code here is not compiled in case we don't have GPU support due to the
+  // constexpr below
+  template <int dim, typename MemorySpace>
+  unsigned int
+  LaplaceProblem<dim, MemorySpace>::cuda_solve()
+  {
+    unsigned int n_iterations = 0;
+    if (preconditioner_type == "none")
+      {
+        // Required here as the constraints are not ignored
+        constraints.set_zero(system_rhs);
+        SolverControl solver_control(system_rhs.size(),
+                                     1e-12 * system_rhs.l2_norm());
+
+        // Create vectos on the device
+        DeviceVector update, rhs;
+        system_matrix.initialize_dof_vector(update);
+        system_matrix.initialize_dof_vector(rhs);
+        update = 0;
+
+        // transfer the vectors to the device
+        LinearAlgebra::ReadWriteVector<double> rw_vector(
+          dof_handler.locally_owned_dofs());
+        rw_vector.import(system_rhs, VectorOperation::insert);
+        rhs.import(rw_vector, VectorOperation::insert);
+
+        // Solve
+        SolverCG<DeviceVector> cg(solver_control);
+        cg.solve(system_matrix, update, rhs, PreconditionIdentity());
+
+        // transfer the solution back, using VectorOperation::add to the
+        // solution could be faster/save the addition later on
+        rw_vector.import(update, VectorOperation::insert);
+        solution_update.import(rw_vector, VectorOperation::insert);
+
+        n_iterations = solver_control.last_step();
+      }
+    else
+      AssertThrow(false, ExcNotImplemented());
+
+    return n_iterations;
+  }
+
+
+
+  template <int dim, typename MemorySpace>
+  void
+  LaplaceProblem<dim, MemorySpace>::solve()
+  {
+    TimerOutput::Scope t(timer, "solve system");
+
+    if constexpr (std::is_same<MemorySpace, ::dealii::MemorySpace::Host>::value)
+      total_n_cg_iterations += cpu_solve();
+    else
+      total_n_cg_iterations += cuda_solve();
 
     // More or less a safety operation, as the constraints have already been
     // enforced
@@ -575,16 +647,16 @@ namespace Heat_Transfer
     // and update the complete solution = non-homogenous part + homogenous part
     solution += solution_update;
     solution.update_ghost_values();
-    total_n_cg_iterations += solver_control.last_step();
     ++total_n_cg_solve;
   }
 
 
   template <int dim, typename MemorySpace>
-  void
-  LaplaceProblem<dim, MemorySpace>::solve_gmg_preconditioner(
-    SolverControl &solver_control)
+  unsigned int
+  LaplaceProblem<dim, MemorySpace>::solve_gmg_preconditioner()
   {
+    SolverControl solver_control(100, 1e-12 * system_rhs.l2_norm());
+
     MGTransferMatrixFree<dim, float> mg_transfer(mg_constrained_dofs);
     mg_transfer.build(dof_handler);
 
