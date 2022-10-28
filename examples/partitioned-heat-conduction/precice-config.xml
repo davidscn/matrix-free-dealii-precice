@@ -33,7 +33,8 @@
       <use-mesh name="Neumann-write" from="Neumann" />
       <write-data name="Heat-Flux" mesh="Dirichlet-write" />
       <read-data name="Temperature" mesh="Dirichlet-read" />
-      <mapping:rbf-thin-plate-splines
+      <mapping:rbf-compact-polynomial-c6
+	support-radius=".5"
         direction="read"
         from="Neumann-write"
         to="Dirichlet-read"
@@ -48,7 +49,8 @@
       <use-mesh name="Dirichlet-write" from="Dirichlet" />
       <write-data name="Temperature" mesh="Neumann-write" />
       <read-data name="Heat-Flux" mesh="Neumann-read" />
-      <mapping:rbf-thin-plate-splines
+      <mapping:rbf-compact-polynomial-c6
+	support-radius=".5"
         direction="read"
         from="Dirichlet-write"
         to="Neumann-read"
@@ -71,8 +73,8 @@
         from="Neumann"
         to="Dirichlet"
         initialize="true" />
-      <absolute-convergence-measure data="Heat-Flux" mesh="Dirichlet-write" limit="1e-8" />
-      <absolute-convergence-measure data="Temperature" mesh="Neumann-write" limit="1e-8" />
+      <relative-convergence-measure data="Heat-Flux" mesh="Dirichlet-write" limit="1e-4" />
+      <relative-convergence-measure data="Temperature" mesh="Neumann-write" limit="1e-4" />
       <acceleration:aitken>
         <data mesh="Neumann-write" name="Temperature" />
         <initial-relaxation value="0.5" />

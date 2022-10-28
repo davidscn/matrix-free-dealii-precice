@@ -105,7 +105,7 @@ namespace Heat_Transfer
 
     // TODO: Find a solution for the Fe degree
     using CPUSystemMatrixType  = LaplaceOperator<dim, double>;
-    using CUDASystemMatrixType = CUDALaplaceOperator<dim, 1, double>;
+    using CUDASystemMatrixType = CUDALaplaceOperator<dim, 2, double>;
 
     using SystemMatrixType =
       std::conditional_t<use_cuda, CUDASystemMatrixType, CPUSystemMatrixType>;
@@ -220,7 +220,7 @@ namespace Heat_Transfer
     unsigned int        total_n_cg_solve;
 
     // Valid options are none, jacobi and gmg
-    std::string preconditioner_type = "gmg";
+    std::string preconditioner_type = "none";
 
     Time time;
   };
@@ -587,6 +587,7 @@ namespace Heat_Transfer
       }
     else if (preconditioner_type == "none")
       {
+        constraints.set_zero(system_rhs);
         SolverControl        solver_control(system_rhs.size(),
                                      1e-12 * system_rhs.l2_norm());
         SolverCG<VectorType> cg(solver_control);
