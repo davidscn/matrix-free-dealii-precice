@@ -297,13 +297,9 @@ namespace Adapter
     writer->process_coupling_mesh();
 
     // write initial writeData to preCICE if required
-    if (precice->isActionRequired(precice::constants::actionWriteInitialData()))
-      {
-        writer->write_data(dealii_to_precice);
+    if (precice->requiresInitialData())
+      writer->write_data(dealii_to_precice);
 
-        precice->markActionFulfilled(
-          precice::constants::actionWriteInitialData());
-      }
 
     // Initialize preCICE internally
     precice->initialize();
@@ -379,13 +375,8 @@ namespace Adapter
   {
     // First, we let preCICE check, whether we need to store the variables.
     // Then, the data is stored in the class
-    if (precice->isActionRequired(
-          precice::constants::actionWriteIterationCheckpoint()))
-      {
-        save_state();
-        precice->markActionFulfilled(
-          precice::constants::actionWriteIterationCheckpoint());
-      }
+    if (precice->requiresWritingCheckpoint())
+      save_state();
   }
 
 
@@ -400,13 +391,8 @@ namespace Adapter
   {
     // In case we need to reload a state, we just take the internally stored
     // data vectors and write then in to the input data
-    if (precice->isActionRequired(
-          precice::constants::actionReadIterationCheckpoint()))
-      {
-        reload_old_state();
-        precice->markActionFulfilled(
-          precice::constants::actionReadIterationCheckpoint());
-      }
+    if (precice->requiresReadingCheckpoint())
+      reload_old_state();
   }
 
 
