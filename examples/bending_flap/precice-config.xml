@@ -28,9 +28,9 @@
     </mesh>
 
     <participant name="Fluid">
-      <use-mesh name="Solid-write" from="Solid" />
-      <use-mesh name="Fluid-Mesh-Nodes" provide="yes" />
-      <use-mesh name="Fluid-Mesh-Faces" provide="yes" />
+      <receive-mesh name="Solid-write" from="Solid" />
+      <provide-mesh name="Fluid-Mesh-Nodes" />
+      <provide-mesh name="Fluid-Mesh-Faces" />
       <write-data name="Stress" mesh="Fluid-Mesh-Faces" />
       <read-data name="Displacement" mesh="Fluid-Mesh-Nodes" />
       <mapping:nearest-neighbor
@@ -41,9 +41,9 @@
     </participant>
 
     <participant name="Solid">
-      <use-mesh name="Solid-write" provide="yes" />
-      <use-mesh name="Solid-read" provide="yes" />
-      <use-mesh name="Fluid-Mesh-Faces" from="Fluid" />
+      <provide-mesh name="Solid-write" />
+      <provide-mesh name="Solid-read" />
+      <receive-mesh name="Fluid-Mesh-Faces" from="Fluid" />
       <write-data name="Displacement" mesh="Solid-write" />
       <read-data name="Stress" mesh="Solid-read" />
       <watch-point mesh="Solid-write" name="center-front-tip" coordinate="0.5;0.35;0.0" />

@@ -22,8 +22,8 @@
     </mesh>
 
     <participant name="dealii">
-      <use-mesh name="dealii-mesh" provide="yes" />
-      <use-mesh name="tester-mesh" from="tester" />
+      <provide-mesh name="dealii-mesh" />
+      <receive-mesh name="tester-mesh" from="tester" />
       <write-data name="Displacement" mesh="dealii-mesh" />
       <read-data name="Stress" mesh="dealii-mesh" />
       <mapping:rbf-thin-plate-splines
@@ -35,8 +35,8 @@
     </participant>
 
     <participant name="tester">
-      <use-mesh name="tester-mesh" provide="yes" />
-      <use-mesh name="dealii-mesh" from="dealii" />
+      <provide-mesh name="tester-mesh" />
+      <receive-mesh name="dealii-mesh" from="dealii" />
       <read-data name="Displacement" mesh="tester-mesh" />
       <write-data name="Stress" mesh="tester-mesh" />
       <mapping:rbf-thin-plate-splines
