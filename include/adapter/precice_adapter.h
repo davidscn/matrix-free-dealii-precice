@@ -12,6 +12,7 @@
 #  include <adapter/arbitrary_interface.h>
 #endif
 #include <adapter/dof_interface.h>
+#include <adapter/overlapping-interface.h>
 #include <adapter/quad_interface.h>
 #include <base/q_equidistant.h>
 #include <precice/SolverInterface.hpp>
@@ -232,40 +233,16 @@ namespace Adapter
     // 2. Set the writer, which is defined in the parameter file
     if (parameters.write_mesh_name == parameters.read_mesh_name)
       writer = reader;
-    else if (parameters.write_data_specification == "values_on_dofs")
-      writer =
-        std::make_shared<DoFInterface<dim, data_dim, VectorizedArrayType>>(
+    else
+      {
+        writer = std::make_shared<
+          OverlappingInterface<dim, data_dim, VectorizedArrayType>>(
           data,
           precice,
           parameters.write_mesh_name,
           dealii_boundary_interface_id,
-          dof_index);
-#if PRECICE_EXPERIMENTAL
-    else if (parameters.write_data_specification == "values_on_other_mesh" ||
-             parameters.write_data_specification == "gradients_on_other_mesh")
-      {
-        writer = std::make_shared<
-          ArbitraryInterface<dim, data_dim, VectorizedArrayType>>(
-          data,
-          precice,
-          parameters.write_mesh_name,
-          dealii_boundary_interface_id);
-      }
-#endif
-    else
-      {
-        Assert(parameters.write_data_specification == "values_on_quads" ||
-                 parameters.write_data_specification ==
-                   "normal_gradients_on_quads",
-               ExcNotImplemented());
-        writer =
-          std::make_shared<QuadInterface<dim, data_dim, VectorizedArrayType>>(
-            data,
-            precice,
-            parameters.write_mesh_name,
-            dealii_boundary_interface_id,
-            dof_index,
-            parameters.write_quad_index);
+          dof_index,
+          parameters.write_quad_index);
       }
 
     reader->add_read_data(parameters.read_data_name);
