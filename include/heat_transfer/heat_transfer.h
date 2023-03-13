@@ -965,8 +965,8 @@ namespace Heat_Transfer
     if (testcase->is_dirichlet)
       {
         // We misuse the system_rhs in the flux evaluation
-        evaluate_boundary_flux();
-        precice_adapter->initialize(system_rhs);
+        // evaluate_boundary_flux();
+        precice_adapter->initialize(solution);
       }
     else
       precice_adapter->initialize(solution);
@@ -982,8 +982,8 @@ namespace Heat_Transfer
           if (testcase->is_dirichlet)
             {
               // We misuse the system_rhs in the flux evaluation
-              evaluate_boundary_flux();
-              precice_adapter->advance(system_rhs, time.get_delta_t());
+              // evaluate_boundary_flux();
+              precice_adapter->advance(solution, time.get_delta_t());
             }
           else
             precice_adapter->advance(solution, time.get_delta_t());

@@ -156,13 +156,17 @@ namespace Adapter
             // Only for interface nodes
             const auto local_vertex = phi.quadrature_point(q);
 
-            bool q_is_relevant =
-              std::any_of(&local_vertex[0][0],
-                          &(local_vertex[0][active_cells]),
-                          [this](auto val) {
-                            return (val < (1 + x_threshold)) &&
-                                   (val > (1 - x_threshold));
-                          });
+            bool q_is_relevant = false;
+
+            for (int i = 0; i < active_cells; ++i)
+              {
+                double val = local_vertex[0][i];
+                if ((1 - x_threshold) < val && val < (1 + x_threshold))
+                  {
+                    q_is_relevant = true;
+                  }
+              }
+
             if (!q_is_relevant)
               continue;
 
@@ -217,7 +221,9 @@ namespace Adapter
           write_data_factory(data_vector,
                              EvaluationFlags::gradients,
                              [](auto &phi, auto q_point) {
-                               return phi.get_normal_derivative(q_point);
+                               Tensor<1, dim> x_normal;
+                               x_normal[0] = 1;
+                               return phi.get_gradient(q_point) * x_normal;
                              });
           break;
         default:
@@ -261,13 +267,17 @@ namespace Adapter
           {
             const auto local_vertex = phi.quadrature_point(q);
 
-            bool q_is_relevant =
-              std::any_of(&local_vertex[0][0],
-                          &(local_vertex[0][active_cells]),
-                          [this](auto val) {
-                            return (val < (1 + x_threshold)) &&
-                                   (val > (1 - x_threshold));
-                          });
+            bool q_is_relevant = false;
+
+            for (int i = 0; i < active_cells; ++i)
+              {
+                double val = local_vertex[0][i];
+                if ((1 - x_threshold) < val && val < (1 + x_threshold))
+                  {
+                    q_is_relevant = true;
+                  }
+              }
+
             if (!q_is_relevant)
               continue;
 
