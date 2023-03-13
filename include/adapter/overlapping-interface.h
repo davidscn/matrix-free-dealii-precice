@@ -115,7 +115,7 @@ namespace Adapter
     const int mf_quad_index;
 
     // percentage of quads we want to send
-    const double x_threshold = 0.5;
+    const double x_threshold = 1;
     virtual std::string
     get_interface_type() const override;
   };
