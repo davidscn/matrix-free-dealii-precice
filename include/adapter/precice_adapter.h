@@ -292,22 +292,17 @@ namespace Adapter
     reader->define_coupling_mesh();
     writer->define_coupling_mesh();
 
-    // Initialize preCICE internally
-    precice->initialize();
-
     // Only the writer needs potentially to process the coupling mesh, if the
     // mapping is carried out in the solver
     writer->process_coupling_mesh();
 
     // write initial writeData to preCICE if required
-    if (precice->isActionRequired(precice::constants::actionWriteInitialData()))
-      {
-        writer->write_data(dealii_to_precice);
+    if (precice->requiresInitialData())
+      writer->write_data(dealii_to_precice);
 
-        precice->markActionFulfilled(
-          precice::constants::actionWriteInitialData());
-      }
-    precice->initializeData();
+
+    // Initialize preCICE internally
+    precice->initialize();
 
     // Maybe, read block-wise and work with an AlignedVector since the read data
     // (forces) is multiple times required during the Newton iteration
@@ -380,13 +375,8 @@ namespace Adapter
   {
     // First, we let preCICE check, whether we need to store the variables.
     // Then, the data is stored in the class
-    if (precice->isActionRequired(
-          precice::constants::actionWriteIterationCheckpoint()))
-      {
-        save_state();
-        precice->markActionFulfilled(
-          precice::constants::actionWriteIterationCheckpoint());
-      }
+    if (precice->requiresWritingCheckpoint())
+      save_state();
   }
 
 
@@ -401,13 +391,8 @@ namespace Adapter
   {
     // In case we need to reload a state, we just take the internally stored
     // data vectors and write then in to the input data
-    if (precice->isActionRequired(
-          precice::constants::actionReadIterationCheckpoint()))
-      {
-        reload_old_state();
-        precice->markActionFulfilled(
-          precice::constants::actionReadIterationCheckpoint());
-      }
+    if (precice->requiresReadingCheckpoint())
+      reload_old_state();
   }
 
 

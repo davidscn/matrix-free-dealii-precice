@@ -28,9 +28,9 @@
     </mesh>
 
     <participant name="Dirichlet">
-      <use-mesh name="Dirichlet-read" provide="yes" />
-      <use-mesh name="Dirichlet-write" provide="yes" />
-      <use-mesh name="Neumann-write" from="Neumann" />
+      <provide-mesh name="Dirichlet-read" />
+      <provide-mesh name="Dirichlet-write" />
+      <receive-mesh name="Neumann-write" from="Neumann" />
       <write-data name="Heat-Flux" mesh="Dirichlet-write" />
       <read-data name="Temperature" mesh="Dirichlet-read" />
       <mapping:rbf-compact-polynomial-c6
@@ -44,9 +44,9 @@
     </participant>
 
     <participant name="Neumann">
-      <use-mesh name="Neumann-write" provide="yes" />
-      <use-mesh name="Neumann-read" provide="yes" />
-      <use-mesh name="Dirichlet-write" from="Dirichlet" />
+      <provide-mesh name="Neumann-write" />
+      <provide-mesh name="Neumann-read" />
+      <receive-mesh name="Dirichlet-write" from="Dirichlet" />
       <write-data name="Temperature" mesh="Neumann-write" />
       <read-data name="Heat-Flux" mesh="Neumann-read" />
       <mapping:rbf-compact-polynomial-c6
