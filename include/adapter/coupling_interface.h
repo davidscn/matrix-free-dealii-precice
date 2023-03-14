@@ -46,6 +46,8 @@ namespace Adapter
     /// Alias for the face integrator
     using FEFaceIntegrator =
       FEFaceIntegrators<dim, data_dim, double, VectorizedArrayType>;
+    using FECellIntegrator =
+      FECellIntegrators<dim, data_dim, double, VectorizedArrayType>;
     using value_type = typename FEFaceIntegrator::value_type;
     /**
      * @brief define_coupling_mesh Define the coupling mesh associated to the
