@@ -165,9 +165,6 @@ namespace Adapter
   {
     Assert(data.get() != nullptr, ExcNotInitialized());
     Assert(precice.get() != nullptr, ExcNotInitialized());
-
-    // Ask preCICE already in the constructor for the IDs
-    mesh_id = precice->getMeshID(mesh_name);
   }
 
 
@@ -178,7 +175,6 @@ namespace Adapter
   {
     Assert(mesh_id != -1, ExcNotInitialized());
     read_data_name = read_data_name_;
-    read_data_id   = precice->getDataID(read_data_name, mesh_id);
   }
 
 
@@ -191,7 +187,6 @@ namespace Adapter
   {
     Assert(mesh_id != -1, ExcNotInitialized());
     write_data_name = write_data_name_;
-    write_data_id   = precice->getDataID(write_data_name, mesh_id);
 
     if (write_data_specification == "values_on_dofs")
       write_data_type = WriteDataType::values_on_dofs;
