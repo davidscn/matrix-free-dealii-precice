@@ -121,7 +121,7 @@ namespace Adapter
   void
   QuadInterface<dim, data_dim, VectorizedArrayType>::define_coupling_mesh()
   {
-    Assert(this->mesh_id != -1, ExcNotInitialized());
+    Assert(!this->mesh_name.empty(), ExcNotInitialized());
 
     // In order to avoid that we define the interface multiple times when reader
     // and writer refer to the same object
@@ -165,7 +165,7 @@ namespace Adapter
               for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
                 unrolled_vertices[d + dim * v] = local_vertex[d][v];
 
-            this->precice->setMeshVertices(this->mesh_id,
+            this->precice->setMeshVertices(this->mesh_name,
                                            active_faces,
                                            unrolled_vertices.data(),
                                            node_ids.data());
@@ -180,13 +180,14 @@ namespace Adapter
     // the IDs preCICE knows
     Assert(size * VectorizedArrayType::size() >=
              static_cast<unsigned int>(
-               this->precice->getMeshVertexSize(this->mesh_id)),
+               this->precice->getMeshVertexSize(this->mesh_name)),
            ExcInternalError());
 
-    if (this->read_data_id != -1)
-      this->print_info(true, this->precice->getMeshVertexSize(this->mesh_id));
-    if (this->write_data_id != -1)
-      this->print_info(false, this->precice->getMeshVertexSize(this->mesh_id));
+    if (!this->read_data_name.empty())
+      this->print_info(true, this->precice->getMeshVertexSize(this->mesh_name));
+    if (!this->write_data_name.empty())
+      this->print_info(false,
+                       this->precice->getMeshVertexSize(this->mesh_name));
   }
 
 
@@ -226,7 +227,7 @@ namespace Adapter
     const std::function<value_type(FEFaceIntegrator &, unsigned int)>
       &get_write_value)
   {
-    Assert(this->write_data_id != -1, ExcNotInitialized());
+    Assert(!this->write_data_name().empty(), ExcNotInitialized());
     Assert(interface_is_defined, ExcNotInitialized());
     // Similar as in define_coupling_mesh
     FEFaceIntegrator phi(*this->mf_data, true, mf_dof_index, mf_quad_index);
@@ -272,14 +273,16 @@ namespace Adapter
                   for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
                     unrolled_local_data[d + data_dim * v] = local_data[d][v];
 
-                this->precice->writeBlockVectorData(this->write_data_id,
+                this->precice->writeBlockVectorData(this->mesh_name,
+                                                    this->write_data_name,
                                                     active_faces,
                                                     index->data(),
                                                     unrolled_local_data.data());
               }
             else
               {
-                this->precice->writeBlockScalarData(this->write_data_id,
+                this->precice->writeBlockScalarData(this->mesh_name,
+                                                    this->write_data_name,
                                                     active_faces,
                                                     index->data(),
                                                     &local_data[0]);
@@ -300,7 +303,7 @@ namespace Adapter
     // Assert input
     Assert(active_faces <= VectorizedArrayType::size(), ExcInternalError());
     AssertIndexRange(id_number, interface_nodes_ids.size());
-    Assert(this->read_data_id != -1, ExcNotInitialized());
+    Assert(!this->read_data_name.empty(), ExcNotInitialized());
 
     value_type dealii_data;
     const auto vertex_ids = &interface_nodes_ids[id_number];
@@ -308,7 +311,8 @@ namespace Adapter
     if constexpr (data_dim > 1)
       {
         std::array<double, data_dim * VectorizedArrayType::size()> precice_data;
-        this->precice->readBlockVectorData(this->read_data_id,
+        this->precice->readBlockVectorData(this->mesh_name,
+                                           this->read_data_name,
                                            active_faces,
                                            vertex_ids->data(),
                                            precice_data.data());
@@ -320,7 +324,8 @@ namespace Adapter
     else
       {
         // Scalar case
-        this->precice->readBlockScalarData(this->read_data_id,
+        this->precice->readBlockScalarData(this->mesh_name,
+                                           this->read_data_name,
                                            active_faces,
                                            vertex_ids->data(),
                                            &dealii_data[0]);

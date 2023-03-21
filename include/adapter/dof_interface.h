@@ -85,7 +85,7 @@ namespace Adapter
   void
   DoFInterface<dim, data_dim, VectorizedArrayType>::define_coupling_mesh()
   {
-    Assert(this->mesh_id != -1, ExcNotInitialized());
+    Assert(!this->mesh_name.empty(), ExcNotInitialized());
 
     // In order to avoid that we define the interface multiple times when reader
     // and writer refer to the same object
@@ -156,16 +156,16 @@ namespace Adapter
 
         // pass node coordinates to precice
         const int precice_id =
-          this->precice->setMeshVertex(this->mesh_id, nodes_position.data());
+          this->precice->setMeshVertex(this->mesh_name, nodes_position.data());
         interface_nodes_ids.emplace_back(precice_id);
       }
 
     interface_is_defined = true;
 
-    if (this->read_data_id != -1)
-      this->print_info(true, this->precice->getMeshVertexSize(this->mesh_id));
-    if (this->write_data_id != -1)
-      this->print_info(false, this->precice->getMeshVertexSize(this->mesh_id));
+    if (!this->read_data_name.empty())
+      this->print_info(true, this->precice->getMeshVertexSize(this->mesh_name));
+    if (!this->write_data_name.empty())
+      this->print_info(false, this->precice->getMeshVertexSize(this->mesh_name));
   }
 
 
@@ -175,7 +175,7 @@ namespace Adapter
   DoFInterface<dim, data_dim, VectorizedArrayType>::write_data(
     const LinearAlgebra::distributed::Vector<double> &data_vector)
   {
-    Assert(this->write_data_id != -1, ExcNotInitialized());
+    Assert(!this->write_data_name.empty(), ExcNotInitialized());
     Assert(interface_is_defined, ExcNotInitialized());
 
     std::array<double, data_dim> write_data;
@@ -191,13 +191,15 @@ namespace Adapter
         // and pass them to preCICE
         if constexpr (data_dim > 1)
           {
-            this->precice->writeVectorData(this->write_data_id,
+            this->precice->writeVectorData(this->mesh_name,
+                                           this->write_data_name,
                                            interface_nodes_ids[i],
                                            write_data.data());
           }
         else
           {
-            this->precice->writeScalarData(this->write_data_id,
+            this->precice->writeScalarData(this->mesh_name,
+                                           this->write_data_name,
                                            interface_nodes_ids[i],
                                            write_data[0]);
           }
@@ -216,13 +218,15 @@ namespace Adapter
       {
         if constexpr (data_dim > 1)
           {
-            this->precice->readVectorData(this->read_data_id,
+            this->precice->readVectorData(this->mesh_name,
+                                          this->read_data_name,
                                           interface_nodes_ids[i],
                                           values.data());
           }
         else
           {
-            this->precice->readScalarData(this->read_data_id,
+            this->precice->readScalarData(this->mesh_name,
+                                          this->read_data_name,
                                           interface_nodes_ids[i],
                                           values[0]);
           }

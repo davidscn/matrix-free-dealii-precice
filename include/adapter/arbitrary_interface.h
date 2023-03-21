@@ -137,7 +137,7 @@ namespace Adapter
   void
   ArbitraryInterface<dim, data_dim, VectorizedArrayType>::define_coupling_mesh()
   {
-    Assert(this->mesh_id != -1, ExcNotInitialized());
+    Assert(!this->mesh_name.empty(), ExcNotInitialized());
     const auto &triangulation =
       this->mf_data->get_dof_handler().get_triangulation();
 
@@ -170,7 +170,7 @@ namespace Adapter
         }
 
     // Finally pass the bounding box to preCICE
-    this->precice->setMeshAccessRegion(this->mesh_id,
+    this->precice->setMeshAccessRegion(this->mesh_name,
                                        precice_bounding_box.data());
   }
 
@@ -193,11 +193,13 @@ namespace Adapter
                                     EvaluationFlags::values);
               const auto val = fe_evaluator.get_value(0);
               if constexpr (data_dim > 1)
-                this->precice->writeVectorData(this->write_data_id,
+                this->precice->writeVectorData(this->mesh_name,
+                                               this->write_data_name,
                                                interface_nodes_ids[i],
                                                val.begin_raw());
               else
-                this->precice->writeScalarData(this->write_data_id,
+                this->precice->writeScalarData(this->mesh_name,
+                                               this->write_data_name,
                                                interface_nodes_ids[i],
                                                val);
             });
@@ -211,7 +213,8 @@ namespace Adapter
               fe_evaluator.evaluate(make_array_view(local_values),
                                     EvaluationFlags::gradients);
               const auto val = fe_evaluator.get_gradient(0);
-              this->precice->writeVectorData(this->write_data_id,
+              this->precice->writeVectorData(this->mesh_name,
+                                             this->write_data_name,
                                              interface_nodes_ids[i],
                                              val.begin_raw());
             });
@@ -232,7 +235,7 @@ namespace Adapter
                              const Vector<double> &,
                              const size_t)> &         write_value) const
   {
-    Assert(this->write_data_id != -1, ExcNotInitialized());
+    Assert(!this->write_data_name.empty(), ExcNotInitialized());
 
     // This class allows to evaluate data at arbitrary points
     FEPointEvaluation<data_dim, dim> fe_evaluator(
@@ -272,18 +275,18 @@ namespace Adapter
   ArbitraryInterface<dim, data_dim, VectorizedArrayType>::
     process_coupling_mesh()
   {
-    Assert(this->mesh_id != -1, ExcNotInitialized());
+    Assert(!this->mesh_name.empty(), ExcNotInitialized());
 
     // Ask preCICE for the relevant mesh size we work (preliminary) on
     const int received_mesh_size =
-      this->precice->getMeshVertexSize(this->mesh_id);
+      this->precice->getMeshVertexSize(this->mesh_name);
 
     // Allocate a vector for the vertices and the corresponding IDs
     std::vector<double> received_coordinates(received_mesh_size * dim);
     interface_nodes_ids.resize(received_mesh_size);
 
     // ... and let preCICE fill the data containers
-    this->precice->getMeshVerticesAndIDs(this->mesh_id,
+    this->precice->getMeshVerticesAndIDs(this->mesh_name,
                                          received_mesh_size,
                                          interface_nodes_ids.data(),
                                          received_coordinates.data());
@@ -308,8 +311,8 @@ namespace Adapter
 
     // Some consistency checks: we can only write data using this interface,
     // reading doesn't make sense
-    Assert(this->read_data_id == -1, ExcInternalError());
-    Assert(this->write_data_id != -1, ExcInternalError());
+    Assert(this->read_data_name.empty(), ExcInternalError());
+    Assert(!this->write_data_name.empty(), ExcInternalError());
 
     this->print_info(false, interface_nodes_ids.size());
   }
