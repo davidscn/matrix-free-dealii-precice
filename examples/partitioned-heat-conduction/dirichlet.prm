@@ -14,7 +14,7 @@ subsection Geometry
   set Dimension         = 2
 
   # Number of global refinements
-  set Global refinement = 3
+  set Global refinement = 6
 
   # Testcase to compute
   set Testcase          = partitioned_heat_dirichlet

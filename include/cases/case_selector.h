@@ -12,47 +12,53 @@
 namespace TestCases
 {
   template <int dim>
-  class CaseSelector
+  struct CaseSelector
   {
-  public:
     /**
      * @brief get_test_case Returns the specified test case
      * @param testcase_name Name of the test case as specified in the
      *        configuration file
-     * @param simulation_type Simulation type: elasticity vs heat_transfer
-     *
      * @return object describing the test case
      */
     static std::shared_ptr<TestCaseBase<dim>>
-    get_test_case(const std::string &testcase_name,
-                  const std::string &simulation_type)
+    get_elasticity_test_case(const std::string &testcase_name)
     {
-      Assert(simulation_type == "elasticity" ||
-               simulation_type == "heat_transfer",
-             ExcNotImplemented());
-      if (simulation_type == "elasticity")
-        {
-          if (testcase_name == "turek_hron")
-            return std::make_shared<TurekHron<dim>>();
-          else if (testcase_name == "cook")
-            return std::make_shared<CookMembrane<dim>>();
-          else if (testcase_name == "tube3d")
-            return std::make_shared<Tube3D<dim>>();
-          else if (testcase_name == "bending_flap")
-            return std::make_shared<BendingFlap<dim>>();
-          else if (testcase_name == "Wall_beam")
-            return std::make_shared<WallBeam<dim>>();
-          else if (testcase_name == "perpendicular_flap")
-            return std::make_shared<PerpendicularFlap<dim>>();
-          // Add your case here
-        }
-      if (simulation_type == "heat_transfer")
-        {
-          if (testcase_name == "partitioned_heat_dirichlet")
-            return std::make_shared<PartitionedHeat<dim>>(true);
-          else if (testcase_name == "partitioned_heat_neumann")
-            return std::make_shared<PartitionedHeat<dim>>(false);
-        }
+      if (testcase_name == "turek_hron")
+        return std::make_shared<TurekHron<dim>>();
+      else if (testcase_name == "cook")
+        return std::make_shared<CookMembrane<dim>>();
+      else if (testcase_name == "tube3d")
+        return std::make_shared<Tube3D<dim>>();
+      else if (testcase_name == "bending_flap")
+        return std::make_shared<BendingFlap<dim>>();
+      else if (testcase_name == "Wall_beam")
+        return std::make_shared<WallBeam<dim>>();
+      else if (testcase_name == "perpendicular_flap")
+        return std::make_shared<PerpendicularFlap<dim>>();
+      // Add your case here
+      AssertThrow(
+        false,
+        ExcMessage(
+          "Unable to configure your case \"" + testcase_name +
+          "\". Make sure you use the right executable for the selected case, "
+          "namely the \"solid\" executable for FSI cases and the \"heat\" "
+          "executable for heat transfer simulation."));
+    }
+
+    /**
+     * @brief get_test_case Returns the specified test case
+     * @param testcase_name Name of the test case as specified in the
+     *        configuration file
+     * @return object describing the test case
+     */
+
+    static std::shared_ptr<TestCaseBase<dim>>
+    get_heat_transfer_test_case(const std::string &testcase_name)
+    {
+      if (testcase_name == "partitioned_heat_dirichlet")
+        return std::make_shared<PartitionedHeat<dim>>(true);
+      else if (testcase_name == "partitioned_heat_neumann")
+        return std::make_shared<PartitionedHeat<dim>>(false);
       AssertThrow(
         false,
         ExcMessage(

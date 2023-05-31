@@ -35,6 +35,8 @@
 #include <base/time_handler.h>
 #include <base/utilities.h>
 #include <cases/case_selector.h>
+#include <heat_transfer/cuda_laplace_operator.h>
+#include <heat_transfer/laplace_operator.h>
 #include <parameter/parameter_handling.h>
 
 #include <fstream>
@@ -77,199 +79,19 @@ namespace Heat_Transfer
     return value<double>(p, component);
   }
 
+  // Forward declarations in case we don't have any CUDA support
+#ifndef DEAL_II_COMPILER_CUDA_AWARE
+  template <int dim, int fe_degree, typename number>
+  class CUDALaplaceOperator;
 
-  template <int dim, typename number>
-  class LaplaceOperator
-    : public MatrixFreeOperators::
-        Base<dim, LinearAlgebra::distributed::Vector<number>>
+  namespace CUDAWrappers
   {
-  public:
-    using value_type = number;
-    using FECellIntegrator =
-      FECellIntegrators<dim, 1, number, VectorizedArray<number>>;
-    using FEFaceIntegrator =
-      FEFaceIntegrators<dim, 1, number, VectorizedArray<number>>;
-
-    LaplaceOperator();
-
-    void
-    clear() override;
-
-    void
-    evaluate_coefficient(const Coefficient<dim> &coefficient_function);
-
-    void
-    set_delta_t(const double delta_t_)
-    {
-      delta_t = delta_t_;
-    }
-
-    virtual void
-    compute_diagonal() override;
-
-  private:
-    virtual void
-    apply_add(
-      LinearAlgebra::distributed::Vector<number> &      dst,
-      const LinearAlgebra::distributed::Vector<number> &src) const override;
-
-    void
-    local_apply(const MatrixFree<dim, number> &                   data,
-                LinearAlgebra::distributed::Vector<number> &      dst,
-                const LinearAlgebra::distributed::Vector<number> &src,
-                const std::pair<unsigned int, unsigned int> &cell_range) const;
-
-    void
-    do_operation_on_cell(FECellIntegrator &phi) const;
-
-    Table<2, VectorizedArray<number>> coefficient;
-    double                            delta_t = 0;
-  };
-
-
-
-  template <int dim, typename number>
-  LaplaceOperator<dim, number>::LaplaceOperator()
-    : MatrixFreeOperators::Base<dim,
-                                LinearAlgebra::distributed::Vector<number>>()
-  {}
-
-
-
-  template <int dim, typename number>
-  void
-  LaplaceOperator<dim, number>::clear()
-  {
-    coefficient.reinit(0, 0);
-    MatrixFreeOperators::Base<dim, LinearAlgebra::distributed::Vector<number>>::
-      clear();
+    template <int dim, typename number>
+    class MatrixFree;
   }
+#endif
 
-
-
-  template <int dim, typename number>
-  void
-  LaplaceOperator<dim, number>::evaluate_coefficient(
-    const Coefficient<dim> &coefficient_function)
-  {
-    const unsigned int n_cells = this->data->n_cell_batches();
-    FECellIntegrator   phi(*this->data);
-
-    coefficient.reinit(n_cells, phi.n_q_points);
-    for (unsigned int cell = 0; cell < n_cells; ++cell)
-      {
-        phi.reinit(cell);
-        for (unsigned int q = 0; q < phi.n_q_points; ++q)
-          coefficient(cell, q) =
-            coefficient_function.value(phi.quadrature_point(q), 0);
-      }
-  }
-
-
-
-  template <int dim, typename number>
-  void
-  LaplaceOperator<dim, number>::local_apply(
-    const MatrixFree<dim, number> &                   data,
-    LinearAlgebra::distributed::Vector<number> &      dst,
-    const LinearAlgebra::distributed::Vector<number> &src,
-    const std::pair<unsigned int, unsigned int> &     cell_range) const
-  {
-    FECellIntegrator phi(data);
-
-    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
-      {
-        AssertDimension(coefficient.size(0), data.n_cell_batches());
-        AssertDimension(coefficient.size(1), phi.n_q_points);
-
-        phi.reinit(cell);
-        phi.read_dof_values(src);
-        do_operation_on_cell(phi);
-        phi.distribute_local_to_global(dst);
-      }
-  }
-
-
-
-  template <int dim, typename number>
-  void
-  LaplaceOperator<dim, number>::apply_add(
-    LinearAlgebra::distributed::Vector<number> &      dst,
-    const LinearAlgebra::distributed::Vector<number> &src) const
-  {
-    this->data->cell_loop(&LaplaceOperator::local_apply, this, dst, src);
-  }
-
-
-
-  template <int dim, typename number>
-  void
-  LaplaceOperator<dim, number>::compute_diagonal()
-  {
-    this->inverse_diagonal_entries.reset(
-      new DiagonalMatrix<LinearAlgebra::distributed::Vector<number>>());
-    LinearAlgebra::distributed::Vector<number> &inverse_diagonal =
-      this->inverse_diagonal_entries->get_vector();
-    this->data->initialize_dof_vector(inverse_diagonal);
-
-    MatrixFreeTools::compute_diagonal(*(this->data),
-                                      inverse_diagonal,
-                                      &LaplaceOperator::do_operation_on_cell,
-                                      this);
-
-    this->set_constrained_entries_to_one(inverse_diagonal);
-
-    for (unsigned int i = 0; i < inverse_diagonal.locally_owned_size(); ++i)
-      {
-        Assert(inverse_diagonal.local_element(i) > 0.,
-               ExcMessage("No diagonal entry in a positive definite operator "
-                          "should be zero"));
-        inverse_diagonal.local_element(i) =
-          1. / inverse_diagonal.local_element(i);
-      }
-  }
-
-
-
-  template <int dim, typename number>
-  void
-  LaplaceOperator<dim, number>::do_operation_on_cell(
-    FECellIntegrator &phi) const
-  {
-    Assert(delta_t > 0, ExcNotInitialized());
-    const unsigned int cell = phi.get_current_cell_index();
-    phi.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
-    for (unsigned int q = 0; q < phi.n_q_points; ++q)
-      {
-        phi.submit_value(phi.get_value(q), q);
-        phi.submit_gradient(coefficient(cell, q) * delta_t *
-                              phi.get_gradient(q),
-                            q);
-      }
-    phi.integrate(EvaluationFlags::values | EvaluationFlags::gradients);
-  }
-
-  // Helper function in order to evaluate the vectorized point
-  template <int dim, typename Number>
-  VectorizedArray<Number>
-  evaluate_function(const Function<dim> &                      function,
-                    const Point<dim, VectorizedArray<Number>> &p_vectorized,
-                    const unsigned int                         component = 0)
-  {
-    VectorizedArray<Number> result;
-    for (unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v)
-      {
-        Point<dim> p;
-        for (unsigned int d = 0; d < dim; ++d)
-          p[d] = p_vectorized[d][v];
-        result[v] = function.value(p, component);
-      }
-    return result;
-  }
-
-
-
-  template <int dim>
+  template <int dim, bool use_cuda = false>
   class LaplaceProblem
   {
   public:
@@ -281,7 +103,18 @@ namespace Heat_Transfer
     using VectorType      = LinearAlgebra::distributed::Vector<double>;
     using LevelVectorType = LinearAlgebra::distributed::Vector<float>;
 
+    // TODO: Find a solution for the Fe degree
+    using CPUSystemMatrixType  = LaplaceOperator<dim, double>;
+    using CUDASystemMatrixType = CUDALaplaceOperator<dim, 2, double>;
+
+    using SystemMatrixType =
+      std::conditional_t<use_cuda, CUDASystemMatrixType, CPUSystemMatrixType>;
+
+    using DeviceVector =
+      LinearAlgebra::distributed::Vector<double, ::dealii::MemorySpace::CUDA>;
+
     LaplaceProblem(const Parameters::HeatParameters<dim> &parameters);
+
     void
     run(std::shared_ptr<TestCases::TestCaseBase<dim>> testcase_);
 
@@ -318,9 +151,17 @@ namespace Heat_Transfer
     void
     solve();
 
-    /// @brief solve using the gmg preconditioner
-    void
-    solve_gmg_preconditioner(SolverControl &solver_control);
+    /// @brief solve using no preconditioner and cuda, returns the number of CG iterations
+    unsigned int
+    cuda_solve();
+
+    /// @brief solve using the usual CPU options, returns the number of CG iterations
+    unsigned int
+    cpu_solve();
+
+    /// @brief solve using the gmg preconditioner (CPU), returns the number of CG iterations
+    unsigned int
+    solve_gmg_preconditioner();
 
     /**
      * @brief compute_error
@@ -355,11 +196,11 @@ namespace Heat_Transfer
     MappingQ1<dim> mapping;
 
     AffineConstraints<double> constraints;
-    using SystemMatrixType = LaplaceOperator<dim, double>;
+
     SystemMatrixType system_matrix;
     // In order to operate with the non-homogenous Dirichlet BCs
     // TODO: use one operator with different constraint objects instead
-    SystemMatrixType inhomogeneous_operator;
+    CPUSystemMatrixType inhomogeneous_operator;
 
     MGConstrainedDoFs mg_constrained_dofs;
     using LevelMatrixType = LaplaceOperator<dim, float>;
@@ -379,15 +220,15 @@ namespace Heat_Transfer
     unsigned int        total_n_cg_solve;
 
     // Valid options are none, jacobi and gmg
-    std::string preconditioner_type = "gmg";
+    std::string preconditioner_type = "none";
 
     Time time;
   };
 
 
 
-  template <int dim>
-  LaplaceProblem<dim>::LaplaceProblem(
+  template <int dim, bool use_cuda>
+  LaplaceProblem<dim, use_cuda>::LaplaceProblem(
     const Parameters::HeatParameters<dim> &parameters)
     : parameters(parameters)
     , triangulation(MPI_COMM_WORLD,
@@ -412,9 +253,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim>
+  template <int dim, bool use_cuda>
   void
-  LaplaceProblem<dim>::make_grid()
+  LaplaceProblem<dim, use_cuda>::make_grid()
   {
     Assert(testcase.get() != nullptr, ExcInternalError());
     testcase->make_coarse_grid_and_bcs(triangulation);
@@ -423,15 +264,12 @@ namespace Heat_Transfer
 
 
 
-  template <int dim>
+  template <int dim, bool use_cuda>
   void
-  LaplaceProblem<dim>::setup_system()
+  LaplaceProblem<dim, use_cuda>::setup_system()
   {
     system_matrix.clear();
-    mg_matrices.clear_elements();
-
     dof_handler.distribute_dofs(fe);
-    dof_handler.distribute_mg_dofs();
 
     std::locale s = pcout.get_stream().getloc();
     pcout.get_stream().imbue(std::locale(""));
@@ -450,16 +288,20 @@ namespace Heat_Transfer
     // interface
     apply_boundary_condition(true);
     {
+      using MatrixFreeStorage =
+        std::conditional_t<use_cuda,
+                           CUDAWrappers::MatrixFree<dim, double>,
+                           MatrixFree<dim, double>>;
+
       // Set up two matrix-free objects: one for the homogenous part and one for
       // the inhomogenous part (without any constraints)
-      typename MatrixFree<dim, double>::AdditionalData additional_data;
-      additional_data.tasks_parallel_scheme =
+      typename MatrixFree<dim, double>::AdditionalData additional_data_cpu;
+      additional_data_cpu.tasks_parallel_scheme =
         MatrixFree<dim, double>::AdditionalData::none;
-      additional_data.mapping_update_flags =
+      additional_data_cpu.mapping_update_flags =
         (update_values | update_gradients | update_JxW_values |
          update_quadrature_points);
-      std::shared_ptr<MatrixFree<dim, double>> system_mf_storage(
-        new MatrixFree<dim, double>());
+
       // FIXME: The boundary face flag is only for the RHS assembly required in
       // order to apply the coupling data. Here, only the second MatrixFree
       // object is required. In order to ensure compatibility of the global
@@ -469,17 +311,26 @@ namespace Heat_Transfer
       // For Neumann: write values and integrate them during assembly
       // In both cases: define interface using FEEvaluation::quadrature_point()
       if (testcase->is_dirichlet)
-        additional_data.mapping_update_flags_boundary_faces =
+        additional_data_cpu.mapping_update_flags_boundary_faces =
           (update_values | update_JxW_values | update_gradients |
            update_normal_vectors | update_quadrature_points);
       else
-        additional_data.mapping_update_flags_boundary_faces =
+        additional_data_cpu.mapping_update_flags_boundary_faces =
           (update_values | update_JxW_values | update_quadrature_points);
+
+
+      typename MatrixFreeStorage::AdditionalData additional_data;
+
+      additional_data.mapping_update_flags =
+        additional_data_cpu.mapping_update_flags;
+      std::shared_ptr<MatrixFreeStorage> system_mf_storage(
+        new MatrixFreeStorage);
 
       system_mf_storage->reinit(
         mapping, dof_handler, constraints, quadrature_1d, additional_data);
+
       system_matrix.initialize(system_mf_storage);
-      system_matrix.evaluate_coefficient(Coefficient<dim>());
+      system_matrix.evaluate_coefficient();
       system_matrix.set_delta_t(time.get_delta_t());
 
       // ... the second matrix-free operator for inhomogenous BCs
@@ -487,18 +338,25 @@ namespace Heat_Transfer
       no_constraints.close();
       std::shared_ptr<MatrixFree<dim, double>> matrix_free(
         new MatrixFree<dim, double>());
-      matrix_free->reinit(
-        mapping, dof_handler, no_constraints, quadrature_1d, additional_data);
+      matrix_free->reinit(mapping,
+                          dof_handler,
+                          no_constraints,
+                          quadrature_1d,
+                          additional_data_cpu);
+
       inhomogeneous_operator.initialize(matrix_free);
-
-
-      inhomogeneous_operator.evaluate_coefficient(Coefficient<dim>());
+      inhomogeneous_operator.evaluate_coefficient();
       inhomogeneous_operator.set_delta_t(time.get_delta_t());
     }
-    system_matrix.initialize_dof_vector(solution);
-    system_matrix.initialize_dof_vector(solution_old);
-    system_matrix.initialize_dof_vector(solution_update);
-    system_matrix.initialize_dof_vector(system_rhs);
+
+    if constexpr (use_cuda)
+      inhomogeneous_operator.initialize_dof_vector(solution);
+    else
+      system_matrix.initialize_dof_vector(solution);
+
+    solution_old.reinit(solution);
+    solution_update.reinit(solution);
+    system_rhs.reinit(solution);
 
     if (preconditioner_type == "gmg")
       setup_gmg();
@@ -506,10 +364,13 @@ namespace Heat_Transfer
 
 
 
-  template <int dim>
+  template <int dim, bool use_cuda>
   void
-  LaplaceProblem<dim>::setup_gmg()
+  LaplaceProblem<dim, use_cuda>::setup_gmg()
   {
+    mg_matrices.clear_elements();
+    dof_handler.distribute_mg_dofs();
+
     const unsigned int nlevels = triangulation.n_global_levels();
     mg_matrices.resize(0, nlevels - 1);
     mg_constrained_dofs.initialize(dof_handler);
@@ -563,16 +424,16 @@ namespace Heat_Transfer
         mg_matrices[level].initialize(mg_mf_storage_level,
                                       mg_constrained_dofs,
                                       level);
-        mg_matrices[level].evaluate_coefficient(Coefficient<dim>());
+        mg_matrices[level].evaluate_coefficient();
         mg_matrices[level].set_delta_t(time.get_delta_t());
       }
   }
 
 
 
-  template <int dim>
+  template <int dim, bool use_cuda>
   void
-  LaplaceProblem<dim>::assemble_rhs()
+  LaplaceProblem<dim, use_cuda>::assemble_rhs()
   {
     TimerOutput::Scope t(timer, "assemble rhs");
 
@@ -651,9 +512,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim>
+  template <int dim, bool use_cuda>
   void
-  LaplaceProblem<dim>::apply_boundary_condition(const bool initialize)
+  LaplaceProblem<dim, use_cuda>::apply_boundary_condition(const bool initialize)
   {
     // Update the constraints object
     constraints.clear();
@@ -704,38 +565,104 @@ namespace Heat_Transfer
   }
 
 
-  template <int dim>
-  void
-  LaplaceProblem<dim>::solve()
-  {
-    TimerOutput::Scope t(timer, "solve system");
 
-    SolverControl solver_control(system_rhs.size(),
-                                 1e-12 * system_rhs.l2_norm());
+  template <int dim, bool use_cuda>
+  unsigned int
+  LaplaceProblem<dim, use_cuda>::cpu_solve()
+  {
+    unsigned int n_iterations = 0;
+
     if (preconditioner_type == "jacobi")
       {
         // FIXME: Leads currently to more iterations compared to "none"
+        SolverControl                        solver_control(system_rhs.size(),
+                                     1e-12 * system_rhs.l2_norm());
         SolverCG<VectorType>                 cg(solver_control);
         PreconditionJacobi<SystemMatrixType> preconditioner;
         double                               relaxation = .7;
         preconditioner.initialize(system_matrix, relaxation);
         system_matrix.compute_diagonal();
         cg.solve(system_matrix, solution_update, system_rhs, preconditioner);
+        n_iterations += solver_control.last_step();
       }
     else if (preconditioner_type == "none")
       {
+        constraints.set_zero(system_rhs);
+        SolverControl        solver_control(system_rhs.size(),
+                                     1e-12 * system_rhs.l2_norm());
         SolverCG<VectorType> cg(solver_control);
         cg.solve(system_matrix,
                  solution_update,
                  system_rhs,
                  PreconditionIdentity());
+        n_iterations += solver_control.last_step();
       }
     else if (preconditioner_type == "gmg")
       {
-        solve_gmg_preconditioner(solver_control);
+        n_iterations += solve_gmg_preconditioner();
       }
     else
       AssertThrow(false, ExcNotImplemented());
+
+    return n_iterations;
+  }
+
+
+  // The code here is not compiled in case we don't have GPU support due to the
+  // constexpr below
+  template <int dim, bool use_cuda>
+  unsigned int
+  LaplaceProblem<dim, use_cuda>::cuda_solve()
+  {
+    unsigned int n_iterations = 0;
+    if (preconditioner_type == "none")
+      {
+        // Required here as the constraints are not ignored
+        constraints.set_zero(system_rhs);
+        SolverControl solver_control(system_rhs.size(),
+                                     1e-12 * system_rhs.l2_norm());
+
+        // Create vectos on the device
+        DeviceVector update, rhs;
+        system_matrix.initialize_dof_vector(update);
+        system_matrix.initialize_dof_vector(rhs);
+        update = 0;
+
+        // transfer the vectors to the device
+        LinearAlgebra::ReadWriteVector<double> rw_vector(
+          dof_handler.locally_owned_dofs());
+        rw_vector.import(system_rhs, VectorOperation::insert);
+        rhs.import(rw_vector, VectorOperation::insert);
+
+        // Solve
+        SolverCG<DeviceVector> cg(solver_control);
+        cg.solve(system_matrix, update, rhs, PreconditionIdentity());
+
+        // transfer the solution back, using VectorOperation::add to the
+        // solution could be faster/save the addition later on
+        rw_vector.import(update, VectorOperation::insert);
+        solution_update.import(rw_vector, VectorOperation::insert);
+
+        n_iterations = solver_control.last_step();
+      }
+    else
+      AssertThrow(false, ExcNotImplemented());
+
+    return n_iterations;
+  }
+
+
+
+  template <int dim, bool use_cuda>
+  void
+  LaplaceProblem<dim, use_cuda>::solve()
+  {
+    TimerOutput::Scope t(timer, "solve system");
+
+    if constexpr (use_cuda)
+      total_n_cg_iterations += cuda_solve();
+    else
+      total_n_cg_iterations += cpu_solve();
 
     // More or less a safety operation, as the constraints have already been
     // enforced
@@ -743,15 +670,16 @@ namespace Heat_Transfer
     // and update the complete solution = non-homogenous part + homogenous part
     solution += solution_update;
     solution.update_ghost_values();
-    total_n_cg_iterations += solver_control.last_step();
     ++total_n_cg_solve;
   }
 
 
-  template <int dim>
-  void
-  LaplaceProblem<dim>::solve_gmg_preconditioner(SolverControl &solver_control)
+  template <int dim, bool use_cuda>
+  unsigned int
+  LaplaceProblem<dim, use_cuda>::solve_gmg_preconditioner()
   {
+    SolverControl solver_control(100, 1e-12 * system_rhs.l2_norm());
+
     MGTransferMatrixFree<dim, float> mg_transfer(mg_constrained_dofs);
     mg_transfer.build(dof_handler);
 
@@ -803,12 +731,14 @@ namespace Heat_Transfer
 
     SolverCG<VectorType> cg(solver_control);
     cg.solve(system_matrix, solution_update, system_rhs, preconditioner);
+
+    return solver_control.last_step();
   }
 
 
-  template <int dim>
+  template <int dim, bool use_cuda>
   double
-  LaplaceProblem<dim>::compute_error(
+  LaplaceProblem<dim, use_cuda>::compute_error(
     const Function<dim> &                             function,
     const LinearAlgebra::distributed::Vector<double> &solution) const
   {
@@ -843,9 +773,10 @@ namespace Heat_Transfer
 
 
 
-  template <int dim>
+  template <int dim, bool use_cuda>
   void
-  LaplaceProblem<dim>::output_results(const unsigned int result_number) const
+  LaplaceProblem<dim, use_cuda>::output_results(
+    const unsigned int result_number) const
   {
     TimerOutput::Scope t(timer, "output");
 
@@ -889,9 +820,9 @@ namespace Heat_Transfer
 
 
 
-  template <int dim>
+  template <int dim, bool use_cuda>
   void
-  LaplaceProblem<dim>::evaluate_boundary_flux()
+  LaplaceProblem<dim, use_cuda>::evaluate_boundary_flux()
   {
     VectorType &residual = system_rhs;
     // 1. Compute the residual
@@ -934,9 +865,9 @@ namespace Heat_Transfer
   }
 
 
-  template <int dim>
+  template <int dim, bool use_cuda>
   void
-  LaplaceProblem<dim>::run(
+  LaplaceProblem<dim, use_cuda>::run(
     std::shared_ptr<TestCases::TestCaseBase<dim>> testcase_)
   {
     testcase = testcase_;
@@ -956,7 +887,7 @@ namespace Heat_Transfer
       Adapter::Adapter<dim, 1, VectorType, VectorizedArray<double>>>(
       parameters,
       int(TestCases::TestCaseBase<dim>::interface_id),
-      system_matrix.get_matrix_free(),
+      inhomogeneous_operator.get_matrix_free(),
       0 /*MF dof index*/,
       0 /*MF quad index*/,
       testcase->is_dirichlet);
