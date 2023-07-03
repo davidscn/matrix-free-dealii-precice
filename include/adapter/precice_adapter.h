@@ -14,7 +14,7 @@
 #include <adapter/dof_interface.h>
 #include <adapter/quad_interface.h>
 #include <base/q_equidistant.h>
-#include <precice/SolverInterface.hpp>
+#include <precice/precice.hpp>
 
 #include <ostream>
 
@@ -38,7 +38,7 @@ namespace Adapter
       typename CouplingInterface<dim, data_dim, VectorizedArrayType>::
         value_type;
     /**
-     * @brief      Constructor, which sets up the precice Solverinterface
+     * @brief      Constructor, which sets up the precice Participant
      *
      * @tparam     data_dim Dimension of the coupling data. Equivalent to n_components
      *             in the deal.II documentation
@@ -169,9 +169,9 @@ namespace Adapter
 
 
   private:
-    // public precice solverinterface, needed in order to steer the time loop
+    // public precice Participant, needed in order to steer the time loop
     // inside the solver.
-    std::shared_ptr<precice::SolverInterface> precice;
+    std::shared_ptr<precice::Participant> precice;
     /// The objects handling reading and writing data
     std::shared_ptr<CouplingInterface<dim, data_dim, VectorizedArrayType>>
       writer;
@@ -199,13 +199,13 @@ namespace Adapter
     const bool         is_dirichlet)
     : dealii_boundary_interface_id(dealii_boundary_interface_id)
   {
-    precice = std::make_shared<precice::SolverInterface>(
+    precice = std::make_shared<precice::Participant>(
       parameters.participant_name,
       parameters.config_file,
       Utilities::MPI::this_mpi_process(MPI_COMM_WORLD),
       Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD));
 
-    AssertThrow(dim == precice->getDimensions(), ExcInternalError());
+    AssertThrow(dim == precice->getMeshDimensions(parameters.read_mesh_name), ExcInternalError());
     AssertThrow(dim > 1, ExcNotImplemented());
 
     // 1. Set the reader, which is defined in the Adapter constructor

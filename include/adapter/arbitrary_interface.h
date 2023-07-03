@@ -22,9 +22,9 @@ namespace Adapter
   public:
     ArbitraryInterface(
       std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
-      std::shared_ptr<precice::SolverInterface> precice,
-      std::string                               mesh_name,
-      types::boundary_id                        interface_id)
+      std::shared_ptr<precice::Participant> precice,
+      std::string                           mesh_name,
+      types::boundary_id                    interface_id)
       : CouplingInterface<dim, data_dim, VectorizedArrayType>(data,
                                                               precice,
                                                               mesh_name,
@@ -170,8 +170,7 @@ namespace Adapter
         }
 
     // Finally pass the bounding box to preCICE
-    this->precice->setMeshAccessRegion(this->mesh_name,
-                                       precice_bounding_box.data());
+    this->precice->setMeshAccessRegion(this->mesh_name, precice_bounding_box);
   }
 
 
@@ -287,9 +286,8 @@ namespace Adapter
 
     // ... and let preCICE fill the data containers
     this->precice->getMeshVerticesAndIDs(this->mesh_name,
-                                         received_mesh_size,
-                                         interface_nodes_ids.data(),
-                                         received_coordinates.data());
+                                         interface_nodes_ids,
+                                         received_coordinates);
 
     // Transform the received points into a more deal.II like format, which is
     // vector of points

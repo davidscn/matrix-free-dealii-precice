@@ -23,7 +23,7 @@ namespace Adapter
   public:
     DoFInterface(
       std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
-      std::shared_ptr<precice::SolverInterface> precice,
+      std::shared_ptr<precice::Participant> precice,
       std::string                               mesh_name,
       types::boundary_id                        interface_id,
       int                                       mf_dof_index)
@@ -156,7 +156,7 @@ namespace Adapter
 
         // pass node coordinates to precice
         const int precice_id =
-          this->precice->setMeshVertex(this->mesh_name, nodes_position.data());
+          this->precice->setMeshVertex(this->mesh_name, nodes_position);
         interface_nodes_ids.emplace_back(precice_id);
       }
 

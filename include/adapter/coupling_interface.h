@@ -6,7 +6,7 @@
 #include <deal.II/matrix_free/matrix_free.h>
 
 #include <base/fe_integrator.h>
-#include <precice/SolverInterface.hpp>
+#include <precice/precice.hpp>
 
 namespace Adapter
 {
@@ -37,7 +37,7 @@ namespace Adapter
   public:
     CouplingInterface(
       std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
-      std::shared_ptr<precice::SolverInterface> precice,
+      std::shared_ptr<precice::Participant> precice,
       std::string                               mesh_name,
       types::boundary_id                        interface_id);
 
@@ -131,8 +131,8 @@ namespace Adapter
     /// The MatrixFree object (preCICE can only handle double precision)
     std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> mf_data;
 
-    /// public precice solverinterface
-    std::shared_ptr<precice::SolverInterface> precice;
+    /// public precice Participant
+    std::shared_ptr<precice::Participant> precice;
 
     /// Configuration parameters
     const std::string mesh_name;
@@ -155,7 +155,7 @@ namespace Adapter
   template <int dim, int data_dim, typename VectorizedArrayType>
   CouplingInterface<dim, data_dim, VectorizedArrayType>::CouplingInterface(
     std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
-    std::shared_ptr<precice::SolverInterface>                           precice,
+    std::shared_ptr<precice::Participant>                           precice,
     std::string              mesh_name,
     const types::boundary_id interface_id)
     : mf_data(data)

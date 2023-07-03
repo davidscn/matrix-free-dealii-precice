@@ -22,7 +22,7 @@ namespace Adapter
   public:
     QuadInterface(
       std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
-      std::shared_ptr<precice::SolverInterface> precice,
+      std::shared_ptr<precice::Participant> precice,
       std::string                               mesh_name,
       types::boundary_id                        interface_id,
       int                                       mf_dof_index,
