@@ -295,17 +295,17 @@ namespace Adapter
     reader->define_coupling_mesh();
     writer->define_coupling_mesh();
 
-    // Only the writer needs potentially to process the coupling mesh, if the
-    // mapping is carried out in the solver
-    writer->process_coupling_mesh();
 
     // write initial writeData to preCICE if required
     if (precice->requiresInitialData())
       writer->write_data(dealii_to_precice);
 
-
     // Initialize preCICE internally
     precice->initialize();
+
+    // Only the writer needs potentially to process the coupling mesh, if the
+    // mapping is carried out in the solver
+    writer->process_coupling_mesh();
 
     // Maybe, read block-wise and work with an AlignedVector since the read data
     // (forces) is multiple times required during the Newton iteration
