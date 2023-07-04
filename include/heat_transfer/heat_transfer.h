@@ -639,7 +639,8 @@ namespace Heat_Transfer
               // Get the value from preCICE
               const auto heat_flux =
                 precice_adapter->read_on_quadrature_point(q_index,
-                                                          active_faces);
+                                                          active_faces,
+                                                          dt);
               phi_face.submit_value(-heat_flux * dt, q);
               ++q_index;
             }
@@ -681,7 +682,7 @@ namespace Heat_Transfer
                        int(TestCases::TestCaseBase<dim>::interface_id),
                        Functions::ZeroFunction<dim>(),
                        constraints) :
-                     precice_adapter->apply_dirichlet_bcs(constraints);
+                     precice_adapter->apply_dirichlet_bcs(constraints, dt);
       }
 
     for (const auto &el : testcase->dirichlet)

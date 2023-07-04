@@ -141,7 +141,8 @@ namespace Adapter
      *        documentation there.
      */
     void
-    apply_dirichlet_bcs(AffineConstraints<double> &constraints) const;
+    apply_dirichlet_bcs(AffineConstraints<double> &constraints,
+                        double                     relative_read_time) const;
 
     /**
      * @brief is_coupling_ongoing Calls the preCICE API function isCouplingOnGoing
@@ -363,9 +364,10 @@ namespace Adapter
             typename VectorizedArrayType>
   void
   Adapter<dim, data_dim, VectorType, VectorizedArrayType>::apply_dirichlet_bcs(
-    AffineConstraints<double> &constraints) const
+    AffineConstraints<double> &constraints,
+    double                     relative_read_time) const
   {
-    reader->apply_Dirichlet_bcs(constraints);
+    reader->apply_Dirichlet_bcs(constraints, relative_read_time);
   }
 
 
