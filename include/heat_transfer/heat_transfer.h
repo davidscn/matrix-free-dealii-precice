@@ -640,7 +640,7 @@ namespace Heat_Transfer
               const auto heat_flux =
                 precice_adapter->read_on_quadrature_point(q_index,
                                                           active_faces,
-                                                          dt);
+                                                          time.get_delta_t());
               phi_face.submit_value(-heat_flux * dt, q);
               ++q_index;
             }
@@ -676,13 +676,14 @@ namespace Heat_Transfer
         // dummy zero boundary condition, which is only relevant for the
         // initialization of MatrixFree. Afterwards, we use the adapter as
         // usual.
-        initialize ? VectorTools::interpolate_boundary_values(
-                       mapping,
-                       dof_handler,
-                       int(TestCases::TestCaseBase<dim>::interface_id),
-                       Functions::ZeroFunction<dim>(),
-                       constraints) :
-                     precice_adapter->apply_dirichlet_bcs(constraints, dt);
+        initialize ?
+          VectorTools::interpolate_boundary_values(
+            mapping,
+            dof_handler,
+            int(TestCases::TestCaseBase<dim>::interface_id),
+            Functions::ZeroFunction<dim>(),
+            constraints) :
+          precice_adapter->apply_dirichlet_bcs(constraints, time.get_delta_t());
       }
 
     for (const auto &el : testcase->dirichlet)
