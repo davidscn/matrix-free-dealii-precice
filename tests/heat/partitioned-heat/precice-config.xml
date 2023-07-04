@@ -57,7 +57,7 @@
         x-dead="true" />
     </participant>
 
-    <m2n:sockets from="Dirichlet" to="Neumann" />
+    <m2n:sockets acceptor="Dirichlet" connector="Neumann" />
 
     <coupling-scheme:serial-implicit>
       <participants first="Dirichlet" second="Neumann" />
