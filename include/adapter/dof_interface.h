@@ -24,9 +24,9 @@ namespace Adapter
     DoFInterface(
       std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
       std::shared_ptr<precice::Participant> precice,
-      std::string                               mesh_name,
-      types::boundary_id                        interface_id,
-      int                                       mf_dof_index)
+      std::string                           mesh_name,
+      types::boundary_id                    interface_id,
+      int                                   mf_dof_index)
       : CouplingInterface<dim, data_dim, VectorizedArrayType>(data,
                                                               precice,
                                                               mesh_name,
@@ -60,9 +60,11 @@ namespace Adapter
      *
      * @param constraints The relevant constraint object. Note that only dofs
      *        which have not yet been constrained are filled.
+     * @param relative_read_time delta_t on of the required constraints
      */
     virtual void
-    apply_Dirichlet_bcs(AffineConstraints<double> &constraints) const override;
+    apply_Dirichlet_bcs(AffineConstraints<double> &constraints,
+                        double relative_read_time) const override;
 
   private:
     /// The preCICE IDs
@@ -165,7 +167,8 @@ namespace Adapter
     if (!this->read_data_name.empty())
       this->print_info(true, this->precice->getMeshVertexSize(this->mesh_name));
     if (!this->write_data_name.empty())
-      this->print_info(false, this->precice->getMeshVertexSize(this->mesh_name));
+      this->print_info(false,
+                       this->precice->getMeshVertexSize(this->mesh_name));
   }
 
 
@@ -189,20 +192,10 @@ namespace Adapter
           }
 
         // and pass them to preCICE
-        if constexpr (data_dim > 1)
-          {
-            this->precice->writeVectorData(this->mesh_name,
-                                           this->write_data_name,
-                                           interface_nodes_ids[i],
-                                           write_data.data());
-          }
-        else
-          {
-            this->precice->writeScalarData(this->mesh_name,
-                                           this->write_data_name,
-                                           interface_nodes_ids[i],
-                                           write_data[0]);
-          }
+        this->precice->writeData(this->mesh_name,
+                                 this->write_data_name,
+                                 {&interface_nodes_ids[i], 1},
+                                 write_data);
       }
   }
 
@@ -211,25 +204,17 @@ namespace Adapter
   template <int dim, int data_dim, typename VectorizedArrayType>
   void
   DoFInterface<dim, data_dim, VectorizedArrayType>::apply_Dirichlet_bcs(
-    AffineConstraints<double> &constraints) const
+    AffineConstraints<double> &constraints,
+    double                     relative_read_time) const
   {
     std::array<double, data_dim> values;
     for (std::size_t i = 0; i < global_indices.size(); ++i)
       {
-        if constexpr (data_dim > 1)
-          {
-            this->precice->readVectorData(this->mesh_name,
-                                          this->read_data_name,
-                                          interface_nodes_ids[i],
-                                          values.data());
-          }
-        else
-          {
-            this->precice->readScalarData(this->mesh_name,
-                                          this->read_data_name,
-                                          interface_nodes_ids[i],
-                                          values[0]);
-          }
+        this->precice->readData(this->mesh_name,
+                                this->read_data_name,
+                                {&interface_nodes_ids[i], 1},
+                                relative_read_time,
+                                values);
 
         // Get the global dof indices
         const auto dof = global_indices[i];

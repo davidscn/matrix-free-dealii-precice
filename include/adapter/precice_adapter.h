@@ -133,7 +133,8 @@ namespace Adapter
      */
     value_type
     read_on_quadrature_point(const unsigned int id_number,
-                             const unsigned int active_faces) const;
+                             const unsigned int active_faces,
+                             double             relative_read_time) const;
     /**
      * @brief Public API adapter method, which calls the respective implementation
      *        in derived classes of the CouplingInterface. Have a look at the
@@ -205,7 +206,8 @@ namespace Adapter
       Utilities::MPI::this_mpi_process(MPI_COMM_WORLD),
       Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD));
 
-    AssertThrow(dim == precice->getMeshDimensions(parameters.read_mesh_name), ExcInternalError());
+    AssertThrow(dim == precice->getMeshDimensions(parameters.read_mesh_name),
+                ExcInternalError());
     AssertThrow(dim > 1, ExcNotImplemented());
 
     // 1. Set the reader, which is defined in the Adapter constructor
@@ -345,9 +347,12 @@ namespace Adapter
     typename Adapter<dim, data_dim, VectorType, VectorizedArrayType>::value_type
     Adapter<dim, data_dim, VectorType, VectorizedArrayType>::
       read_on_quadrature_point(const unsigned int id_number,
-                               const unsigned int active_faces) const
+                               const unsigned int active_faces,
+                               double             relative_read_time) const
   {
-    return reader->read_on_quadrature_point(id_number, active_faces);
+    return reader->read_on_quadrature_point(id_number,
+                                            active_faces,
+                                            relative_read_time);
   }
 
 

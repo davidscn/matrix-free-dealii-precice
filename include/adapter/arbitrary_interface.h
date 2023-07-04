@@ -192,15 +192,15 @@ namespace Adapter
                                     EvaluationFlags::values);
               const auto val = fe_evaluator.get_value(0);
               if constexpr (data_dim > 1)
-                this->precice->writeVectorData(this->mesh_name,
-                                               this->write_data_name,
-                                               interface_nodes_ids[i],
-                                               val.begin_raw());
+                this->precice->writeData(this->mesh_name,
+                                         this->write_data_name,
+                                         {&interface_nodes_ids[i], 1},
+                                         {val.begin_raw(), static_cast<std::size_t>(data_dim)});
               else
-                this->precice->writeScalarData(this->mesh_name,
-                                               this->write_data_name,
-                                               interface_nodes_ids[i],
-                                               val);
+                this->precice->writeData(this->mesh_name,
+                                         this->write_data_name,
+                                         {&interface_nodes_ids[i], 1},
+                                         {&val, 1});
             });
           break;
         case WriteDataType::gradients_on_other_mesh:
@@ -212,10 +212,10 @@ namespace Adapter
               fe_evaluator.evaluate(make_array_view(local_values),
                                     EvaluationFlags::gradients);
               const auto val = fe_evaluator.get_gradient(0);
-              this->precice->writeVectorData(this->mesh_name,
-                                             this->write_data_name,
-                                             interface_nodes_ids[i],
-                                             val.begin_raw());
+              this->precice->writeData(this->mesh_name,
+                                       this->write_data_name,
+                                       {&interface_nodes_ids[i], 1},
+                                       {val.begin_raw(), static_cast<std::size_t>(data_dim)});
             });
           break;
         default:
