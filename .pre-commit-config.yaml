@@ -1,0 +1,7 @@
+repos:
+# Official repo for the clang-format hook
+# Official repo for default hooks
+- repo: https://github.com/precice/precice-pre-commit-hooks
+  rev: 'v2.1'
+  hooks:
+  - id: format-precice-config
