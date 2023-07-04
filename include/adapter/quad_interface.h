@@ -229,7 +229,7 @@ namespace Adapter
     const std::function<value_type(FEFaceIntegrator &, unsigned int)>
       &get_write_value)
   {
-    Assert(!this->write_data_name().empty(), ExcNotInitialized());
+    Assert(!this->write_data_name.empty(), ExcNotInitialized());
     Assert(interface_is_defined, ExcNotInitialized());
     // Similar as in define_coupling_mesh
     FEFaceIntegrator phi(*this->mf_data, true, mf_dof_index, mf_quad_index);

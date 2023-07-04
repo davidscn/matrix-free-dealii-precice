@@ -141,9 +141,6 @@ namespace Adapter
     const std::string mesh_name;
     std::string       read_data_name  = "";
     std::string       write_data_name = "";
-    int               mesh_id         = -1;
-    int               read_data_id    = -1;
-    int               write_data_id   = -1;
 
     const types::boundary_id dealii_boundary_interface_id;
 
@@ -176,7 +173,7 @@ namespace Adapter
   CouplingInterface<dim, data_dim, VectorizedArrayType>::add_read_data(
     const std::string &read_data_name_)
   {
-    Assert(mesh_id != -1, ExcNotInitialized());
+    Assert(!mesh_name.empty(), ExcNotInitialized());
     read_data_name = read_data_name_;
   }
 
@@ -188,7 +185,7 @@ namespace Adapter
     const std::string &write_data_name_,
     const std::string &write_data_specification)
   {
-    Assert(mesh_id != -1, ExcNotInitialized());
+    Assert(!mesh_name.empty(), ExcNotInitialized());
     write_data_name = write_data_name_;
 
     if (write_data_specification == "values_on_dofs")
