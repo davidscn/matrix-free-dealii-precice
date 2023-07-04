@@ -38,8 +38,8 @@ namespace Adapter
     CouplingInterface(
       std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
       std::shared_ptr<precice::Participant> precice,
-      std::string                               mesh_name,
-      types::boundary_id                        interface_id);
+      std::string                           mesh_name,
+      types::boundary_id                    interface_id);
 
     virtual ~CouplingInterface() = default;
 
@@ -85,12 +85,14 @@ namespace Adapter
      *             works on.
      * @param[in]  active_faces Number of active faces the matrix-free object
      *             works on
+     * @param[in]  relativeReadTime time where the coupling data is required
      *
      * @return dim dimensional data associated to the interface node
      */
     virtual value_type
     read_on_quadrature_point(const unsigned int id_number,
-                             const unsigned int active_faces) const;
+                             const unsigned int active_faces,
+                             double             relative_read_time) const;
 
     /**
      * @brief apply_Dirichlet_bcs Read data from preCICE and fill a constraint
@@ -100,7 +102,8 @@ namespace Adapter
      * @param constraint associated constraint object
      */
     virtual void
-    apply_Dirichlet_bcs(AffineConstraints<double> &constraints) const;
+    apply_Dirichlet_bcs(AffineConstraints<double> &constraints,
+                        double                     relativeReadTime) const;
 
     /**
      * @brief Queries data IDs from preCICE for the given read data name
@@ -155,7 +158,7 @@ namespace Adapter
   template <int dim, int data_dim, typename VectorizedArrayType>
   CouplingInterface<dim, data_dim, VectorizedArrayType>::CouplingInterface(
     std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
-    std::shared_ptr<precice::Participant>                           precice,
+    std::shared_ptr<precice::Participant>                               precice,
     std::string              mesh_name,
     const types::boundary_id interface_id)
     : mf_data(data)
@@ -217,7 +220,8 @@ namespace Adapter
   typename CouplingInterface<dim, data_dim, VectorizedArrayType>::value_type
   CouplingInterface<dim, data_dim, VectorizedArrayType>::
     read_on_quadrature_point(const unsigned int /*id_number*/,
-                             const unsigned int /*active_faces*/) const
+                             const unsigned int /*active_faces*/,
+                             double /*relative_read_time*/) const
   {
     AssertThrow(false, ExcNotImplemented());
   }
@@ -227,7 +231,8 @@ namespace Adapter
   template <int dim, int data_dim, typename VectorizedArrayType>
   void
   CouplingInterface<dim, data_dim, VectorizedArrayType>::apply_Dirichlet_bcs(
-    AffineConstraints<double> &) const
+    AffineConstraints<double> &,
+    double) const
   {
     AssertThrow(false, ExcNotImplemented());
   }
