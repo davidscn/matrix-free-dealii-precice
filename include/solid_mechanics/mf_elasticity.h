@@ -1847,7 +1847,9 @@ namespace FSI
               Physics::Elasticity::Kinematics::F(phi.get_gradient(q));
             // Get the value from preCICE
             auto traction =
-              precice_adapter->read_on_quadrature_point(q_index, active_faces);
+              precice_adapter->read_on_quadrature_point(q_index,
+                                                        active_faces,
+                                                        parameters.delta_t);
 
             // pull-back the traction
             const auto N = phi.get_normal_vector(q);
