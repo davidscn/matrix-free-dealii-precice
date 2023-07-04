@@ -47,12 +47,13 @@
 
     <write-data name="Stress" mesh="tester-mesh" />
 
-    <mapping:rbf-thin-plate-splines
+    <mapping:rbf-global-direct
       direction="read"
       from="dealii-mesh"
       to="tester-mesh"
-      use-qr-decomposition="true"
-      constraint="consistent" />
+      constraint="consistent">
+      <basis-function:thin-plate-splines />
+    </mapping:rbf-global-direct>
   </participant>
 
   <m2n:sockets acceptor="dealii" connector="tester" />
