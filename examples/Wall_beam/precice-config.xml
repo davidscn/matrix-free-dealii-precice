@@ -1,4 +1,4 @@
-<?xml version="1.0"?>
+<?xml version="1.0" encoding="UTF-8" ?>
 <precice-configuration>
   <log>
     <sink
@@ -42,7 +42,7 @@
 
     <participant name="Solid">
       <provide-mesh name="Solid-write" />
-      <provide-mesh name="Solid-read"  />
+      <provide-mesh name="Solid-read" />
       <receive-mesh name="Fluid-Mesh-Faces" from="Fluid" />
       <write-data name="Displacement" mesh="Solid-write" />
       <read-data name="Stress" mesh="Solid-read" />

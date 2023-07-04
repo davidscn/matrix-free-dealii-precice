@@ -7,7 +7,7 @@
       enabled="true" />
   </log>
 
-  <solver-interface dimensions="2"  experimental="true">
+  <solver-interface dimensions="2" experimental="true">
     <data:scalar name="Temperature" />
     <data:scalar name="Heat-Flux" />
 
@@ -28,7 +28,11 @@
 
     <participant name="Neumann">
       <provide-mesh name="Neumann-Mesh" />
-      <receive-mesh name="Dirichlet-Mesh" from="Dirichlet" direct-access="true" safety-factor="0.0" />
+      <receive-mesh
+        name="Dirichlet-Mesh"
+        from="Dirichlet"
+        direct-access="true"
+        safety-factor="0.0" />
       <write-data name="Temperature" mesh="Dirichlet-Mesh" />
       <read-data name="Heat-Flux" mesh="Neumann-Mesh" />
     </participant>
