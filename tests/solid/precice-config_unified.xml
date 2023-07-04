@@ -47,7 +47,7 @@
         constraint="consistent" />
     </participant>
 
-    <m2n:sockets from="dealii" to="tester" />
+    <m2n:sockets acceptor="dealii" connector="tester" />
 
     <coupling-scheme:serial-explicit>
       <time-window-size value="0.1" />
