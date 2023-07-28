@@ -8,9 +8,8 @@
 #include <deal.II/fe/mapping_q_generic.h>
 
 #include <deal.II/matrix_free/matrix_free.h>
-#if PRECICE_EXPERIMENTAL
-#  include <adapter/arbitrary_interface.h>
-#endif
+
+#include <adapter/arbitrary_interface.h>
 #include <adapter/dof_interface.h>
 #include <adapter/quad_interface.h>
 #include <base/q_equidistant.h>
@@ -243,7 +242,6 @@ namespace Adapter
           parameters.write_mesh_name,
           dealii_boundary_interface_id,
           dof_index);
-#if PRECICE_EXPERIMENTAL
     else if (parameters.write_data_specification == "values_on_other_mesh" ||
              parameters.write_data_specification == "gradients_on_other_mesh")
       {
@@ -254,7 +252,6 @@ namespace Adapter
           parameters.write_mesh_name,
           dealii_boundary_interface_id);
       }
-#endif
     else
       {
         Assert(parameters.write_data_specification == "values_on_quads" ||
