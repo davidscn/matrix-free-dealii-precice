@@ -105,19 +105,6 @@ IF(NOT ${precice_FOUND})
 ENDIF()
 MESSAGE(STATUS "Found preCICE version ${precice_VERSION} at ${precice_DIR}")
 
-# Add a define for experimental preCICE features
-IF(${precice_VERSION} GREATER_EQUAL "2.3.0")
-  SET(SUPPORT_EXPERIMENTAL ON)
-ELSE()
-  SET(SUPPORT_EXPERIMENTAL OFF)
-ENDIF()
-OPTION(PRECICE_EXPERIMENTAL "Enable experimental preCICE (>=v2.3.0) features, which require the \"experimental\" tag within the preCICE configuration file." ${SUPPORT_EXPERIMENTAL})
-
-if(PRECICE_EXPERIMENTAL)
-    ADD_DEFINITIONS(-DPRECICE_EXPERIMENTAL)
-ENDIF(PRECICE_EXPERIMENTAL)
-MESSAGE(STATUS "Support for experimental preCICE features: ${PRECICE_EXPERIMENTAL}")
-
 # Link targets to preCICE
 TARGET_LINK_LIBRARIES(${SOLVER1} version precice::precice)
 TARGET_LINK_LIBRARIES(${SOLVER2} version precice::precice)
