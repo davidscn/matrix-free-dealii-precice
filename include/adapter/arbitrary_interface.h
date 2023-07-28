@@ -285,9 +285,9 @@ namespace Adapter
     interface_nodes_ids.resize(received_mesh_size);
 
     // ... and let preCICE fill the data containers
-    this->precice->getMeshVerticesAndIDs(this->mesh_name,
-                                         interface_nodes_ids,
-                                         received_coordinates);
+    this->precice->getMeshVertexIDsAndCoordinates(this->mesh_name,
+                                                  interface_nodes_ids,
+                                                  received_coordinates);
 
     // Transform the received points into a more deal.II like format, which is
     // vector of points
