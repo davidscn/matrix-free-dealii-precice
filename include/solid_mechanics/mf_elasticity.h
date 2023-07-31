@@ -892,6 +892,10 @@ namespace FSI
                                    mg_total_displacement,
                                    solution_total_transfer);
 
+    // necessary since deal.II v 9.6
+    for (unsigned int level = 0; level <= max_level; ++level)
+      mg_total_displacement[level].update_ghost_values();
+
     timer.leave_subsection();
   }
 
