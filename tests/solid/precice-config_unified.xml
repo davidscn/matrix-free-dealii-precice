@@ -22,13 +22,9 @@
 
   <participant name="dealii">
     <provide-mesh name="dealii-mesh" />
-
     <receive-mesh name="tester-mesh" from="tester" />
-
     <write-data name="Displacement" mesh="dealii-mesh" />
-
     <read-data name="Stress" mesh="dealii-mesh" />
-
     <mapping:rbf-global-direct
       direction="read"
       from="tester-mesh"
@@ -40,13 +36,9 @@
 
   <participant name="tester">
     <provide-mesh name="tester-mesh" />
-
     <receive-mesh name="dealii-mesh" from="dealii" />
-
     <read-data name="Displacement" mesh="tester-mesh" />
-
     <write-data name="Stress" mesh="tester-mesh" />
-
     <mapping:rbf-global-direct
       direction="read"
       from="dealii-mesh"
@@ -60,11 +52,8 @@
 
   <coupling-scheme:serial-explicit>
     <time-window-size value="0.1" />
-
     <max-time value="0.2" />
-
     <participants first="dealii" second="tester" />
-
     <exchange data="Displacement" mesh="dealii-mesh" from="dealii" to="tester" />
     <exchange data="Stress" mesh="tester-mesh" from="tester" to="dealii" initialize="true" />
   </coupling-scheme:serial-explicit>

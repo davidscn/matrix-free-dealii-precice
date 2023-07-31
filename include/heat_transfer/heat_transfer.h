@@ -71,7 +71,7 @@ namespace Heat_Transfer
   }
   template <int dim>
   double
-  Coefficient<dim>::value(const Point<dim> & p,
+  Coefficient<dim>::value(const Point<dim>  &p,
                           const unsigned int component) const
   {
     return value<double>(p, component);
@@ -110,12 +110,12 @@ namespace Heat_Transfer
   private:
     virtual void
     apply_add(
-      LinearAlgebra::distributed::Vector<number> &      dst,
+      LinearAlgebra::distributed::Vector<number>       &dst,
       const LinearAlgebra::distributed::Vector<number> &src) const override;
 
     void
-    local_apply(const MatrixFree<dim, number> &                   data,
-                LinearAlgebra::distributed::Vector<number> &      dst,
+    local_apply(const MatrixFree<dim, number>                    &data,
+                LinearAlgebra::distributed::Vector<number>       &dst,
                 const LinearAlgebra::distributed::Vector<number> &src,
                 const std::pair<unsigned int, unsigned int> &cell_range) const;
 
@@ -170,10 +170,10 @@ namespace Heat_Transfer
   template <int dim, typename number>
   void
   LaplaceOperator<dim, number>::local_apply(
-    const MatrixFree<dim, number> &                   data,
-    LinearAlgebra::distributed::Vector<number> &      dst,
+    const MatrixFree<dim, number>                    &data,
+    LinearAlgebra::distributed::Vector<number>       &dst,
     const LinearAlgebra::distributed::Vector<number> &src,
-    const std::pair<unsigned int, unsigned int> &     cell_range) const
+    const std::pair<unsigned int, unsigned int>      &cell_range) const
   {
     FECellIntegrator phi(data);
 
@@ -194,7 +194,7 @@ namespace Heat_Transfer
   template <int dim, typename number>
   void
   LaplaceOperator<dim, number>::apply_add(
-    LinearAlgebra::distributed::Vector<number> &      dst,
+    LinearAlgebra::distributed::Vector<number>       &dst,
     const LinearAlgebra::distributed::Vector<number> &src) const
   {
     this->data->cell_loop(&LaplaceOperator::local_apply, this, dst, src);
@@ -252,7 +252,7 @@ namespace Heat_Transfer
   // Helper function in order to evaluate the vectorized point
   template <int dim, typename Number>
   VectorizedArray<Number>
-  evaluate_function(const Function<dim> &                      function,
+  evaluate_function(const Function<dim>                       &function,
                     const Point<dim, VectorizedArray<Number>> &p_vectorized,
                     const unsigned int                         component = 0)
   {
@@ -328,7 +328,7 @@ namespace Heat_Transfer
      */
     double
     compute_error(
-      const Function<dim> &                             function,
+      const Function<dim>                              &function,
       const LinearAlgebra::distributed::Vector<double> &solution) const;
     /**
      * @brief output_results Output the generated results.
@@ -811,7 +811,7 @@ namespace Heat_Transfer
   template <int dim>
   double
   LaplaceProblem<dim>::compute_error(
-    const Function<dim> &                             function,
+    const Function<dim>                              &function,
     const LinearAlgebra::distributed::Vector<double> &solution) const
   {
     TimerOutput::Scope t(timer, "compute errors");

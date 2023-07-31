@@ -48,10 +48,10 @@ public:
 
   void
   solve(const Vector &forces,
-        Vector &      vertices,
-        double &      old_moment,
-        double &      theta,
-        double &      theta_dot,
+        Vector       &vertices,
+        double       &old_moment,
+        double       &theta,
+        double       &theta_dot,
         const double  delta_t)
   {
     // Leapfrog update

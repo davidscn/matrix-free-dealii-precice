@@ -42,7 +42,7 @@ namespace TestCases
 
   protected:
     void
-    refine_boundary(Triangulation<dim> &     triangulation,
+    refine_boundary(Triangulation<dim>      &triangulation,
                     const types::boundary_id boundary_id) const;
   };
 
@@ -50,7 +50,7 @@ namespace TestCases
 
   template <int dim>
   void
-  TestCaseBase<dim>::refine_boundary(Triangulation<dim> &     triangulation,
+  TestCaseBase<dim>::refine_boundary(Triangulation<dim>      &triangulation,
                                      const types::boundary_id boundary_id) const
   {
     for (const auto &cell : triangulation.active_cell_iterators())

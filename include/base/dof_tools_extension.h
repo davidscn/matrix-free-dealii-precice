@@ -17,10 +17,10 @@ namespace DoFTools
   template <int dim, int spacedim>
   void
   map_boundary_dofs_to_support_points(
-    const Mapping<dim, spacedim> &                      mapping,
-    const DoFHandler<dim, spacedim> &                   dof_handler,
+    const Mapping<dim, spacedim>                       &mapping,
+    const DoFHandler<dim, spacedim>                    &dof_handler,
     std::map<types::global_dof_index, Point<spacedim>> &support_points,
-    const ComponentMask &                               in_mask,
+    const ComponentMask                                &in_mask,
     const types::boundary_id                            boundary_id)
   {
     const FiniteElement<dim, spacedim> &fe = dof_handler.get_fe();

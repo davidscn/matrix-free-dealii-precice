@@ -29,13 +29,9 @@
   <participant name="Dirichlet">
     <provide-mesh name="Dirichlet-read" />
     <provide-mesh name="Dirichlet-write" />
-
     <receive-mesh name="Neumann-write" from="Neumann" />
-
     <write-data name="Heat-Flux" mesh="Dirichlet-write" />
-
     <read-data name="Temperature" mesh="Dirichlet-read" />
-
     <mapping:rbf-global-direct
       direction="read"
       from="Neumann-write"
@@ -49,13 +45,9 @@
   <participant name="Neumann">
     <provide-mesh name="Neumann-write" />
     <provide-mesh name="Neumann-read" />
-
     <receive-mesh name="Dirichlet-write" from="Dirichlet" />
-
     <write-data name="Temperature" mesh="Neumann-write" />
-
     <read-data name="Heat-Flux" mesh="Neumann-read" />
-
     <mapping:rbf-global-direct
       direction="read"
       from="Dirichlet-write"
@@ -70,13 +62,9 @@
 
   <coupling-scheme:serial-implicit>
     <participants first="Dirichlet" second="Neumann" />
-
     <max-time value="1.0" />
-
     <time-window-size value="0.1" />
-
     <max-iterations value="100" />
-
     <exchange data="Heat-Flux" mesh="Dirichlet-write" from="Dirichlet" to="Neumann" />
     <exchange
       data="Temperature"
@@ -84,10 +72,8 @@
       from="Neumann"
       to="Dirichlet"
       initialize="true" />
-
     <absolute-convergence-measure data="Heat-Flux" mesh="Dirichlet-write" limit="1e-10" />
     <absolute-convergence-measure data="Temperature" mesh="Neumann-write" limit="1e-10" />
-
     <acceleration:aitken>
       <data mesh="Neumann-write" name="Temperature" />
       <initial-relaxation value="0.5" />
