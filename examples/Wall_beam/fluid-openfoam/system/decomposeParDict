@@ -14,4 +14,3 @@ simpleCoeffs
     n               (2 2 3);
     delta           0.001;
 }
-

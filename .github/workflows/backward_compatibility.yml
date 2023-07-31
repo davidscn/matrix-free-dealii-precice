@@ -21,8 +21,8 @@ jobs:
                   git fetch origin ${{ github.ref }} && \
                   git checkout FETCH_HEAD && \
                   mkdir build && cd build && \
-                  cmake .. && make all"; 
-         
+                  cmake .. && make all";
+
          echo $command
 
          docker pull dealii/dealii:v9.3.0-focal
