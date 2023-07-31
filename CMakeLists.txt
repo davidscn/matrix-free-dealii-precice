@@ -92,7 +92,7 @@ DEAL_II_SETUP_TARGET(${SOLVER1})
 DEAL_II_SETUP_TARGET(${SOLVER2})
 
 # the environment variable precice_DIR is searched by default
-FIND_PACKAGE(precice 2.0
+FIND_PACKAGE(precice 3.0
         HINTS ${precice_DIR} ${PRECICE_DIR} $ENV{PRECICE_DIR}
   )
 IF(NOT ${precice_FOUND})
