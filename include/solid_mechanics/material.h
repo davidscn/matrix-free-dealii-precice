@@ -96,7 +96,7 @@ public:
   // The first function is the total energy
   // $\Psi = \Psi_{\textrm{iso}} + \Psi_{\textrm{vol}}$.
   Number
-  get_Psi(const Number &                         det_F,
+  get_Psi(const Number                          &det_F,
           const SymmetricTensor<2, dim, Number> &b_bar,
           const SymmetricTensor<2, dim, Number> &b) const
   {
@@ -115,8 +115,8 @@ public:
   // = \boldsymbol{\tau}_{\textrm{iso}} + \boldsymbol{\tau}_{\textrm{vol}}$
   template <typename OutputType>
   void
-  get_tau(SymmetricTensor<2, dim, OutputType> &      tau,
-          const OutputType &                         det_F,
+  get_tau(SymmetricTensor<2, dim, OutputType>       &tau,
+          const OutputType                          &det_F,
           const SymmetricTensor<2, dim, OutputType> &b_bar,
           const SymmetricTensor<2, dim, OutputType> &b)
   {
@@ -167,7 +167,7 @@ public:
   // where $ \mathfrak{C} = 4 \frac{\partial^2 \Psi(\mathbf{C})}{\partial
   // \mathbf{C} \partial \mathbf{C}}$
   SymmetricTensor<2, dim, Number>
-  act_Jc(const Number &                         det_F,
+  act_Jc(const Number                          &det_F,
          const SymmetricTensor<2, dim, Number> &b_bar,
          const SymmetricTensor<2, dim, Number> & /*b*/,
          const SymmetricTensor<2, dim, Number> &src) const

@@ -30,11 +30,11 @@ namespace VectorTools
    */
   template <int dim, int spacedim, typename VectorType>
   void
-  project_boundary_values(const Mapping<dim, spacedim> &   mapping,
+  project_boundary_values(const Mapping<dim, spacedim>    &mapping,
                           const DoFHandler<dim, spacedim> &dof_handler,
                           const types::boundary_id         boundary_id,
-                          VectorType &                     rhs_vector,
-                          const Quadrature<dim - 1> &      quadrature)
+                          VectorType                      &rhs_vector,
+                          const Quadrature<dim - 1>       &quadrature)
   {
     Assert((dynamic_cast<const parallel::TriangulationBase<dim> *>(
               &(dof_handler.get_triangulation())) == nullptr),

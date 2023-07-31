@@ -339,10 +339,10 @@ namespace Parameters
   {
     template <typename CLASS>
     void
-    process_parameter_handler(ParameterHandler & prm,
+    process_parameter_handler(ParameterHandler  &prm,
                               const std::string &input_file,
                               const int          dim,
-                              CLASS *            owning_class)
+                              CLASS             *owning_class)
     {
       try
         {

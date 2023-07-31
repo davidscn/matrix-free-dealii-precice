@@ -149,7 +149,7 @@ namespace FSI
     // Set up an Additional data object
     template <typename AdditionalData>
     void
-    setup_mf_additional_data(AdditionalData &   data,
+    setup_mf_additional_data(AdditionalData    &data,
                              const unsigned int level,
                              const bool         initialize_indices) const;
 
@@ -807,7 +807,7 @@ namespace FSI
   template <typename AdditionalData>
   void
   Solid<dim, Number>::setup_mf_additional_data(
-    AdditionalData &   data,
+    AdditionalData    &data,
     const unsigned int level,
     const bool         initialize_indices) const
   {
@@ -1076,7 +1076,7 @@ namespace FSI
   template <int dim, typename Number>
   template <typename Operator>
   void
-  Solid<dim, Number>::setup_operator_cache(Operator &         nh_operator,
+  Solid<dim, Number>::setup_operator_cache(Operator          &nh_operator,
                                            const unsigned int level)
   {
     timer.enter_subsection("Setup MF: cache() and diagonal()");
@@ -1597,7 +1597,7 @@ namespace FSI
   // Helper function in order to evaluate the vectorized point
   template <int dim, typename VectorizedArrayType, int n_components = dim>
   Tensor<1, n_components, VectorizedArrayType>
-  evaluate_function(const Function<dim> &                  function,
+  evaluate_function(const Function<dim>                   &function,
                     const Point<dim, VectorizedArrayType> &p_vectorized)
   {
     AssertDimension(function.n_components, n_components);

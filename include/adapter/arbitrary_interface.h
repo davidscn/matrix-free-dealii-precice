@@ -81,7 +81,7 @@ namespace Adapter
       const UpdateFlags                                 flags,
       const std::function<void(FEPointEvaluation<data_dim, dim> &,
                                const Vector<double> &,
-                               const size_t)> &         write_value) const;
+                               const size_t)>          &write_value) const;
 
     /**
      * @brief get_interface_type A function that returns a description of the
@@ -120,8 +120,8 @@ namespace Adapter
      */
     std::vector<
       std::pair<typename Triangulation<dim>::active_cell_iterator, Point<dim>>>
-    filter_vertices_to_local_partition(const Mapping<dim> &          mapping,
-                                       const Triangulation<dim> &    tria,
+    filter_vertices_to_local_partition(const Mapping<dim>           &mapping,
+                                       const Triangulation<dim>     &tria,
                                        const std::vector<Point<dim>> points_in,
                                        double tolerance = 1e-10);
 
@@ -195,7 +195,8 @@ namespace Adapter
                 this->precice->writeData(this->mesh_name,
                                          this->write_data_name,
                                          {&interface_nodes_ids[i], 1},
-                                         {val.begin_raw(), static_cast<std::size_t>(data_dim)});
+                                         {val.begin_raw(),
+                                          static_cast<std::size_t>(data_dim)});
               else
                 this->precice->writeData(this->mesh_name,
                                          this->write_data_name,
@@ -215,7 +216,8 @@ namespace Adapter
               this->precice->writeData(this->mesh_name,
                                        this->write_data_name,
                                        {&interface_nodes_ids[i], 1},
-                                       {val.begin_raw(), static_cast<std::size_t>(data_dim)});
+                                       {val.begin_raw(),
+                                        static_cast<std::size_t>(data_dim)});
             });
           break;
         default:
@@ -232,7 +234,7 @@ namespace Adapter
     const UpdateFlags                                 flags,
     const std::function<void(FEPointEvaluation<data_dim, dim> &,
                              const Vector<double> &,
-                             const size_t)> &         write_value) const
+                             const size_t)>          &write_value) const
   {
     Assert(!this->write_data_name.empty(), ExcNotInitialized());
 
@@ -330,8 +332,8 @@ namespace Adapter
   std::vector<
     std::pair<typename Triangulation<dim>::active_cell_iterator, Point<dim>>>
   ArbitraryInterface<dim, data_dim, VectorizedArrayType>::
-    filter_vertices_to_local_partition(const Mapping<dim> &          mapping,
-                                       const Triangulation<dim> &    tria,
+    filter_vertices_to_local_partition(const Mapping<dim>           &mapping,
+                                       const Triangulation<dim>     &tria,
                                        const std::vector<Point<dim>> points_in,
                                        double                        tolerance)
   {
