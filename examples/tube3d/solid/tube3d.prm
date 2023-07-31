@@ -103,7 +103,7 @@ end
 
 subsection Time
   # End time
-  set End time       = 0.5 
+  set End time       = 0.5
 
   # Time step size
   set Time step size = 1e-4
@@ -118,7 +118,7 @@ subsection precice configuration
 
   # Name of the coupling mesh in the precice-config.xml file
   set Write mesh name     = Solid-write
-  
+
   # Name of the coupling mesh in the precice-config.xml file
   set Read mesh name      = Solid-read
 

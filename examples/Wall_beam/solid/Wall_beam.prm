@@ -62,7 +62,7 @@ subsection Linear solver
 
   # Accurately estimate eigenvalues for coarse level Chebyshev solver
   set MF Chebyshev coarse accurate eigenvalues = true
-  
+
   # Number of CG iterations to estiamte condition number for Chebyshev smoother
   set MF Chebyshev number CG iterations = 30
 end
@@ -118,7 +118,7 @@ subsection precice configuration
 
   # Name of the coupling mesh in the precice-config.xml file
   set Read mesh name      = Solid-read
-  
+
   set Write mesh name     = Solid-write
 
   # Name of the read data in the precice-config.xml file

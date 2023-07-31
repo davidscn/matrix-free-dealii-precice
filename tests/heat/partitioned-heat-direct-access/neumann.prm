@@ -45,7 +45,7 @@ end
 subsection precice configuration
   # Name of the read coupling mesh in the precice-config.xml file
   set Read mesh name           = Neumann-Mesh
-  
+
   # Name of the write coupling mesh in the precice-config.xml file
   set Write mesh name          = Dirichlet-Mesh
 

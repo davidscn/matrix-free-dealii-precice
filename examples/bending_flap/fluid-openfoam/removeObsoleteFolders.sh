@@ -19,4 +19,3 @@ if [ -d processor0 ]; then
 	done
 fi
 cd ..
-

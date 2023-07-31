@@ -10,7 +10,7 @@ with open(str(sys.argv[1])) as f:
      seen = set()
      for line in f:
          line_lower = line.lower()
-         
+
          if "CELLS" in line:
             sys.exit()
 
@@ -18,4 +18,3 @@ with open(str(sys.argv[1])) as f:
              print(line)
          else:
              seen.add(line_lower)
-

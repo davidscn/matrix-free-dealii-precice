@@ -30,7 +30,7 @@ boundaryField
         type            fixedValue;
         value           $internalField;
     }
-    
+
     upperWall
     {
         type            slip;
