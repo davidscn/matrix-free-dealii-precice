@@ -1,7 +1,7 @@
 # A matrix-free high performance solid solver for coupled fluid-structure interactions
 [![Heat transfer CI](https://github.com/DavidSCN/matrix-free-dealii-precice/actions/workflows/heat_transfer_ci.yml/badge.svg)](https://github.com/DavidSCN/matrix-free-dealii-precice/actions/workflows/heat_transfer_ci.yml)
 [![Solid mechanics CI](https://github.com/DavidSCN/matrix-free-dealii-precice/actions/workflows/solid_mechanics_ci.yml/badge.svg)](https://github.com/DavidSCN/matrix-free-dealii-precice/actions/workflows/solid_mechanics_ci.yml)
-[![v9.3](https://github.com/DavidSCN/matrix-free-dealii-precice/actions/workflows/backward_compatibility.yml/badge.svg)](https://github.com/DavidSCN/matrix-free-dealii-precice/actions/workflows/backward_compatibility.yml)
+[![v9.4](https://github.com/DavidSCN/matrix-free-dealii-precice/actions/workflows/backward_compatibility.yml/badge.svg)](https://github.com/DavidSCN/matrix-free-dealii-precice/actions/workflows/backward_compatibility.yml)
 
 This project provides matrix-free high-performance solver for coupled simulations: a hyper-elastic `solid` solver for coupled fluid-structure interactions, which was primarily developed on the basis of the ['large-strain-matrix-free'](https://github.com/davydden/large-strain-matrix-free) project, and a `heat` solver describing the thermal diffusion in a rigid body. The startin point of this project was given by the matrix-based coupled codes in the ['dealii-adapter'](https://github.com/precice/dealii-adapter) project. Special thanks goes to [@peterrum](https://github.com/peterrum/) for his valuable deal.II advice at all times.
 
@@ -28,7 +28,7 @@ The heat diffusion solver:
 In order to build the program, both libraries (deal.II and preCICE) need to be installed on your system:
 
 ### Step 1: install deal.II
-At least version `9.3` or greater is required. Compatibility for older deal.II versions and corresponding older repository versions might be available thorugh the [list of releases](https://github.com/DavidSCN/matrix-free-dealii-precice/releases). You can use the following command line instructions in order to download and compile deal.II. Note that the library relies on [p4est](https://www.p4est.org/) in order to handle distributed meshes and you need to adjust the `P4EST_DIR` according to your installation. If you have not yet installed p4est, you might want to download the latest tarball and run the `p4est-setup.sh` script located in your deal.II directory at `dealii/doc/external-libs`. In order to compile p4est properly, the script might require you to export the mpi wrapper before starting it: `export CC=mpicc` and `export CXX=mpicxx`. On Linux-based systems, the [candi](https://github.com/dealii/candi) (compile & install) script offers help for the installation process. A complete installation guide including all installation options is also given on the [deal.II installation page](https://dealii.org/developer/readme.html#installation).
+At least version `9.4` (`9.3` might work as well, but this version in not tested any more) or greater is required. Compatibility for older deal.II versions and corresponding older repository versions might be available thorugh the [list of releases](https://github.com/DavidSCN/matrix-free-dealii-precice/releases). You can use the following command line instructions in order to download and compile deal.II. Note that the library relies on [p4est](https://www.p4est.org/) in order to handle distributed meshes and you need to adjust the `P4EST_DIR` according to your installation. If you have not yet installed p4est, you might want to download the latest tarball and run the `p4est-setup.sh` script located in your deal.II directory at `dealii/doc/external-libs`. In order to compile p4est properly, the script might require you to export the mpi wrapper before starting it: `export CC=mpicc` and `export CXX=mpicxx`. On Linux-based systems, the [candi](https://github.com/dealii/candi) (compile & install) script offers help for the installation process. A complete installation guide including all installation options is also given on the [deal.II installation page](https://dealii.org/developer/readme.html#installation).
 ```
 git clone https://github.com/dealii/dealii.git
 mkdir build && cd build
@@ -50,7 +50,7 @@ make -j8
 ```
 
 ### Step 2: install preCICE
-At least version `2.0` or greater is required. A nice overview of various installation options is given on the [preCICE installation page](https://www.precice.org/installation-overview.html).
+At least version `3.0` or greater is required. A nice overview of various installation options is given on the [preCICE installation page](https://www.precice.org/installation-overview.html).
 
 ### Step 3: build the program
 Similar to the deal.II programs, run
