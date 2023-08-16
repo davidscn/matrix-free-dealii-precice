@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<precice-configuration dimensions="2">
+<precice-configuration>
   <log>
     <sink
       filter="%Severity% > debug and %Rank% = 0"
@@ -10,19 +10,19 @@
   <data:scalar name="Temperature" />
   <data:scalar name="Heat-Flux" />
 
-  <mesh name="Dirichlet-read">
+  <mesh name="Dirichlet-read" dimensions="2">
     <use-data name="Temperature" />
   </mesh>
 
-  <mesh name="Dirichlet-write">
+  <mesh name="Dirichlet-write" dimensions="2">
     <use-data name="Heat-Flux" />
   </mesh>
 
-  <mesh name="Neumann-read">
+  <mesh name="Neumann-read" dimensions="2">
     <use-data name="Heat-Flux" />
   </mesh>
 
-  <mesh name="Neumann-write">
+  <mesh name="Neumann-write" dimensions="2">
     <use-data name="Temperature" />
   </mesh>
 
