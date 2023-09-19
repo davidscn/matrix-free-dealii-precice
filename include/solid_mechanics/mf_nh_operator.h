@@ -871,10 +871,10 @@ NeoHookOperator<dim, Number>::do_operation_on_cell(FECellIntegrator &phi) const
                       {
                         VectorizedArrayType sum =
                           inv_jac[e][0] *
-                          ref_grads[(d * dim + 0) * n_q_points + q];
+                          ref_grads[(d * n_q_points + q) * dim + 0];
                         for (unsigned int f = 1; f < dim; ++f)
                           sum += inv_jac[e][f] *
-                                 ref_grads[(d * dim + f) * n_q_points + q];
+                                 ref_grads[(d * n_q_points + q) * dim + f];
                         F[d][e] = sum;
 
                         // since we already have the inverse Jacobian,
@@ -883,10 +883,10 @@ NeoHookOperator<dim, Number>::do_operation_on_cell(FECellIntegrator &phi) const
                         // same otherwise)
                         VectorizedArrayType sum2 =
                           inv_jac[e][0] *
-                          x_grads[(d * dim + 0) * n_q_points + q];
+                          x_grads[(d * n_q_points + q) * dim + 0];
                         for (unsigned int f = 1; f < dim; ++f)
                           sum2 += inv_jac[e][f] *
-                                  x_grads[(d * dim + f) * n_q_points + q];
+                                  x_grads[(d * n_q_points + q) * dim + f];
                         grad_Nx_v[d][e] = sum2;
                       }
                     F[d][d] += one;
