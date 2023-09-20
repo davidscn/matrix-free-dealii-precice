@@ -871,14 +871,14 @@ NeoHookOperator<dim, Number>::do_operation_on_cell(FECellIntegrator &phi) const
                       {
                         VectorizedArrayType sum =
                           inv_jac[e][0] *
-#if DEAL_II_GTE(9, 6, 0)
+#if DEAL_II_VERSION_GTE(9, 6, 0)
                           ref_grads[(d * n_q_points + q) * dim + 0];
 #else
                           ref_grads[(d * dim + 0) * n_q_points + q];
 #endif
                         for (unsigned int f = 1; f < dim; ++f)
                           sum += inv_jac[e][f] *
-#if DEAL_II_GTE(9, 6, 0)
+#if DEAL_II_VERSION_GTE(9, 6, 0)
                                  ref_grads[(d * n_q_points + q) * dim + f];
 #else
                                  ref_grads[(d * dim + f) * n_q_points + q];
@@ -891,14 +891,14 @@ NeoHookOperator<dim, Number>::do_operation_on_cell(FECellIntegrator &phi) const
                         // same otherwise)
                         VectorizedArrayType sum2 =
                           inv_jac[e][0] *
-#if DEAL_II_GTE(9, 6, 0)
+#if DEAL_II_VERSION_GTE(9, 6, 0)
                           x_grads[(d * n_q_points + q) * dim + 0];
 #else
                           x_grads[(d * dim + 0) * n_q_points + q];
 #endif
                         for (unsigned int f = 1; f < dim; ++f)
                           sum2 += inv_jac[e][f] *
-#if DEAL_II_GTE(9, 6, 0)
+#if DEAL_II_VERSION_GTE(9, 6, 0)
                                   x_grads[(d * n_q_points + q) * dim + f];
 #else
                                   x_grads[(d * dim + f) * n_q_points + q];
