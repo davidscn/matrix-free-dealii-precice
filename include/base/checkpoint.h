@@ -30,9 +30,9 @@ namespace Utilities
   void
   create_checkpoint(
     const dealii::parallel::distributed::Triangulation<dim> &triangulation,
-    const dealii::DoFHandler<dim> &                          dof_handler,
-    const std::vector<const VectorType *> &                  vectors,
-    const std::string &                                      name,
+    const dealii::DoFHandler<dim>                           &dof_handler,
+    const std::vector<const VectorType *>                   &vectors,
+    const std::string                                       &name,
     const double                                             t)
   {
     dealii::parallel::distributed::SolutionTransfer<dim, VectorType>
@@ -64,25 +64,47 @@ namespace Utilities
    */
   template <int dim, typename VectorType>
   void
-  load_checkpoint(
-    const dealii::DoFHandler<dim> &                    dof_handler,
-    std::vector<VectorType *> &                        vectors,
-    const std::string &                                name,
-    double &                                           t)
+  load_checkpoint(const dealii::DoFHandler<dim> &dof_handler,
+                  std::vector<VectorType *>     &vectors,
+                  const std::string             &name,
+                  double                        &t)
   {
+    auto partitioner = std::make_shared<Utilities::MPI::Partitioner>(
+      dof_handler.locally_owned_dofs(),
+      DoFTools::extract_locally_relevant_dofs(dof_handler),
+      MPI_COMM_WORLD);
+
+    // We need something temporarily because the reloading doesn't allow for
+    // ghosted vectors
+    std::vector<VectorType>   tmp_vectors(vectors.size());
+    std::vector<VectorType *> tmp_vectors_ptr;
+
+    for (auto &vec : tmp_vectors)
+      {
+        vec.reinit(partitioner);
+        tmp_vectors_ptr.emplace_back(&vec);
+      }
+
     // triangulation.load(name + "-checkpoint.mesh");
     dealii::parallel::distributed::SolutionTransfer<dim, VectorType>
       solution_transfer(dof_handler);
 
-    solution_transfer.deserialize(vectors);
+    solution_transfer.deserialize(tmp_vectors_ptr);
 
-    for (auto &it : vectors)
+    for (auto &it : tmp_vectors_ptr)
       it->update_ghost_values();
 
     std::ifstream file(name + "-checkpoint.metadata", std::ios::binary);
 
     boost::archive::binary_iarchive ia(file);
     ia >> t;
+
+
+    for (unsigned int i = 0; i < tmp_vectors_ptr.size(); ++i)
+      {
+        vectors[i]->copy_locally_owned_data_from(*(tmp_vectors_ptr[i]));
+        vectors[i]->update_ghost_values();
+      }
   }
 } // namespace Utilities
 

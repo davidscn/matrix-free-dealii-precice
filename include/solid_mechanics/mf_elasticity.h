@@ -2090,34 +2090,14 @@ namespace FSI
                                           &velocity_old,
                                           &acceleration_old});
 
-    auto partitioner = std::make_shared<Utilities::MPI::Partitioner>(
-      dof_handler.locally_owned_dofs(),
-      locally_relevant_dofs,
-      mpi_communicator);
-
-    // We need something temporarily because the reloading doesn't allow for
-    // ghosted vectors
-    std::vector<VectorType>   tmp_vectors(in_vectors.size());
-    std::vector<VectorType *> tmp_vectors_ptr;
-
-    for (auto &vec : tmp_vectors)
-      {
-        vec.reinit(partitioner);
-        tmp_vectors_ptr.emplace_back(&vec);
-      }
 
     double new_time = 0;
     Utilities::load_checkpoint<dim, VectorType>(dof_handler,
-                                                tmp_vectors_ptr,
+                                                in_vectors,
                                                 "test",
                                                 new_time);
 
 
-    for (unsigned int i = 0; i < tmp_vectors_ptr.size(); ++i)
-      {
-        in_vectors[i]->copy_locally_owned_data_from(*(tmp_vectors_ptr[i]));
-        in_vectors[i]->update_ghost_values();
-      }
 
     pcout << "resume interrupted computation at t = " << new_time << "\n";
   }
