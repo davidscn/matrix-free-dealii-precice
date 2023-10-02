@@ -74,37 +74,49 @@ namespace Utilities
       DoFTools::extract_locally_relevant_dofs(dof_handler),
       MPI_COMM_WORLD);
 
-    // We need something temporarily because the reloading doesn't allow for
-    // ghosted vectors
+    // To load a checkpoint, we need write access to ghost entries
+    // Thus, we might need temporary vectors to comply with the required
+    // partitioner layout (fully distributed vector with write access to ghost
+    // entries). We use lazy allocation, if required.
     std::vector<VectorType>   tmp_vectors(vectors.size());
     std::vector<VectorType *> tmp_vectors_ptr;
 
-    for (auto &vec : tmp_vectors)
+    for (std::size_t i = 0; i < vectors.size(); ++i)
       {
-        vec.reinit(partitioner);
-        tmp_vectors_ptr.emplace_back(&vec);
+        // With LA:d:V, we can grant write access using zero_out_ghost_values
+        // (this wouldn't work with distributed PETSc vectors or similar)
+        if (vectors[i]->has_ghost_elements())
+          {
+            vectors[i]->zero_out_ghost_values();
+            tmp_vectors_ptr.emplace_back(vectors[i]);
+          }
+        else
+          {
+            // in case our vector carries anyway only local data, i.e., no ghost
+            // values at all, we need to create a temporary vector
+            tmp_vectors[i].reinit(partitioner);
+            tmp_vectors_ptr.emplace_back(&tmp_vectors[i]);
+          }
       }
 
     // triangulation.load(name + "-checkpoint.mesh");
     dealii::parallel::distributed::SolutionTransfer<dim, VectorType>
       solution_transfer(dof_handler);
-
     solution_transfer.deserialize(tmp_vectors_ptr);
-
-    for (auto &it : tmp_vectors_ptr)
-      it->update_ghost_values();
-
-    std::ifstream file(name + "-checkpoint.metadata", std::ios::binary);
-
-    boost::archive::binary_iarchive ia(file);
-    ia >> t;
-
 
     for (unsigned int i = 0; i < tmp_vectors_ptr.size(); ++i)
       {
-        vectors[i]->copy_locally_owned_data_from(*(tmp_vectors_ptr[i]));
+        // Copy over data from the temporary vectors, if necessary
+        if (!vectors[i]->has_ghost_elements())
+          vectors[i]->copy_locally_owned_data_from(*(tmp_vectors_ptr[i]));
+        // ... and update all ghost values
         vectors[i]->update_ghost_values();
       }
+
+    // Last but not least, retrieve the time-stamp data
+    std::ifstream file(name + "-checkpoint.metadata", std::ios::binary);
+    boost::archive::binary_iarchive ia(file);
+    ia >> t;
   }
 } // namespace Utilities
 
