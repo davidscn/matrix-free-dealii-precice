@@ -146,11 +146,11 @@ namespace FSI
     output_results(const unsigned int result_number) const;
 
     void
-    write_checkpoint();
+    write_restart();
 
 
     void
-    load_checkpoint();
+    load_restart();
 
     // Set up an Additional data object
     template <typename AdditionalData>
@@ -580,9 +580,9 @@ namespace FSI
     precice_adapter->initialize(total_displacement);
 
     if (parameters.read_checkpoint)
-      load_checkpoint();
+      load_restart();
     else
-      write_checkpoint();
+      write_restart();
 
     // At the beginning, we reset the solution update for this time step...
     while (precice_adapter->is_coupling_ongoing())
@@ -625,8 +625,7 @@ namespace FSI
             time.increment();
           }
       }
-    write_checkpoint();
-
+    write_restart();
 
     // for post-processing, print average CG iterations over the whole run:
     timer_out << std::endl
@@ -2062,9 +2061,9 @@ namespace FSI
 
   template <int dim, typename Number>
   void
-  Solid<dim, Number>::write_checkpoint()
+  Solid<dim, Number>::write_restart()
   {
-    pcout << "checkpoint computation"
+    pcout << "Creating restart files for t = " + std::to_string(time.current())
           << "\n";
     std::vector<const VectorType *> in_vectors({&total_displacement,
                                                 &velocity,
@@ -2073,15 +2072,24 @@ namespace FSI
                                                 &velocity_old,
                                                 &acceleration_old});
 
-    Utilities::create_checkpoint<dim, VectorType>(
-      triangulation, dof_handler, in_vectors, "test", time.current());
+    // Make sure to pass updated vectors into the function
+    for (auto &in : in_vectors)
+      in->update_ghost_values();
+
+    Utilities::create_restart_snapshot<dim, VectorType>(
+      triangulation,
+      dof_handler,
+      total_displacement.get_partitioner(),
+      in_vectors,
+      "test",
+      time.current());
   }
 
 
 
   template <int dim, typename Number>
   void
-  Solid<dim, Number>::load_checkpoint()
+  Solid<dim, Number>::load_restart()
   {
     std::vector<VectorType *> in_vectors({&total_displacement,
                                           &velocity,
@@ -2092,14 +2100,14 @@ namespace FSI
 
 
     double new_time = 0;
-    Utilities::load_checkpoint<dim, VectorType>(dof_handler,
-                                                in_vectors,
-                                                "test",
-                                                new_time);
+    Utilities::load_restart_snapshot<dim, VectorType>(dof_handler,
+                                                      in_vectors,
+                                                      "test",
+                                                      new_time);
 
 
 
-    pcout << "resume interrupted computation at t = " << new_time << "\n";
+    pcout << "Loaded interrupted computation at t = " << new_time << "\n";
   }
 
 

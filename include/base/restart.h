@@ -16,35 +16,62 @@ DEAL_II_NAMESPACE_OPEN
 namespace Utilities
 {
   /**
-   * @brief Create a checkpoint consisting of the triangulation, vectors, and some metadata
+   * @brief Create files required for a restart consisting of the triangulation, vectors, and some metadata
    *
-   * @tparam dim
-   * @tparam VectorType
-   * @param triangulation
-   * @param dof_handler
-   * @param vectors
-   * @param name
-   * @param t
+   * @tparam PartitionerPtr shred_ptr holding a fully distributed  Partitioner with ghost elements
+   *
+   * @param triangulation The triangulation used to create the checkpoint
+   * @param dof_handler DoFHandeler associated to the global vectors
+   * @param partitioner A valid shared_ptr with partitioner used to create tmp vectors if necessary
+   * @param vectors A list of vectors, which are stored in the checkpoint
+   * @param name File name(s) for the restart files
+   * @param t Absolute time associated to the data vectors
    */
-  template <int dim, typename VectorType>
+  template <int dim, typename VectorType, typename PartitionerPtr>
   void
-  create_checkpoint(
+  create_restart_snapshot(
     const dealii::parallel::distributed::Triangulation<dim> &triangulation,
     const dealii::DoFHandler<dim>                           &dof_handler,
+    PartitionerPtr                                           partitioner,
     const std::vector<const VectorType *>                   &vectors,
     const std::string                                       &name,
     const double                                             t)
   {
+    // To load a restart, we need read access to ghost entries.
+    // Thus, we might need temporary vectors to comply with the required
+    // partitioner layout (fully distributed vector with read access to ghost
+    // entries). We use lazy allocation, if required.
+    std::vector<VectorType>         tmp_vectors(vectors.size());
+    std::vector<const VectorType *> tmp_vectors_ptr;
+
+    for (std::size_t i = 0; i < vectors.size(); ++i)
+      {
+        if (!vectors[i]->partitioners_are_globally_compatible(
+              *partitioner.get()))
+          {
+            // in case our vector carries anyway only local data, i.e., no ghost
+            // values at all, we need to create a temporary vector
+            tmp_vectors[i].reinit(partitioner);
+            tmp_vectors[i] = *(vectors[i]);
+            tmp_vectors_ptr.emplace_back(&tmp_vectors[i]);
+          }
+        else
+          {
+            // if the partitioner is compatible, we can just use the existing
+            // vector
+            tmp_vectors_ptr.emplace_back(vectors[i]);
+          }
+      }
+
     dealii::parallel::distributed::SolutionTransfer<dim, VectorType>
       solution_transfer(dof_handler);
 
-    solution_transfer.prepare_for_serialization(vectors);
-
-    triangulation.save(name + "-checkpoint.mesh");
+    solution_transfer.prepare_for_serialization(tmp_vectors_ptr);
+    triangulation.save(name + ".mesh");
 
     if (dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
       {
-        std::ofstream file(name + "-checkpoint.metadata", std::ios::binary);
+        std::ofstream file(name + ".metadata", std::ios::binary);
         boost::archive::binary_oarchive oa(file);
         oa << t;
       }
@@ -52,29 +79,26 @@ namespace Utilities
 
 
   /**
-   * @brief Load a checkpoint previously stored using create_checkpoint
+   * @brief Load a restart snapshot previously stored using create_restart_snapshot
    *
-   * @tparam dim
-   * @tparam VectorType
-   * @param triangulation
-   * @param dof_handler
-   * @param vectors
-   * @param name
-   * @param t
+   * @param dof_handler DoFHandler associated to the vectors
+   * @param vectors Vectors container to load data into
+   * @param name Name of the file bundle
+   * @param t Absolute time stored in the metadata
    */
   template <int dim, typename VectorType>
   void
-  load_checkpoint(const dealii::DoFHandler<dim> &dof_handler,
-                  std::vector<VectorType *>     &vectors,
-                  const std::string             &name,
-                  double                        &t)
+  load_restart_snapshot(const dealii::DoFHandler<dim> &dof_handler,
+                        std::vector<VectorType *>     &vectors,
+                        const std::string             &name,
+                        double                        &t)
   {
     auto partitioner = std::make_shared<Utilities::MPI::Partitioner>(
       dof_handler.locally_owned_dofs(),
       DoFTools::extract_locally_relevant_dofs(dof_handler),
       MPI_COMM_WORLD);
 
-    // To load a checkpoint, we need write access to ghost entries
+    // To load a restart, we need write access to ghost entries
     // Thus, we might need temporary vectors to comply with the required
     // partitioner layout (fully distributed vector with write access to ghost
     // entries). We use lazy allocation, if required.
@@ -114,7 +138,7 @@ namespace Utilities
       }
 
     // Last but not least, retrieve the time-stamp data
-    std::ifstream file(name + "-checkpoint.metadata", std::ios::binary);
+    std::ifstream                   file(name + ".metadata", std::ios::binary);
     boost::archive::binary_iarchive ia(file);
     ia >> t;
   }
