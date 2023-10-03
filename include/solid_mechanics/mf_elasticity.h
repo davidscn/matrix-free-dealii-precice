@@ -579,7 +579,7 @@ namespace FSI
       mf_data_reference);
     precice_adapter->initialize(total_displacement);
 
-    if (parameters.read_checkpoint)
+    if (parameters.start_time != 0)
       load_restart();
 
     // At the beginning, we reset the solution update for this time step...
@@ -647,8 +647,9 @@ namespace FSI
     Assert(testcase.get() != nullptr, ExcInternalError());
     testcase->make_coarse_grid_and_bcs(triangulation);
 
-    if (parameters.read_checkpoint)
-      triangulation.load(parameters.output_folder + "restart.mesh");
+    if (parameters.start_time != 0)
+      triangulation.load(parameters.output_folder + "restart-t-" +
+                         std::to_string(parameters.start_time) + ".mesh");
     else
       triangulation.refine_global(parameters.n_global_refinement);
 
@@ -2062,8 +2063,28 @@ namespace FSI
   void
   Solid<dim, Number>::write_restart()
   {
-    pcout << "--     Creating restart files for t = " +
-               std::to_string(time.current())
+    // We need to apply some cosmetics to t to make it usable
+    std::string t_string = std::to_string(time.current());
+    for (int i = t_string.size() - 1; i >= 1; i--)
+      {
+        if (t_string.at(i) == '0')
+          {
+            t_string.pop_back(); // Remove if last digit is '0'.
+          }
+        else if (t_string.at(i) == '.')
+          {
+            t_string.pop_back(); // Remove dot.
+            break;               // Break after '.' is removed.
+          }
+        else
+          {
+            break; // Or break before a digit is removed.
+          }
+      }
+    std::string restart_file(parameters.output_folder + "restart-t-" +
+                             t_string);
+    pcout << "--     Creating restart files \"" + restart_file +
+               "\" for t = " + t_string
           << " ( timestep " << time.get_timestep() << " ) "
           << "\n";
     std::vector<const VectorType *> in_vectors({&total_displacement,
@@ -2082,7 +2103,7 @@ namespace FSI
       dof_handler,
       total_displacement.get_partitioner(),
       in_vectors,
-      parameters.output_folder + "restart",
+      restart_file,
       time.current(),
       time.get_timestep());
   }
@@ -2100,18 +2121,17 @@ namespace FSI
                                           &velocity_old,
                                           &acceleration_old});
 
+    std::string restart_file(parameters.output_folder + "restart-t-" +
+                             std::to_string(parameters.start_time));
 
     double       loaded_time     = 0;
     unsigned int loaded_timestep = 0;
-    Utilities::load_restart_snapshot<dim, VectorType>(dof_handler,
-                                                      in_vectors,
-                                                      parameters.output_folder +
-                                                        "restart",
-                                                      loaded_time,
-                                                      loaded_timestep);
+    Utilities::load_restart_snapshot<dim, VectorType>(
+      dof_handler, in_vectors, restart_file, loaded_time, loaded_timestep);
 
-    pcout << "--     Loaded interrupted computation at t = " << loaded_time
-          << " ( timestep " << loaded_timestep << " ) "
+    pcout << "--     Restarting computation from files \"" + restart_file +
+               "\" at t = "
+          << loaded_time << " ( timestep " << loaded_timestep << " ) "
           << "\n";
     time.set_time(loaded_time, loaded_timestep);
   }
