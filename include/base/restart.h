@@ -26,6 +26,7 @@ namespace Utilities
    * @param vectors A list of vectors, which are stored in the checkpoint
    * @param name File name(s) for the restart files
    * @param t Absolute time associated to the data vectors
+   * @param t Timestep associated to the data vectors
    */
   template <int dim, typename VectorType, typename PartitionerPtr>
   void
@@ -35,7 +36,8 @@ namespace Utilities
     PartitionerPtr                                           partitioner,
     const std::vector<const VectorType *>                   &vectors,
     const std::string                                       &name,
-    const double                                             t)
+    const double                                             t,
+    unsigned int                                             timestep)
   {
     // To load a restart, we need read access to ghost entries.
     // Thus, we might need temporary vectors to comply with the required
@@ -74,6 +76,7 @@ namespace Utilities
         std::ofstream file(name + ".metadata", std::ios::binary);
         boost::archive::binary_oarchive oa(file);
         oa << t;
+        oa << timestep;
       }
   }
 
@@ -85,13 +88,15 @@ namespace Utilities
    * @param vectors Vectors container to load data into
    * @param name Name of the file bundle
    * @param t Absolute time stored in the metadata
+   * @param timestep Timestep stored in the metadata
    */
   template <int dim, typename VectorType>
   void
   load_restart_snapshot(const dealii::DoFHandler<dim> &dof_handler,
                         std::vector<VectorType *>     &vectors,
                         const std::string             &name,
-                        double                        &t)
+                        double                        &t,
+                        unsigned int                  &timestep)
   {
     auto partitioner = std::make_shared<Utilities::MPI::Partitioner>(
       dof_handler.locally_owned_dofs(),
@@ -141,6 +146,7 @@ namespace Utilities
     std::ifstream                   file(name + ".metadata", std::ios::binary);
     boost::archive::binary_iarchive ia(file);
     ia >> t;
+    ia >> timestep;
   }
 } // namespace Utilities
 

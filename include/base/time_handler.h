@@ -45,6 +45,12 @@ public:
     time_current += delta_t;
     ++timestep;
   }
+  void
+  set_time(double absolute_time, unsigned int nth_timestep)
+  {
+    time_current = absolute_time;
+    timestep     = nth_timestep;
+  }
 
 private:
   unsigned int timestep;

@@ -60,9 +60,9 @@ static const unsigned int debug_level = 0;
 #include <deal.II/physics/elasticity/standard_tensors.h>
 
 #include <adapter/precice_adapter.h>
-#include <base/checkpoint.h>
 #include <base/fe_integrator.h>
 #include <base/q_equidistant.h>
+#include <base/restart.h>
 #include <base/time_handler.h>
 #include <base/utilities.h>
 #include <cases/case_base.h>
@@ -581,8 +581,6 @@ namespace FSI
 
     if (parameters.read_checkpoint)
       load_restart();
-    else
-      write_restart();
 
     // At the beginning, we reset the solution update for this time step...
     while (precice_adapter->is_coupling_ongoing())
@@ -625,6 +623,7 @@ namespace FSI
             time.increment();
           }
       }
+    // has to come after we incremented the time
     write_restart();
 
     // for post-processing, print average CG iterations over the whole run:
@@ -649,7 +648,7 @@ namespace FSI
     testcase->make_coarse_grid_and_bcs(triangulation);
 
     if (parameters.read_checkpoint)
-      triangulation.load("test-checkpoint.mesh");
+      triangulation.load(parameters.output_folder + "restart.mesh");
     else
       triangulation.refine_global(parameters.n_global_refinement);
 
@@ -2063,7 +2062,9 @@ namespace FSI
   void
   Solid<dim, Number>::write_restart()
   {
-    pcout << "Creating restart files for t = " + std::to_string(time.current())
+    pcout << "--     Creating restart files for t = " +
+               std::to_string(time.current())
+          << " ( timestep " << time.get_timestep() << " ) "
           << "\n";
     std::vector<const VectorType *> in_vectors({&total_displacement,
                                                 &velocity,
@@ -2081,8 +2082,9 @@ namespace FSI
       dof_handler,
       total_displacement.get_partitioner(),
       in_vectors,
-      "test",
-      time.current());
+      parameters.output_folder + "restart",
+      time.current(),
+      time.get_timestep());
   }
 
 
@@ -2099,15 +2101,19 @@ namespace FSI
                                           &acceleration_old});
 
 
-    double new_time = 0;
+    double       loaded_time     = 0;
+    unsigned int loaded_timestep = 0;
     Utilities::load_restart_snapshot<dim, VectorType>(dof_handler,
                                                       in_vectors,
-                                                      "test",
-                                                      new_time);
+                                                      parameters.output_folder +
+                                                        "restart",
+                                                      loaded_time,
+                                                      loaded_timestep);
 
-
-
-    pcout << "Loaded interrupted computation at t = " << new_time << "\n";
+    pcout << "--     Loaded interrupted computation at t = " << loaded_time
+          << " ( timestep " << loaded_timestep << " ) "
+          << "\n";
+    time.set_time(loaded_time, loaded_timestep);
   }
 
 
