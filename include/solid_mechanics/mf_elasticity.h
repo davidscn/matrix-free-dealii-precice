@@ -564,7 +564,8 @@ namespace FSI
     testcase = testcase_;
     make_grid();
     system_setup();
-    output_results(0);
+    if (parameters.start_time != 0)
+      output_results(0);
     time.increment();
 
     // We then declare the incremental solution update $\varDelta
@@ -623,8 +624,11 @@ namespace FSI
             time.increment();
           }
       }
-    // has to come after we incremented the time
+    // write the restart after we finished
+    // we decrement the time in the write_restart function, as we call the
+    // function after we incremented the time for the next iteration
     write_restart();
+
 
     // for post-processing, print average CG iterations over the whole run:
     timer_out << std::endl
@@ -648,8 +652,14 @@ namespace FSI
     testcase->make_coarse_grid_and_bcs(triangulation);
 
     if (parameters.start_time != 0)
-      triangulation.load(parameters.output_folder + "restart-t-" +
-                         std::to_string(parameters.start_time) + ".mesh");
+      {
+        std::string restart_file(
+          parameters.output_folder + "restart-t-" +
+          Utilities::format_time_stamp_to_string(parameters.start_time) +
+          ".mesh");
+        pcout << "--     Looking for restart file \"" << restart_file << "\"\n";
+        triangulation.load(restart_file);
+      }
     else
       triangulation.refine_global(parameters.n_global_refinement);
 
@@ -2063,29 +2073,18 @@ namespace FSI
   void
   Solid<dim, Number>::write_restart()
   {
-    // We need to apply some cosmetics to t to make it usable
-    std::string t_string = std::to_string(time.current());
-    for (int i = t_string.size() - 1; i >= 1; i--)
-      {
-        if (t_string.at(i) == '0')
-          {
-            t_string.pop_back(); // Remove if last digit is '0'.
-          }
-        else if (t_string.at(i) == '.')
-          {
-            t_string.pop_back(); // Remove dot.
-            break;               // Break after '.' is removed.
-          }
-        else
-          {
-            break; // Or break before a digit is removed.
-          }
-      }
+    // first, decrement the time, as we call the function after an (unnecessary)
+    // increment
+    double       t_decrement        = time.current() - time.get_delta_t();
+    unsigned int timestep_decrement = time.get_timestep() - 1;
+
+    auto t_string = Utilities::format_time_stamp_to_string(t_decrement);
+
     std::string restart_file(parameters.output_folder + "restart-t-" +
                              t_string);
     pcout << "--     Creating restart files \"" + restart_file +
                "\" for t = " + t_string
-          << " ( timestep " << time.get_timestep() << " ) "
+          << " ( timestep " << timestep_decrement << " ) "
           << "\n";
     std::vector<const VectorType *> in_vectors({&total_displacement,
                                                 &velocity,
@@ -2104,8 +2103,8 @@ namespace FSI
       total_displacement.get_partitioner(),
       in_vectors,
       restart_file,
-      time.current(),
-      time.get_timestep());
+      t_decrement,
+      timestep_decrement);
   }
 
 
@@ -2121,8 +2120,9 @@ namespace FSI
                                           &velocity_old,
                                           &acceleration_old});
 
-    std::string restart_file(parameters.output_folder + "restart-t-" +
-                             std::to_string(parameters.start_time));
+    std::string restart_file(
+      parameters.output_folder + "restart-t-" +
+      Utilities::format_time_stamp_to_string(parameters.start_time));
 
     double       loaded_time     = 0;
     unsigned int loaded_timestep = 0;
@@ -2134,6 +2134,8 @@ namespace FSI
           << loaded_time << " ( timestep " << loaded_timestep << " ) "
           << "\n";
     time.set_time(loaded_time, loaded_timestep);
+    // we loaded the time we already computed, so let's move on to the next step
+    time.increment();
   }
 
 
