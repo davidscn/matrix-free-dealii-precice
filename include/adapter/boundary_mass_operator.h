@@ -112,7 +112,7 @@ namespace MatrixFreeOperators
     VectorType &diagonal_vector = this->diagonal_entries->get_vector();
     this->initialize_dof_vector(inverse_diagonal_vector);
     this->initialize_dof_vector(diagonal_vector);
-    inverse_diagonal_vector = Number(1.);
+    inverse_diagonal_vector = static_cast<Number>(1.);
     apply_add(diagonal_vector, inverse_diagonal_vector);
 
     this->set_constrained_entries_to_one(diagonal_vector);
@@ -124,7 +124,7 @@ namespace MatrixFreeOperators
       {
         if (inverse_diagonal_vector.local_element(i) > 0)
           inverse_diagonal_vector.local_element(i) =
-            Number(1.) / inverse_diagonal_vector.local_element(i);
+            static_cast<Number>(1.) / inverse_diagonal_vector.local_element(i);
       }
 
     inverse_diagonal_vector.update_ghost_values();
