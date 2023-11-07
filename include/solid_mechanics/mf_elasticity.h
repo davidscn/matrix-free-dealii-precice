@@ -836,9 +836,20 @@ namespace FSI
           update_JxW_values;
         data.cell_vectorization_category.resize(triangulation.n_active_cells());
         for (const auto &cell : triangulation.active_cell_iterators())
-          if (cell->is_locally_owned())
-            data.cell_vectorization_category[cell->active_cell_index()] =
-              cell->material_id();
+          {
+            if (cell->is_locally_owned())
+              {
+                data.cell_vectorization_category[cell->active_cell_index()] =
+                  cell->material_id();
+#if !DEAL_II_VERSION_GTE(9, 6, 0)
+                // See also https://github.com/dealii/dealii/issues/16250
+                AssertThrow(
+                  cell->material_id() == 0,
+                  ExcMessage(
+                    "The deal.II version you are using doesn't allow for different material_ids(). To use this feature, at least deal.II version 9.6.0 is required."));
+#endif
+              }
+          }
       }
     // Setup MG additinal data
     else
