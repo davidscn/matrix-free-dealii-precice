@@ -17,6 +17,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: run test
+      timeout-minutes: 20
 
       run: |
          command="sudo apt-get -y update && \
