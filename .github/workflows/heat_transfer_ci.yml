@@ -35,3 +35,11 @@ jobs:
          docker pull precice/precice:develop
          docker build -t dealii-precice:develop -f ./utilities/Dockerfile .
          docker run -t dealii-precice:develop /bin/sh -c "$command";
+    - uses: actions/upload-artifact@v4
+      if: failure()
+      with:
+        name: test-logs
+        path: |
+           tests/heat/**/*.log
+           tests/heat/**/*.output
+           tests/heat/**/*.diff
