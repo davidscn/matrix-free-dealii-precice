@@ -104,7 +104,42 @@ namespace Utilities
       << std::endl;
   }
 
-
+  /**
+   * @brief Helper function to convert different representations of the same number
+   * (in double rpecision) to a common format by truncating trailing zeros.
+   *
+   * Examples:
+   * number = 0.0100 -> 0.01
+   * number = 42.0100 -> 42.01
+   * number = 42.00 -> 42
+   *
+   *
+   * @param number the number to format
+   * @return std::string the string representation
+   */
+  std::string
+  format_time_stamp_to_string(double number)
+  {
+    // We need to apply some cosmetics to t to make it usable
+    std::string str = std::to_string(number);
+    for (int i = str.size() - 1; i >= 1; i--)
+      {
+        if (str.at(i) == '0')
+          {
+            str.pop_back(); // Remove if last digit is '0'.
+          }
+        else if (str.at(i) == '.')
+          {
+            str.pop_back(); // Remove dot.
+            break;          // Break after '.' is removed.
+          }
+        else
+          {
+            break; // Or break before a digit is removed.
+          }
+      }
+    return str;
+  }
 
   /**
    * @brief Rounds a given number up to a defined precision.
