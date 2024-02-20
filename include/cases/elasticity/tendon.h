@@ -99,8 +99,8 @@ namespace TestCases
 
     // TODO: Make this dependent on the refinement level
     // you can use the information from the triangulation to do so
-    const double       lower_x = (z_height / 2) - (z_height_per_cell / 2);
-    const double       upper_x = (z_height / 2) + (z_height_per_cell / 2);
+    const double       lower_x = 15 + (z_height / 2) - (z_height_per_cell / 2);
+    const double       upper_x = 15 + (z_height / 2) + (z_height_per_cell / 2);
     const unsigned int clamped_mesh_id = 1;
 
     bool any_face_is_clamped = false;
@@ -111,8 +111,8 @@ namespace TestCases
           if (face->at_boundary() == true)
             {
               // The left coupling interface
-              if (face->center()[2] - lower_x > 1e-6 &&
-                  face->center()[2] - upper_x < 1e-6)
+              if (face->center()[2] - (lower_x-1e-6) > 0 &&
+                  upper_x+1e-6 - face->center()[2]  > 0)
                 {
                   face->set_boundary_id(clamped_mesh_id);
                   any_face_is_clamped = true;

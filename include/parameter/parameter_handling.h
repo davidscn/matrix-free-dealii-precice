@@ -126,7 +126,7 @@ namespace Parameters
         testcase,
         "Testcase to compute",
         Patterns::Selection(
-          "turek_hron|cook|tube3d|bending_flap|Wall_beam|perpendicular_flap|"
+          "tendon|turek_hron|cook|tube3d|bending_flap|Wall_beam|perpendicular_flap|"
           "partitioned_heat_dirichlet|partitioned_heat_neumann"));
     }
     prm.leave_subsection();
@@ -405,8 +405,8 @@ namespace Parameters
                       ExcMessage(error_message));
           AssertThrow((owning_class->write_mesh_name2 == "default2"),
                       ExcMessage(error_message));
-          owning_class->read_mesh_name1  = owning_class->mesh_name2;
-          owning_class->write_mesh_name1 = owning_class->mesh_name2;
+          owning_class->read_mesh_name2  = owning_class->mesh_name2;
+          owning_class->write_mesh_name2 = owning_class->mesh_name2;
         }
       else
         {

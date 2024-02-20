@@ -2,10 +2,10 @@
 # ---------------------
 subsection Finite element system
   # Displacement system polynomial order
-  set Polynomial degree = 2
+  set Polynomial degree = 1
 
   # Gauss quadrature order
-  set Quadrature order  = 3
+  set Quadrature order  = 2
 end
 
 
@@ -14,7 +14,7 @@ subsection Geometry
   set Dimension         = 3
 
   # Number of global refinements
-  set Global refinement = 3
+  set Global refinement = 2
 
   # Testcase to compute
   set Testcase          = tendon
@@ -57,16 +57,16 @@ end
 
 subsection Material properties
   # Density
-  set Density         = 250
+  set Density         = 1000
 
   # Formulation of the energy function
   set Formulation     = 0
 
   # Poisson's ratio
-  set Poisson's ratio = 0.4
+  set Poisson's ratio = 0.167
 
   # Shear modulus
-  set Shear modulus   = 178.57
+  set Shear modulus   = 3e8
 end
 
 
@@ -105,7 +105,7 @@ end
 
 subsection Time
   # End time
-  set End time       = 1
+  set End time       = 20
 
   # Time step size
   set Time step size = 0.01
@@ -114,25 +114,25 @@ end
 
 subsection precice configuration
   # Name of the participant in the precice-config.xml file
-  set Participant name         = dealii
+  set Participant name         = TendonSolver
 
   # Name of the coupling mesh in the precice-config.xml file
-  set Mesh name1               = dealii-mesh1
+  set Mesh name1               = TendonMeshLeft
 
   # Name of the read data in the precice-config.xml file
-  set Read data name1          = Stress1
+  set Read data name1          = Traction
 
   # Name of the write data in the precice-config.xml file
-  set Write data name1         = Displacement1
+  set Write data name1         = Displacement
 
   # Name of the coupling mesh in the precice-config.xml file
-  set Mesh name2               = dealii-mesh2
+  set Mesh name2               = TendonMeshRight
 
   # Name of the read data in the precice-config.xml file
-  set Read data name2          = Stress2
+  set Read data name2          = Traction
 
   # Name of the write data in the precice-config.xml file
-  set Write data name2         = Displacement2
+  set Write data name2         = Displacement
 
   # Specification of the write data location and the data typeAvailable
   # options are: values_on_dofs, values_on_quads, normal_gradients_on_quads
@@ -142,5 +142,5 @@ subsection precice configuration
   set Write quadrature index   = 0
 
   # Name of the precice configuration file
-  set precice config-file      = precice-config.xml
+  set precice config-file      = ../precice_config_multiple_neumann.xml
 end
