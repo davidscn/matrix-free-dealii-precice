@@ -122,5 +122,8 @@ namespace TestCases
       }
     AssertThrow(any_face_is_clamped,
                 ExcMessage("No Face was clamped, the problem is ill-posed."));
+
+    // OpenDiHu uses cm
+    GridTools::scale(1e-2, triangulation);
   }
 } // namespace TestCases
