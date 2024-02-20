@@ -374,24 +374,47 @@ namespace Parameters
         "options is invalid. Make sure you adjust your configuration file '" +
         owning_class->config_file + "' according to your settings.");
 
-      if (owning_class->mesh_name != "default")
+      if (owning_class->mesh_name1 != "default1")
         {
-          AssertThrow((owning_class->mesh_name != owning_class->read_mesh_name),
+          AssertThrow((owning_class->mesh_name1 !=
+                       owning_class->read_mesh_name1),
                       ExcMessage(error_message));
-          AssertThrow((owning_class->read_mesh_name == "default"),
+          AssertThrow((owning_class->read_mesh_name1 == "default1"),
                       ExcMessage(error_message));
-          AssertThrow((owning_class->write_mesh_name == "default"),
+          AssertThrow((owning_class->write_mesh_name1 == "default1"),
                       ExcMessage(error_message));
-          owning_class->read_mesh_name  = owning_class->mesh_name;
-          owning_class->write_mesh_name = owning_class->mesh_name;
+          owning_class->read_mesh_name1  = owning_class->mesh_name1;
+          owning_class->write_mesh_name1 = owning_class->mesh_name1;
         }
       else
         {
-          AssertThrow(("default" != owning_class->read_mesh_name) &&
-                        ("default" != owning_class->write_mesh_name),
+          AssertThrow(("default1" != owning_class->read_mesh_name1) &&
+                        ("default1" != owning_class->write_mesh_name1),
                       ExcMessage(error_message));
 
-          AssertThrow("default" == owning_class->mesh_name,
+          AssertThrow("default1" == owning_class->mesh_name1,
+                      ExcMessage(error_message));
+        }
+
+      if (owning_class->mesh_name2 != "default2")
+        {
+          AssertThrow((owning_class->mesh_name2 !=
+                       owning_class->read_mesh_name2),
+                      ExcMessage(error_message));
+          AssertThrow((owning_class->read_mesh_name2 == "default2"),
+                      ExcMessage(error_message));
+          AssertThrow((owning_class->write_mesh_name2 == "default2"),
+                      ExcMessage(error_message));
+          owning_class->read_mesh_name1  = owning_class->mesh_name2;
+          owning_class->write_mesh_name1 = owning_class->mesh_name2;
+        }
+      else
+        {
+          AssertThrow(("default2" != owning_class->read_mesh_name2) &&
+                        ("default2" != owning_class->write_mesh_name2),
+                      ExcMessage(error_message));
+
+          AssertThrow("default2" == owning_class->mesh_name2,
                       ExcMessage(error_message));
         }
 

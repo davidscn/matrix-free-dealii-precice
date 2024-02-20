@@ -17,16 +17,21 @@ namespace Parameters
    */
   struct PreciceAdapterConfiguration
   {
-    std::string config_file              = "precice config-file";
-    std::string participant_name         = "dealiisolver";
-    std::string mesh_name                = "default";
-    std::string read_mesh_name           = "default";
-    std::string write_mesh_name          = "default";
-    int         write_quad_index         = 0;
-    std::string write_data_specification = "values_on_quads";
-    std::string read_data_name           = "received-data";
-    std::string write_data_name          = "calculated-data";
+    std::string config_file      = "precice config-file";
+    std::string participant_name = "dealiisolver";
+    std::string mesh_name1       = "default1";
+    std::string read_mesh_name1  = "default1";
+    std::string write_mesh_name1 = "default1";
+    std::string read_data_name1  = "received-data1";
+    std::string write_data_name1 = "calculated-data1";
+    std::string mesh_name2       = "default2";
+    std::string read_mesh_name2  = "default2";
+    std::string write_mesh_name2 = "default2";
+    std::string read_data_name2  = "received-data2";
+    std::string write_data_name2 = "calculated-data2";
 
+    std::string write_data_specification = "values_on_quads";
+    int         write_quad_index         = 0;
     void
     add_parameters(ParameterHandler &prm);
   };
@@ -47,20 +52,54 @@ namespace Parameters
         "Name of the participant in the precice-config.xml file",
         Patterns::Anything());
       prm.add_parameter(
-        "Mesh name",
-        mesh_name,
+        "Mesh name1",
+        mesh_name1,
         "Name of the coupling mesh in the precice-config.xml file",
         Patterns::Anything());
       prm.add_parameter(
-        "Read mesh name",
-        read_mesh_name,
+        "Read mesh name1",
+        read_mesh_name1,
         "Name of the read coupling mesh in the precice-config.xml file",
         Patterns::Anything());
       prm.add_parameter(
-        "Write mesh name",
-        write_mesh_name,
+        "Write mesh name1",
+        write_mesh_name1,
         "Name of the write coupling mesh in the precice-config.xml file",
         Patterns::Anything());
+      prm.add_parameter("Read data name1",
+                        read_data_name1,
+                        "Name of the read data in the precice-config.xml file",
+                        Patterns::Anything());
+      prm.add_parameter("Write data name1",
+                        write_data_name1,
+                        "Name of the write data in the precice-config.xml file",
+                        Patterns::Anything());
+
+
+      prm.add_parameter(
+        "Mesh name2",
+        mesh_name2,
+        "Name of the coupling mesh in the precice-config.xml file",
+        Patterns::Anything());
+      prm.add_parameter(
+        "Read mesh name2",
+        read_mesh_name2,
+        "Name of the read coupling mesh in the precice-config.xml file",
+        Patterns::Anything());
+      prm.add_parameter(
+        "Write mesh name2",
+        write_mesh_name2,
+        "Name of the write coupling mesh in the precice-config.xml file",
+        Patterns::Anything());
+      prm.add_parameter("Read data name2",
+                        read_data_name2,
+                        "Name of the read data in the precice-config.xml file",
+                        Patterns::Anything());
+      prm.add_parameter("Write data name2",
+                        write_data_name2,
+                        "Name of the write data in the precice-config.xml file",
+                        Patterns::Anything());
+
       prm.add_parameter(
         "Write quadrature index",
         write_quad_index,
@@ -74,14 +113,6 @@ namespace Parameters
         Patterns::Selection(
           "values_on_dofs|values_on_quads|normal_gradients_on_quads|"
           "values_on_other_mesh|gradients_on_other_mesh"));
-      prm.add_parameter("Read data name",
-                        read_data_name,
-                        "Name of the read data in the precice-config.xml file",
-                        Patterns::Anything());
-      prm.add_parameter("Write data name",
-                        write_data_name,
-                        "Name of the write data in the precice-config.xml file",
-                        Patterns::Anything());
     }
     prm.leave_subsection();
   }

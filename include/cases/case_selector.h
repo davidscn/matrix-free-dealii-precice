@@ -5,6 +5,7 @@
 #include <cases/elasticity/bending_flap.h>
 #include <cases/elasticity/cook_membrane.h>
 #include <cases/elasticity/perpendicular_flap.h>
+#include <cases/elasticity/tendon.h>
 #include <cases/elasticity/tube_3d.h>
 #include <cases/elasticity/turek_hron.h>
 #include <cases/heat_transfer/partitioned_heat.h>
@@ -44,6 +45,8 @@ namespace TestCases
             return std::make_shared<WallBeam<dim>>();
           else if (testcase_name == "perpendicular_flap")
             return std::make_shared<PerpendicularFlap<dim>>();
+          else if (testcase_name == "tendon")
+            return std::make_shared<Tendon<dim>>();
           // Add your case here
         }
       if (simulation_type == "heat_transfer")

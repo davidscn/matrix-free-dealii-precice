@@ -568,9 +568,7 @@ namespace FSI
     setup_matrix_free();
     precice_adapter = std::make_unique<
       Adapter::Adapter<dim, dim, VectorType, VectorizedArrayType>>(
-      parameters,
-      int(TestCases::TestCaseBase<dim>::interface_id),
-      mf_data_reference);
+      parameters, TestCases::TestCaseBase<dim>::interfaces, mf_data_reference);
     precice_adapter->initialize(total_displacement);
 
     // At the beginning, we reset the solution update for this time step...
@@ -635,7 +633,8 @@ namespace FSI
   {
     Assert(testcase.get() != nullptr, ExcInternalError());
     testcase->make_coarse_grid_and_bcs(triangulation);
-    triangulation.refine_global(parameters.n_global_refinement);
+    testcase->refine_triangulation_and_finish_bcs(
+      triangulation, parameters.n_global_refinement);
 
     if (testcase->body_force.get() == nullptr)
       testcase->body_force =
@@ -1830,8 +1829,9 @@ namespace FSI
       }
 
 
-    FEFaceIntegrator phi(*mf_data_reference);
-    unsigned int     q_index = 0;
+    FEFaceIntegrator            phi(*mf_data_reference);
+    std::array<unsigned int, 2> q_index{{0, 0}};
+    std::size_t                 current_reader{};
 
     for (unsigned int face = mf_data_reference->n_inner_face_batches();
          face < mf_data_reference->n_boundary_face_batches() +
@@ -1841,8 +1841,18 @@ namespace FSI
         const auto boundary_id = mf_data_reference->get_boundary_id(face);
 
         // Only interfaces
-        if (boundary_id != int(TestCases::TestCaseBase<dim>::interface_id))
-          continue;
+        if (boundary_id == TestCases::TestCaseBase<dim>::interfaces[0])
+          {
+            current_reader = 0;
+          }
+        else if (boundary_id == TestCases::TestCaseBase<dim>::interfaces[1])
+          {
+            current_reader = 1;
+          }
+        else
+          {
+            continue;
+          }
 
         // Read out the total displacment
         phi.reinit(face);
@@ -1853,28 +1863,29 @@ namespace FSI
 
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           {
-            // Evaluate deformation gradient
-            const auto F =
-              Physics::Elasticity::Kinematics::F(phi.get_gradient(q));
+            // TODO: Ask about the configuration the muscle mesh is sending
+            // displacements Evaluate deformation gradient const auto F =
+            //   Physics::Elasticity::Kinematics::F(phi.get_gradient(q));
             // Get the value from preCICE
             auto traction =
-              precice_adapter->read_on_quadrature_point(q_index,
+              precice_adapter->read_on_quadrature_point(current_reader,
+                                                        q_index[current_reader],
                                                         active_faces,
                                                         parameters.delta_t);
 
-            // pull-back the traction
-            const auto N = phi.get_normal_vector(q);
+            // // pull-back the traction
+            // const auto N = phi.get_normal_vector(q);
 
-            // da/dA * N = det F F^{-T} * N := n_star
-            // -> da/dA = n_star.norm()
-            const auto n_star = determinant(F) * transpose(invert(F)) * N;
+            // // da/dA * N = det F F^{-T} * N := n_star
+            // // -> da/dA = n_star.norm()
+            // const auto n_star = determinant(F) * transpose(invert(F)) * N;
 
-            // t_0 = da/dA * t
-            traction *= n_star.norm();
+            // // t_0 = da/dA * t
+            // traction *= n_star.norm();
 
             // Perform pull-back operation and submit value
             phi.submit_value(traction, q);
-            ++q_index;
+            ++q_index[current_reader];
           }
         // Integrate the result and write into the rhs vector
         phi.integrate_scatter(EvaluationFlags::values, system_rhs);

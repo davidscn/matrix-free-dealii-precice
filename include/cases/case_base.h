@@ -22,6 +22,8 @@ namespace TestCases
   struct TestCaseBase
   {
   public:
+    static constexpr std::array<types::boundary_id, 2> interfaces{{11, 12}};
+
     static constexpr types::boundary_id interface_id = 11;
     // Optional TODO in case of more involved BCs: use FunctionParser
     std::map<types::boundary_id, std::unique_ptr<Function<dim>>> dirichlet;
@@ -37,6 +39,11 @@ namespace TestCases
     bool is_dirichlet = false;
     virtual void
     make_coarse_grid_and_bcs(Triangulation<dim> &triangulation) = 0;
+
+    virtual void
+    refine_triangulation_and_finish_bcs(
+      Triangulation<dim> &triangulation,
+      const unsigned int  n_refinement_levels) const;
 
     virtual ~TestCaseBase() = default;
 
@@ -65,5 +72,14 @@ namespace TestCases
       }
     triangulation.prepare_coarsening_and_refinement();
     triangulation.execute_coarsening_and_refinement();
+  }
+
+  template <int dim>
+  void
+  TestCaseBase<dim>::refine_triangulation_and_finish_bcs(
+    Triangulation<dim> &triangulation,
+    const unsigned int  n_refinement_levels) const
+  {
+    triangulation.refine_global(n_refinement_levels);
   }
 } // namespace TestCases
