@@ -60,8 +60,8 @@ namespace Adapter
      *            the relevant coupling data (absolute displacement for FSI)
      */
     virtual void
-    write_data(
-      const LinearAlgebra::distributed::Vector<double> &data_vector) override;
+    write_data(const LinearAlgebra::distributed::Vector<double> &data_vector,
+               int data_index) override;
 
   private:
     /**
@@ -178,7 +178,8 @@ namespace Adapter
   template <int dim, int data_dim, typename VectorizedArrayType>
   void
   ArbitraryInterface<dim, data_dim, VectorizedArrayType>::write_data(
-    const LinearAlgebra::distributed::Vector<double> &data_vector)
+    const LinearAlgebra::distributed::Vector<double> &data_vector,
+    int)
   {
     // Write different data depending on the write_data_type
     switch (this->write_data_type)

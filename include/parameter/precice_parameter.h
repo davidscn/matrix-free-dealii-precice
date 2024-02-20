@@ -17,18 +17,20 @@ namespace Parameters
    */
   struct PreciceAdapterConfiguration
   {
-    std::string config_file      = "precice config-file";
-    std::string participant_name = "dealiisolver";
-    std::string mesh_name1       = "default1";
-    std::string read_mesh_name1  = "default1";
-    std::string write_mesh_name1 = "default1";
-    std::string read_data_name1  = "received-data1";
-    std::string write_data_name1 = "calculated-data1";
-    std::string mesh_name2       = "default2";
-    std::string read_mesh_name2  = "default2";
-    std::string write_mesh_name2 = "default2";
-    std::string read_data_name2  = "received-data2";
-    std::string write_data_name2 = "calculated-data2";
+    std::string config_file       = "precice config-file";
+    std::string participant_name  = "dealiisolver";
+    std::string mesh_name1        = "default1";
+    std::string read_mesh_name1   = "default1";
+    std::string write_mesh_name1  = "default1";
+    std::string read_data_name1   = "received-data1";
+    std::string write_data_name1d = "calculated-data1d";
+    std::string write_data_name1v = "calculated-data1v";
+    std::string mesh_name2        = "default2";
+    std::string read_mesh_name2   = "default2";
+    std::string write_mesh_name2  = "default2";
+    std::string read_data_name2   = "received-data2";
+    std::string write_data_name2d = "calculated-data2d";
+    std::string write_data_name2v = "calculated-data2v";
 
     std::string write_data_specification = "values_on_quads";
     int         write_quad_index         = 0;
@@ -70,8 +72,12 @@ namespace Parameters
                         read_data_name1,
                         "Name of the read data in the precice-config.xml file",
                         Patterns::Anything());
-      prm.add_parameter("Write data name1",
-                        write_data_name1,
+      prm.add_parameter("Write data name displacement1",
+                        write_data_name1d,
+                        "Name of the write data in the precice-config.xml file",
+                        Patterns::Anything());
+      prm.add_parameter("Write data name velocity1",
+                        write_data_name1v,
                         "Name of the write data in the precice-config.xml file",
                         Patterns::Anything());
 
@@ -95,8 +101,12 @@ namespace Parameters
                         read_data_name2,
                         "Name of the read data in the precice-config.xml file",
                         Patterns::Anything());
-      prm.add_parameter("Write data name2",
-                        write_data_name2,
+      prm.add_parameter("Write data name displacement2",
+                        write_data_name2d,
+                        "Name of the write data in the precice-config.xml file",
+                        Patterns::Anything());
+      prm.add_parameter("Write data name velocity2",
+                        write_data_name2v,
                         "Name of the write data in the precice-config.xml file",
                         Patterns::Anything());
 

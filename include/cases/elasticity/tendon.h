@@ -111,8 +111,8 @@ namespace TestCases
           if (face->at_boundary() == true)
             {
               // The left coupling interface
-              if (face->center()[2] - (lower_x-1e-6) > 0 &&
-                  upper_x+1e-6 - face->center()[2]  > 0)
+              if (face->center()[2] - (lower_x - 1e-6) > 0 &&
+                  upper_x + 1e-6 - face->center()[2] > 0)
                 {
                   face->set_boundary_id(clamped_mesh_id);
                   any_face_is_clamped = true;

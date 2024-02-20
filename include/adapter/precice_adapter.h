@@ -77,7 +77,7 @@ namespace Adapter
      *             your initial condition.
      */
     void
-    initialize(const VectorType &dealii_to_precice);
+    initialize(const VectorType &dealii_to_precice, const VectorType &velocity);
 
     /**
      * @brief      Advances preCICE after every timestep, converts data formats
@@ -91,6 +91,7 @@ namespace Adapter
      */
     void
     advance(const VectorType &dealii_to_precice,
+            const VectorType &velocity,
             const double      computed_timestep_length);
 
     /**
@@ -218,8 +219,10 @@ namespace Adapter
       {parameters.write_mesh_name1, parameters.write_mesh_name2}};
     std::array<std::string, 2> read_data_names{
       {parameters.read_data_name1, parameters.read_data_name2}};
-    std::array<std::string, 2> write_data_names{
-      {parameters.write_data_name1, parameters.write_data_name2}};
+    std::array<std::string, 2> write_data_namesd{
+      {parameters.write_data_name1d, parameters.write_data_name2d}};
+    std::array<std::string, 2> write_data_namesv{
+      {parameters.write_data_name1v, parameters.write_data_name2v}};
 
     for (std::size_t i = 0; i < reader.size(); ++i)
       {
@@ -286,7 +289,9 @@ namespace Adapter
           }
 
         reader[i]->add_read_data(read_data_names[i]);
-        writer[i]->add_write_data(write_data_names[i],
+        writer[i]->add_write_data(write_data_namesd[i],
+                                  parameters.write_data_specification);
+        writer[i]->add_write_data(write_data_namesv[i],
                                   parameters.write_data_specification);
 
         Assert(reader[i].get() != nullptr, ExcInternalError());
@@ -302,7 +307,8 @@ namespace Adapter
             typename VectorizedArrayType>
   void
   Adapter<dim, data_dim, VectorType, VectorizedArrayType>::initialize(
-    const VectorType &dealii_to_precice)
+    const VectorType &dealii_to_precice,
+    const VectorType &velocity)
   {
     if (!dealii_to_precice.has_ghost_elements())
       dealii_to_precice.update_ghost_values();
@@ -316,8 +322,10 @@ namespace Adapter
     // write initial writeData to preCICE if required
     if (precice->requiresInitialData())
       for (std::size_t i = 0; i < writer.size(); ++i)
-        writer[i]->write_data(dealii_to_precice);
-
+        {
+          writer[i]->write_data(dealii_to_precice, 0);
+          writer[i]->write_data(velocity, 1);
+        }
     // Initialize preCICE internally
     precice->initialize();
 
@@ -344,10 +352,14 @@ namespace Adapter
   void
   Adapter<dim, data_dim, VectorType, VectorizedArrayType>::advance(
     const VectorType &dealii_to_precice,
+    const VectorType &velocity,
     const double      computed_timestep_length)
   {
     for (std::size_t i = 0; i < writer.size(); ++i)
-      writer[i]->write_data(dealii_to_precice);
+      {
+        writer[i]->write_data(dealii_to_precice, 0);
+        writer[i]->write_data(velocity, 1);
+      }
     // Here, we need to specify the computed time step length and pass it to
     // preCICE
     precice->advance(computed_timestep_length);

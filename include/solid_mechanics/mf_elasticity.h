@@ -569,7 +569,7 @@ namespace FSI
     precice_adapter = std::make_unique<
       Adapter::Adapter<dim, dim, VectorType, VectorizedArrayType>>(
       parameters, TestCases::TestCaseBase<dim>::interfaces, mf_data_reference);
-    precice_adapter->initialize(total_displacement);
+    precice_adapter->initialize(total_displacement, velocity);
 
     // At the beginning, we reset the solution update for this time step...
     while (precice_adapter->is_coupling_ongoing())
@@ -582,7 +582,9 @@ namespace FSI
 
         {
           TimerOutput::Scope t(timer, "Advance preCICE");
-          precice_adapter->advance(total_displacement, time.get_delta_t());
+          precice_adapter->advance(total_displacement,
+                                   velocity,
+                                   time.get_delta_t());
         }
 
         precice_adapter->reload_old_state_if_required([&]() {

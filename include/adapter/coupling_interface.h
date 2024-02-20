@@ -71,8 +71,8 @@ namespace Adapter
      *        preCICE.
      */
     virtual void
-    write_data(
-      const LinearAlgebra::distributed::Vector<double> &data_vector) = 0;
+    write_data(const LinearAlgebra::distributed::Vector<double> &data_vector,
+               int data_index) = 0;
 
     /**
      * @brief read_on_quadrature_point Read and return data from preCICE related
@@ -138,9 +138,10 @@ namespace Adapter
     std::shared_ptr<precice::Participant> precice;
 
     /// Configuration parameters
-    const std::string mesh_name;
-    std::string       read_data_name  = "";
-    std::string       write_data_name = "";
+    const std::string        mesh_name;
+    std::string              read_data_name  = "";
+    std::string              write_data_name = "";
+    std::vector<std::string> write_data_names;
 
     const types::boundary_id dealii_boundary_interface_id;
 
@@ -186,7 +187,7 @@ namespace Adapter
     const std::string &write_data_specification)
   {
     Assert(!mesh_name.empty(), ExcNotInitialized());
-    write_data_name = write_data_name_;
+    write_data_names.push_back(write_data_name_);
 
     if (write_data_specification == "values_on_dofs")
       write_data_type = WriteDataType::values_on_dofs;
@@ -246,9 +247,12 @@ namespace Adapter
                              Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
                                0);
 
+    // std::string writer = write_data_names[0] + " and "+
     pcout << "--     Data " << (reader ? "reading" : "writing") << ":\n"
           << "--     . data name: "
-          << (reader ? read_data_name : write_data_name) << "\n"
+          << (reader ? read_data_name :
+                       (write_data_names[0] + " and " + write_data_names[1]))
+          << "\n"
           << "--     . associated mesh: " << mesh_name << "\n"
           << "--     . Number of interface nodes: "
           << Utilities::MPI::sum(local_size, MPI_COMM_WORLD) << "\n"

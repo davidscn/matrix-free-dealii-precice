@@ -60,8 +60,8 @@ namespace Adapter
      *            update_ghost_values must be calles before
      */
     virtual void
-    write_data(
-      const LinearAlgebra::distributed::Vector<double> &data_vector) override;
+    write_data(const LinearAlgebra::distributed::Vector<double> &data_vector,
+               int data_index) override;
 
     /**
      * @brief read_on_quadrature_point Returns the data_dim dimensional read data
@@ -98,6 +98,7 @@ namespace Adapter
     void
     write_data_factory(
       const LinearAlgebra::distributed::Vector<double> &data_vector,
+      int                                               data_index,
       const EvaluationFlags::EvaluationFlags            flags,
       const std::function<value_type(FEFaceIntegrator &, unsigned int)>
         &get_write_value);
@@ -187,7 +188,7 @@ namespace Adapter
 
     if (!this->read_data_name.empty())
       this->print_info(true, this->precice->getMeshVertexSize(this->mesh_name));
-    if (!this->write_data_name.empty())
+    if (!this->write_data_names[0].empty())
       this->print_info(false,
                        this->precice->getMeshVertexSize(this->mesh_name));
   }
@@ -196,12 +197,14 @@ namespace Adapter
   template <int dim, int data_dim, typename VectorizedArrayType>
   void
   QuadInterface<dim, data_dim, VectorizedArrayType>::write_data(
-    const LinearAlgebra::distributed::Vector<double> &data_vector)
+    const LinearAlgebra::distributed::Vector<double> &data_vector,
+    int                                               data_index)
   {
     switch (this->write_data_type)
       {
         case WriteDataType::values_on_quads:
           write_data_factory(data_vector,
+                             data_index,
                              EvaluationFlags::values,
                              [](auto &phi, auto q_point) {
                                return phi.get_value(q_point);
@@ -209,6 +212,7 @@ namespace Adapter
           break;
         case WriteDataType::normal_gradients_on_quads:
           write_data_factory(data_vector,
+                             data_index,
                              EvaluationFlags::gradients,
                              [](auto &phi, auto q_point) {
                                return phi.get_normal_derivative(q_point);
@@ -225,11 +229,12 @@ namespace Adapter
   void
   QuadInterface<dim, data_dim, VectorizedArrayType>::write_data_factory(
     const LinearAlgebra::distributed::Vector<double> &data_vector,
+    int                                               data_index,
     const EvaluationFlags::EvaluationFlags            flags,
     const std::function<value_type(FEFaceIntegrator &, unsigned int)>
       &get_write_value)
   {
-    Assert(!this->write_data_name.empty(), ExcNotInitialized());
+    Assert(!this->write_data_names[data_index].empty(), ExcNotInitialized());
     Assert(interface_is_defined, ExcNotInitialized());
     // Similar as in define_coupling_mesh
     FEFaceIntegrator phi(*this->mf_data, true, mf_dof_index, mf_quad_index);
@@ -277,7 +282,7 @@ namespace Adapter
 
                 this->precice->writeData(
                   this->mesh_name,
-                  this->write_data_name,
+                  this->write_data_names[data_index],
                   {index->data(), static_cast<std::size_t>(active_faces)},
                   {unrolled_local_data.data(),
                    static_cast<std::size_t>(active_faces * data_dim)});
@@ -286,7 +291,7 @@ namespace Adapter
               {
                 this->precice->writeData(
                   this->mesh_name,
-                  this->write_data_name,
+                  this->write_data_names[data_index],
                   {index->data(), static_cast<std::size_t>(active_faces)},
                   {&local_data[0], static_cast<std::size_t>(active_faces)});
               }
