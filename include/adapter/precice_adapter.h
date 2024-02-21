@@ -77,7 +77,7 @@ namespace Adapter
      *             your initial condition.
      */
     void
-    initialize(const VectorType &dealii_to_precice);
+    initialize(const VectorType &dealii_to_precice, const VectorType &velocity);
 
     /**
      * @brief      Advances preCICE after every timestep, converts data formats
@@ -91,6 +91,7 @@ namespace Adapter
      */
     void
     advance(const VectorType &dealii_to_precice,
+            const VectorType &velocity,
             const double      computed_timestep_length);
 
     /**
@@ -182,6 +183,7 @@ namespace Adapter
     // Container to store time dependent data in case of an implicit coupling
     std::vector<VectorType> old_state_data;
     double                  old_time_value = 0;
+    std::string             velocity_name  = "Velocity";
   };
 
 
@@ -284,7 +286,8 @@ namespace Adapter
             typename VectorizedArrayType>
   void
   Adapter<dim, data_dim, VectorType, VectorizedArrayType>::initialize(
-    const VectorType &dealii_to_precice)
+    const VectorType &dealii_to_precice,
+    const VectorType &velocity)
   {
     if (!dealii_to_precice.has_ghost_elements())
       dealii_to_precice.update_ghost_values();
@@ -295,8 +298,10 @@ namespace Adapter
 
     // write initial writeData to preCICE if required
     if (precice->requiresInitialData())
-      writer->write_data(dealii_to_precice);
-
+      {
+        writer->write_data(dealii_to_precice, "");
+        writer->write_data(velocity, velocity_name);
+      }
     // Initialize preCICE internally
     precice->initialize();
 
@@ -322,9 +327,11 @@ namespace Adapter
   void
   Adapter<dim, data_dim, VectorType, VectorizedArrayType>::advance(
     const VectorType &dealii_to_precice,
+    const VectorType &velocity,
     const double      computed_timestep_length)
   {
-    writer->write_data(dealii_to_precice);
+    writer->write_data(dealii_to_precice, "");
+    writer->write_data(velocity, velocity_name);
     // Here, we need to specify the computed time step length and pass it to
     // preCICE
     precice->advance(computed_timestep_length);

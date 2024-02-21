@@ -71,8 +71,8 @@ namespace Adapter
      *        preCICE.
      */
     virtual void
-    write_data(
-      const LinearAlgebra::distributed::Vector<double> &data_vector) = 0;
+    write_data(const LinearAlgebra::distributed::Vector<double> &data_vector,
+               std::string                                       data_name) = 0;
 
     /**
      * @brief read_on_quadrature_point Read and return data from preCICE related

@@ -60,8 +60,8 @@ namespace Adapter
      *            the relevant coupling data (absolute displacement for FSI)
      */
     virtual void
-    write_data(
-      const LinearAlgebra::distributed::Vector<double> &data_vector) override;
+    write_data(const LinearAlgebra::distributed::Vector<double> &data_vector,
+               std::string data_name = "") override;
 
   private:
     /**
@@ -178,8 +178,12 @@ namespace Adapter
   template <int dim, int data_dim, typename VectorizedArrayType>
   void
   ArbitraryInterface<dim, data_dim, VectorizedArrayType>::write_data(
-    const LinearAlgebra::distributed::Vector<double> &data_vector)
+    const LinearAlgebra::distributed::Vector<double> &data_vector,
+    std::string                                       data_name)
   {
+    if (data_name.empty())
+      data_name = this->write_data_name;
+
     // Write different data depending on the write_data_type
     switch (this->write_data_type)
       {
@@ -187,19 +191,19 @@ namespace Adapter
           write_data_factory(
             data_vector,
             UpdateFlags::update_values,
-            [this](auto &fe_evaluator, auto &local_values, auto i) {
+            [this, &data_name](auto &fe_evaluator, auto &local_values, auto i) {
               fe_evaluator.evaluate(make_array_view(local_values),
                                     EvaluationFlags::values);
               const auto val = fe_evaluator.get_value(0);
               if constexpr (data_dim > 1)
                 this->precice->writeData(this->mesh_name,
-                                         this->write_data_name,
+                                         data_name,
                                          {&interface_nodes_ids[i], 1},
                                          {val.begin_raw(),
                                           static_cast<std::size_t>(data_dim)});
               else
                 this->precice->writeData(this->mesh_name,
-                                         this->write_data_name,
+                                         data_name,
                                          {&interface_nodes_ids[i], 1},
                                          {&val, 1});
             });
@@ -208,7 +212,7 @@ namespace Adapter
           write_data_factory(
             data_vector,
             UpdateFlags::update_gradients,
-            [this](auto &fe_evaluator, auto &local_values, auto i) {
+            [this, &data_name](auto &fe_evaluator, auto &local_values, auto i) {
               if constexpr (data_dim == 1)
                 {
                   fe_evaluator.evaluate(make_array_view(local_values),
@@ -216,7 +220,7 @@ namespace Adapter
                   const auto val = fe_evaluator.get_gradient(0);
                   this->precice->writeData(
                     this->mesh_name,
-                    this->write_data_name,
+                    data_name,
                     {&interface_nodes_ids[i], 1},
                     {val.begin_raw(), static_cast<std::size_t>(data_dim)});
                 }
