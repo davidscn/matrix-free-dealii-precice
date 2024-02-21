@@ -50,8 +50,8 @@ namespace Adapter
      *            displacement for FSI)
      */
     virtual void
-    write_data(
-      const LinearAlgebra::distributed::Vector<double> &data_vector) override;
+    write_data(const LinearAlgebra::distributed::Vector<double> &data_vector,
+               std::string data_name = "") override;
 
     /**
      * @brief apply_Dirichlet_bcs Receive data from preCICE and apply them as
@@ -176,10 +176,14 @@ namespace Adapter
   template <int dim, int data_dim, typename VectorizedArrayType>
   void
   DoFInterface<dim, data_dim, VectorizedArrayType>::write_data(
-    const LinearAlgebra::distributed::Vector<double> &data_vector)
+    const LinearAlgebra::distributed::Vector<double> &data_vector,
+    std::string                                       data_name)
   {
     Assert(!this->write_data_name.empty(), ExcNotInitialized());
     Assert(interface_is_defined, ExcNotInitialized());
+
+    if (data_name.empty())
+      data_name = this->write_data_name;
 
     std::array<double, data_dim> write_data;
     for (std::size_t i = 0; i < global_indices.size(); ++i)
@@ -193,7 +197,7 @@ namespace Adapter
 
         // and pass them to preCICE
         this->precice->writeData(this->mesh_name,
-                                 this->write_data_name,
+                                 data_name,
                                  {&interface_nodes_ids[i], 1},
                                  write_data);
       }
