@@ -560,7 +560,7 @@ namespace FSI
     system_setup();
     output_results(0);
     time.increment();
-
+    bool write_velocities = true;
     // We then declare the incremental solution update $\varDelta
     // \mathbf{\Xi}:= \{\varDelta \mathbf{u}\}$ and start the loop over the
     // time domain.
@@ -580,6 +580,11 @@ namespace FSI
         delta_displacement = 0.0;
         solve_nonlinear_timestep();
 
+        // Acceleration update is performed within the Newton loop
+        if (write_velocities)
+          {
+            update_velocity(delta_displacement);
+          }
         {
           TimerOutput::Scope t(timer, "Advance preCICE");
           precice_adapter->advance(total_displacement,
@@ -590,16 +595,25 @@ namespace FSI
         precice_adapter->reload_old_state_if_required([&]() {
           acceleration       = acceleration_old;
           total_displacement = old_displacement;
+          if (write_velocities)
+            {
+              velocity = velocity_old;
+            }
         });
 
         // ...and plot the results before moving on happily to the next time
         // step:
         if (precice_adapter->is_time_window_complete())
           {
+            if (!write_velocities)
+              {
+                update_velocity(delta_displacement);
+              }
             // TODO: Work with vectors without ghost entris
             old_displacement = total_displacement;
-            // Acceleration update is performed within the Newton loop
-            update_velocity(delta_displacement);
+            velocity_old.copy_locally_owned_data_from(velocity);
+            acceleration_old.copy_locally_owned_data_from(acceleration);
+
 
             if (static_cast<int>(Utilities::round_to_precision(
                   time.current() / parameters.output_tick, 12)) !=
@@ -1588,9 +1602,6 @@ namespace FSI
   {
     velocity.equ(alpha_4, displacement_delta);
     velocity.add(alpha_5, velocity_old, alpha_6, acceleration_old);
-
-    velocity_old.copy_locally_owned_data_from(velocity);
-    acceleration_old.copy_locally_owned_data_from(acceleration);
   }
 
 
