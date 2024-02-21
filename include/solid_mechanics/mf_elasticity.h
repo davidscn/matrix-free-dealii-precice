@@ -571,7 +571,7 @@ namespace FSI
       parameters,
       int(TestCases::TestCaseBase<dim>::interface_id),
       mf_data_reference);
-    precice_adapter->initialize(total_displacement);
+    precice_adapter->initialize(total_displacement, velocity);
 
     // At the beginning, we reset the solution update for this time step...
     while (precice_adapter->is_coupling_ongoing())
