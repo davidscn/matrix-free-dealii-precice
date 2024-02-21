@@ -4,11 +4,11 @@
 #include <cases/elasticity/Wall_beam.h>
 #include <cases/elasticity/bending_flap.h>
 #include <cases/elasticity/cook_membrane.h>
+#include <cases/elasticity/mesh_in.h>
 #include <cases/elasticity/perpendicular_flap.h>
 #include <cases/elasticity/tube_3d.h>
 #include <cases/elasticity/turek_hron.h>
 #include <cases/heat_transfer/partitioned_heat.h>
-
 namespace TestCases
 {
   template <int dim>
@@ -44,6 +44,8 @@ namespace TestCases
             return std::make_shared<WallBeam<dim>>();
           else if (testcase_name == "perpendicular_flap")
             return std::make_shared<PerpendicularFlap<dim>>();
+          else if (testcase_name == "mesh_in")
+            return std::make_shared<MeshIn<dim>>();
           // Add your case here
         }
       if (simulation_type == "heat_transfer")

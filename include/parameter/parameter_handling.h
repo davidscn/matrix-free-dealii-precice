@@ -126,7 +126,7 @@ namespace Parameters
         testcase,
         "Testcase to compute",
         Patterns::Selection(
-          "turek_hron|cook|tube3d|bending_flap|Wall_beam|perpendicular_flap|"
+          "mesh_in|turek_hron|cook|tube3d|bending_flap|Wall_beam|perpendicular_flap|"
           "partitioned_heat_dirichlet|partitioned_heat_neumann"));
     }
     prm.leave_subsection();
