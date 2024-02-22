@@ -54,36 +54,44 @@ namespace TestCases
     else
       gridIn.read(inFile, format);
 
-    // Implement boundary conditions
-    // const types::boundary_id clamped_mesh_id     = 1;
-    // const types::boundary_id do_nothing_boundary = 2;
+    // bottom tendon: -62.4 > z --> apply traction
+    // bottom tendon: -56.5 < z --> coupling interface
+    // the fixed traction: surface area: 0.4907550026758
+    // 100 N /0.4907550026758 = 203.76766299835657
+    // let's assume 0.5 --> 200
+    // ramping it up to this value in 100 ms
 
-    // const double tol_boundary = 1e-6;
+
+    // Implement boundary conditions
+    const types::boundary_id clamped_mesh_id     = 1;
+    const types::boundary_id do_nothing_boundary = 2;
+
+    const double upper_limit = -56.5;
+    const double lower_limit = -62.4;
     // Set boundary conditions
     // Fix all boundary components
-    // this->dirichlet_mask[clamped_mesh_id] = ComponentMask(dim, true);
-    // this->dirichlet[clamped_mesh_id] =
-    //   std::make_unique<Functions::ZeroFunction<dim>>(dim);
+    this->dirichlet_mask[clamped_mesh_id] = ComponentMask(dim, true);
+    this->dirichlet[clamped_mesh_id] =
+      std::make_unique<Functions::ZeroFunction<dim>>(dim);
 
     // Iterate over all cells and set the IDs
-    // for (const auto &cell : triangulation.active_cell_iterators())
-    //   {
-    //     for (const auto &face : cell->face_iterators())
-    //       if (face->at_boundary() == true)
-    //         {
-    //           // Boundaries clamped in all directions, bottom y
-    //           if (face->center()[1] < 1e-6)
-    //             face->set_boundary_id(clamped_mesh_id);
-    //           // Boundaries for the interface: x, z and top y
-    //           else if (face->center()[1] > 1e-6)
-    //             face->set_boundary_id(this->interface_id);
-    //           else
-    //             AssertThrow(false, ExcMessage("Unknown boundary
-    //             condition."));
+    for (const auto &cell : triangulation.active_cell_iterators())
+      {
+        for (const auto &face : cell->face_iterators())
+          if (face->at_boundary() == true)
+            {
+              // Boundaries clamped in all directions, bottom y
+              if (face->center()[dim - 1] < lower_limit)
+                face->set_boundary_id(clamped_mesh_id);
+              // Boundaries for the interface: x, z and top y
+              else if (face->center()[dim - 1] > upper_limit)
+                face->set_boundary_id(this->interface_id);
+              else
+                face->set_boundary_id(do_nothing_boundary);
 
-    //           // on the coarse mesh reset material ID
-    //         }
-    //     cell->set_material_id(0);
-    //   }
+              // on the coarse mesh reset material ID
+            }
+        cell->set_material_id(0);
+      }
   }
 } // namespace TestCases
