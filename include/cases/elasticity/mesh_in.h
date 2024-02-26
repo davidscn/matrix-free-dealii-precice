@@ -21,6 +21,32 @@ namespace TestCases
     make_coarse_grid_and_bcs(Triangulation<dim> &triangulation) override;
   };
 
+  template <int dim>
+  class StretchRamp : public Function<dim>
+  {
+  public:
+    StretchRamp(const double load, const double ramp_end_time)
+      : Function<dim>()
+      , load(load)
+      , ramp_end_time(ramp_end_time)
+    {}
+
+    virtual double
+    value(const Point<dim> &p, const unsigned int component) const override
+    {
+      (void)p;
+      AssertIndexRange(component, dim);
+      const double time = this->get_time();
+      if(component == dim - 1)
+        return load * (std::min(time, ramp_end_time) / ramp_end_time);
+      else
+        return 0;
+    }
+
+  private:
+    const double load;
+    const double ramp_end_time;
+  };
 
 
   template <int dim>
@@ -60,10 +86,13 @@ namespace TestCases
     // 100 N /0.4907550026758 = 203.76766299835657
     // let's assume 0.5 --> 200
     // ramping it up to this value in 100 ms
+    this->body_force = std::make_unique<Functions::ConstantFunction<dim>>(
+     std::vector<double>{0, 0, -9.81e-4});
 
 
     // Implement boundary conditions
     const types::boundary_id clamped_mesh_id     = 1;
+    const types::boundary_id stretched_mesh_id   = 5;
     const types::boundary_id do_nothing_boundary = 2;
 
     const double upper_limit = -56.5;
@@ -73,7 +102,12 @@ namespace TestCases
     this->dirichlet_mask[clamped_mesh_id] = ComponentMask(dim, true);
     this->dirichlet[clamped_mesh_id] =
       std::make_unique<Functions::ZeroFunction<dim>>(dim);
+    this->neumann[stretched_mesh_id] =
+      std::make_unique<StretchRamp<dim>>(-100, 1000);
+    this->neumann[stretched_mesh_id]->set_time(0.0);
 
+int clamped = 0;
+int interf = 0;
     // Iterate over all cells and set the IDs
     for (const auto &cell : triangulation.active_cell_iterators())
       {
@@ -82,10 +116,12 @@ namespace TestCases
             {
               // Boundaries clamped in all directions, bottom y
               if (face->center()[dim - 1] < lower_limit)
-                face->set_boundary_id(clamped_mesh_id);
+               { face->set_boundary_id(stretched_mesh_id);
+	       clamped++;
+               }
               // Boundaries for the interface: x, z and top y
               else if (face->center()[dim - 1] > upper_limit)
-                face->set_boundary_id(this->interface_id);
+                {face->set_boundary_id(this->interface_id);interf++;}
               else
                 face->set_boundary_id(do_nothing_boundary);
 
@@ -93,5 +129,8 @@ namespace TestCases
             }
         cell->set_material_id(0);
       }
-  }
+   // Not supported for fully distributed triangulations
+   // this->refine_in_direction(triangulation, 2);
+std::cout<< clamped<< " <<clamp  interf >>" <<interf<<std::endl;  
+}
 } // namespace TestCases

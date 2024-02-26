@@ -711,13 +711,13 @@ namespace FSI
                       mpi_communicator);
     total_displacement.reinit(system_rhs);
     newton_update.reinit(system_rhs);
+    velocity.reinit(system_rhs);
     // Otherwise, MF will complain about an incompatible vector
     acceleration.reinit(system_rhs);
 
     // Vectors without ghost data
     old_displacement.reinit(locally_owned_dofs, mpi_communicator);
     delta_displacement.reinit(old_displacement);
-    velocity.reinit(old_displacement);
     acceleration_old.reinit(old_displacement);
     velocity_old.reinit(old_displacement);
 
@@ -1867,8 +1867,8 @@ namespace FSI
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           {
             // Evaluate deformation gradient
-            const auto F =
-              Physics::Elasticity::Kinematics::F(phi.get_gradient(q));
+            //const auto F =
+             // Physics::Elasticity::Kinematics::F(phi.get_gradient(q));
             // Get the value from preCICE
             auto traction =
               precice_adapter->read_on_quadrature_point(q_index,
@@ -1876,14 +1876,14 @@ namespace FSI
                                                         parameters.delta_t);
 
             // pull-back the traction
-            const auto N = phi.get_normal_vector(q);
+            //const auto N = phi.get_normal_vector(q);
 
             // da/dA * N = det F F^{-T} * N := n_star
             // -> da/dA = n_star.norm()
-            const auto n_star = determinant(F) * transpose(invert(F)) * N;
+            //const auto n_star = determinant(F) * transpose(invert(F)) * N;
 
             // t_0 = da/dA * t
-            traction *= n_star.norm();
+            //traction *= n_star.norm();
 
             // Perform pull-back operation and submit value
             phi.submit_value(traction, q);
@@ -1892,7 +1892,33 @@ namespace FSI
         // Integrate the result and write into the rhs vector
         phi.integrate_scatter(EvaluationFlags::values, system_rhs);
       }
+    testcase->neumann.begin()->second->set_time(time.current());
+    for (unsigned int face = mf_data_reference->n_inner_face_batches();
+         face < mf_data_reference->n_boundary_face_batches() +
+                  mf_data_reference->n_inner_face_batches();
+         ++face)
+      {
+        const auto boundary_id = mf_data_reference->get_boundary_id(face);
 
+        // Only interfaces
+        if (boundary_id != testcase->neumann.begin()->first)
+          continue;
+
+        Tensor<1, dim, VectorizedArrayType> traction;
+        // The function os constant in space
+        traction = evaluate_function<dim, VectorizedArrayType, dim>(
+          *testcase->neumann[boundary_id].get(), Point<dim, VectorizedArrayType>());
+
+        // Read out the total displacment
+        phi.reinit(face);
+        for (unsigned int q = 0; q < phi.n_q_points; ++q)
+          {
+            // Perform pull-back operation and submit value
+            phi.submit_value(traction, q);
+          }
+        // Integrate the result and write into the rhs vector
+        phi.integrate_scatter(EvaluationFlags::values, system_rhs);
+      }
     system_rhs.compress(VectorOperation::add);
 
     // Determine the error in the residual for the unconstrained degrees of
@@ -2080,6 +2106,7 @@ namespace FSI
         dim, DataComponentInterpretation::component_is_part_of_vector);
 
     std::vector<std::string> solution_name(dim, "displacement");
+    std::vector<std::string> v_name(dim, "v");
 
     data_out.attach_dof_handler(dof_handler);
     data_out.add_data_vector(total_displacement,
@@ -2087,6 +2114,10 @@ namespace FSI
                              DataOut<dim>::type_dof_data,
                              data_component_interpretation);
 
+    data_out.add_data_vector(velocity,
+                             v_name,
+                             DataOut<dim>::type_dof_data,
+                             data_component_interpretation);
     // Per-cell data (MPI subdomains):
     Vector<float> subdomain(triangulation.n_active_cells());
     for (unsigned int i = 0; i < subdomain.size(); ++i)
