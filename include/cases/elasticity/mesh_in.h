@@ -56,7 +56,7 @@ namespace TestCases
     dealii::GridIn<dim> gridIn;
 
     gridIn.attach_triangulation(triangulation);
-    std::string inFile = "inFile.vtk";
+    std::string inFile = this->mesh_in_filename;
 
     std::string extension = std::filesystem::path(inFile).extension();
 
@@ -76,7 +76,7 @@ namespace TestCases
     typename dealii::GridIn<dim>::ExodusIIData exodusIIData;
 
     if (format == dealii::GridIn<dim>::Format::exodusii)
-      exodusIIData = gridIn.read_exodusii("inFile");
+      exodusIIData = gridIn.read_exodusii(inFile);
     else
       gridIn.read(inFile, format);
 
@@ -106,8 +106,6 @@ namespace TestCases
       std::make_unique<StretchRamp<dim>>(-100, 1000);
     this->neumann[stretched_mesh_id]->set_time(0.0);
 
-    int clamped = 0;
-    int interf  = 0;
     // Iterate over all cells and set the IDs
     for (const auto &cell : triangulation.active_cell_iterators())
       {
@@ -116,16 +114,10 @@ namespace TestCases
             {
               // Boundaries clamped in all directions, bottom y
               if (face->center()[dim - 1] < lower_limit)
-                {
-                  face->set_boundary_id(stretched_mesh_id);
-                  clamped++;
-                }
+                face->set_boundary_id(stretched_mesh_id);
               // Boundaries for the interface: x, z and top y
               else if (face->center()[dim - 1] > upper_limit)
-                {
-                  face->set_boundary_id(this->interface_id);
-                  interf++;
-                }
+                face->set_boundary_id(this->interface_id);
               else
                 face->set_boundary_id(do_nothing_boundary);
 
@@ -135,6 +127,5 @@ namespace TestCases
       }
     // Not supported for fully distributed triangulations
     // this->refine_in_direction(triangulation, 2);
-    std::cout << clamped << " <<clamp  interf >>" << interf << std::endl;
   }
 } // namespace TestCases

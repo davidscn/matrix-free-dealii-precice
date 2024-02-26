@@ -44,6 +44,7 @@ main(int argc, char *argv[])
           auto testcase = selector.get_test_case(case_name, "elasticity");
           Parameters::FSIParameters<2> parameters(parameter_filename);
           Solid<2, double>             solid_2d(parameters);
+          testcase->mesh_in_filename = parameters.mesh_in_filename;
           solid_2d.run(testcase);
         }
       else if (dim == 3)
@@ -53,6 +54,7 @@ main(int argc, char *argv[])
           auto testcase = selector.get_test_case(case_name, "elasticity");
           Parameters::FSIParameters<3> parameters(parameter_filename);
           Solid<3, double>             solid_3d(parameters);
+          testcase->mesh_in_filename = parameters.mesh_in_filename;
           solid_3d.run(testcase);
         }
       else

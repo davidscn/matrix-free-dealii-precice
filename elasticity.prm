@@ -18,6 +18,9 @@ subsection Geometry
 
   # Testcase to compute
   set Testcase          = mesh_in
+
+  # File name of the mesh file
+  set Meshfile name     = inFile.vtk
 end
 
 
