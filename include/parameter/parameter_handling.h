@@ -101,6 +101,7 @@ namespace Parameters
     unsigned int dimension           = 2;
     unsigned int n_global_refinement = 0;
     std::string  testcase            = "turek_hron";
+    std::string  mesh_in_filename    = "inFile.vtk";
 
     void
     add_parameters(ParameterHandler &prm);
@@ -128,6 +129,11 @@ namespace Parameters
         Patterns::Selection(
           "mesh_in|turek_hron|cook|tube3d|bending_flap|Wall_beam|perpendicular_flap|"
           "partitioned_heat_dirichlet|partitioned_heat_neumann"));
+
+      prm.add_parameter("Meshfile name",
+                        mesh_in_filename,
+                        "File name of the mesh file",
+                        Patterns::Anything());
     }
     prm.leave_subsection();
   }

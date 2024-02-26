@@ -30,6 +30,7 @@ namespace TestCases
     std::unique_ptr<Function<dim>>                               body_force;
     std::unique_ptr<Function<dim>> initial_condition;
     std::unique_ptr<Function<dim>> heat_transfer_rhs;
+    std::string                    mesh_in_filename;
 
     bool body_force_is_spatially_constant = true;
     // Boolean for the simulation type (only used for heat transfer).

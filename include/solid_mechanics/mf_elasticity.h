@@ -522,6 +522,12 @@ namespace FSI
 
     Utilities::print_configuration(timer_out);
     Utilities::print_configuration(pcout);
+
+    if (parameters.testcase == "mesh_in")
+      {
+        pcout << "--     . Reading mesh file: \"" << parameters.mesh_in_filename
+              << "\"" << std::endl;
+      }
   }
 
   // The class destructor simply clears the data held by the DOFHandler
@@ -764,6 +770,11 @@ namespace FSI
 
     adjust_ghost_range(numbers::invalid_unsigned_int);
     setup_operator_cache(mf_nh_operator, numbers::invalid_unsigned_int);
+
+    pcout << "--     . Number of constrained dofs: "
+          << Utilities::MPI::sum(mf_data_current->get_constrained_dofs().size(),
+                                 mpi_communicator)
+          << std::endl;
 
     // The gmg part
     if (parameters.preconditioner_type != "gmg")
