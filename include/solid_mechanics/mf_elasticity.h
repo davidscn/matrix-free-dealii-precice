@@ -189,7 +189,7 @@ namespace FSI
     update_acceleration(VectorType &displacement_delta);
 
     void
-    update_velocity(VectorType &displacement_delta);
+    update_velocity(const VectorType &displacement_delta);
 
     // MPI communicator
     MPI_Comm mpi_communicator;
@@ -723,6 +723,7 @@ namespace FSI
 
     // Needed in order to write out the results of the first time step
     total_displacement.update_ghost_values();
+    velocity.update_ghost_values();
 
     timer.leave_subsection();
 
@@ -1076,6 +1077,7 @@ namespace FSI
         adjust_ghost_range_if_necessary(partitioner, system_rhs);
         adjust_ghost_range_if_necessary(partitioner, total_displacement);
         adjust_ghost_range_if_necessary(partitioner, acceleration);
+        adjust_ghost_range_if_necessary(partitioner, velocity);
         total_displacement.update_ghost_values();
         acceleration.update_ghost_values();
       }
@@ -1599,7 +1601,7 @@ namespace FSI
   // Update the acceleration according to Newmarks method
   template <int dim, typename Number>
   void
-  Solid<dim, Number>::update_velocity(VectorType &displacement_delta)
+  Solid<dim, Number>::update_velocity(const VectorType &displacement_delta)
   {
     velocity.equ(alpha_4, displacement_delta);
     velocity.add(alpha_5, velocity_old, alpha_6, acceleration_old);
@@ -1892,33 +1894,36 @@ namespace FSI
         // Integrate the result and write into the rhs vector
         phi.integrate_scatter(EvaluationFlags::values, system_rhs);
       }
-    testcase->neumann.begin()->second->set_time(time.current());
-    for (unsigned int face = mf_data_reference->n_inner_face_batches();
-         face < mf_data_reference->n_boundary_face_batches() +
-                  mf_data_reference->n_inner_face_batches();
-         ++face)
+
+    for (const auto &f : testcase->neumann)
       {
-        const auto boundary_id = mf_data_reference->get_boundary_id(face);
-
-        // Only interfaces
-        if (boundary_id != testcase->neumann.begin()->first)
-          continue;
-
-        Tensor<1, dim, VectorizedArrayType> traction;
-        // The function os constant in space
-        traction = evaluate_function<dim, VectorizedArrayType, dim>(
-          *testcase->neumann[boundary_id].get(),
-          Point<dim, VectorizedArrayType>());
-
-        // Read out the total displacment
-        phi.reinit(face);
-        for (unsigned int q = 0; q < phi.n_q_points; ++q)
+        f.second->set_time(time.current());
+        for (unsigned int face = mf_data_reference->n_inner_face_batches();
+             face < mf_data_reference->n_boundary_face_batches() +
+                      mf_data_reference->n_inner_face_batches();
+             ++face)
           {
-            // Perform pull-back operation and submit value
-            phi.submit_value(traction, q);
+            const auto boundary_id = mf_data_reference->get_boundary_id(face);
+
+            // Only interfaces
+            if (boundary_id != f.first)
+              continue;
+
+            Tensor<1, dim, VectorizedArrayType> traction;
+            // The function os constant in space
+            traction = evaluate_function<dim, VectorizedArrayType, dim>(
+              *f.second.get(), Point<dim, VectorizedArrayType>());
+
+            // Read out the total displacment
+            phi.reinit(face);
+            for (unsigned int q = 0; q < phi.n_q_points; ++q)
+              {
+                // Perform pull-back operation and submit value
+                phi.submit_value(traction, q);
+              }
+            // Integrate the result and write into the rhs vector
+            phi.integrate_scatter(EvaluationFlags::values, system_rhs);
           }
-        // Integrate the result and write into the rhs vector
-        phi.integrate_scatter(EvaluationFlags::values, system_rhs);
       }
     system_rhs.compress(VectorOperation::add);
 
