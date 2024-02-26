@@ -37,7 +37,7 @@ namespace TestCases
       (void)p;
       AssertIndexRange(component, dim);
       const double time = this->get_time();
-      if(component == dim - 1)
+      if (component == dim - 1)
         return load * (std::min(time, ramp_end_time) / ramp_end_time);
       else
         return 0;
@@ -87,7 +87,7 @@ namespace TestCases
     // let's assume 0.5 --> 200
     // ramping it up to this value in 100 ms
     this->body_force = std::make_unique<Functions::ConstantFunction<dim>>(
-     std::vector<double>{0, 0, -9.81e-4});
+      std::vector<double>{0, 0, -9.81e-4});
 
 
     // Implement boundary conditions
@@ -106,8 +106,8 @@ namespace TestCases
       std::make_unique<StretchRamp<dim>>(-100, 1000);
     this->neumann[stretched_mesh_id]->set_time(0.0);
 
-int clamped = 0;
-int interf = 0;
+    int clamped = 0;
+    int interf  = 0;
     // Iterate over all cells and set the IDs
     for (const auto &cell : triangulation.active_cell_iterators())
       {
@@ -116,12 +116,16 @@ int interf = 0;
             {
               // Boundaries clamped in all directions, bottom y
               if (face->center()[dim - 1] < lower_limit)
-               { face->set_boundary_id(stretched_mesh_id);
-	       clamped++;
-               }
+                {
+                  face->set_boundary_id(stretched_mesh_id);
+                  clamped++;
+                }
               // Boundaries for the interface: x, z and top y
               else if (face->center()[dim - 1] > upper_limit)
-                {face->set_boundary_id(this->interface_id);interf++;}
+                {
+                  face->set_boundary_id(this->interface_id);
+                  interf++;
+                }
               else
                 face->set_boundary_id(do_nothing_boundary);
 
@@ -129,8 +133,8 @@ int interf = 0;
             }
         cell->set_material_id(0);
       }
-   // Not supported for fully distributed triangulations
-   // this->refine_in_direction(triangulation, 2);
-std::cout<< clamped<< " <<clamp  interf >>" <<interf<<std::endl;  
-}
+    // Not supported for fully distributed triangulations
+    // this->refine_in_direction(triangulation, 2);
+    std::cout << clamped << " <<clamp  interf >>" << interf << std::endl;
+  }
 } // namespace TestCases
