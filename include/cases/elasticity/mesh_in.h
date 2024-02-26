@@ -95,8 +95,11 @@ namespace TestCases
     const types::boundary_id stretched_mesh_id   = 5;
     const types::boundary_id do_nothing_boundary = 2;
 
-    const double upper_limit = -56.5;
-    const double lower_limit = -62.4;
+    const double upper_tendon_upper_limit = -33.5;
+    const double upper_tendon_lower_limit = -41.4;
+
+    const double bottom_tendon_upper_limit = -56.5;
+    const double bottom_tendon_lower_limit = -62.4;
     // Set boundary conditions
     // Fix all boundary components
     this->dirichlet_mask[clamped_mesh_id] = ComponentMask(dim, true);
@@ -113,11 +116,14 @@ namespace TestCases
           if (face->at_boundary() == true)
             {
               // Boundaries clamped in all directions, bottom y
-              if (face->center()[dim - 1] < lower_limit)
+              if (face->center()[dim - 1] < bottom_tendon_lower_limit)
                 face->set_boundary_id(stretched_mesh_id);
               // Boundaries for the interface: x, z and top y
-              else if (face->center()[dim - 1] > upper_limit)
+              else if (face->center()[dim - 1] > bottom_tendon_upper_limit &&
+                       face->center()[dim - 1] < upper_tendon_lower_limit)
                 face->set_boundary_id(this->interface_id);
+              else if (face->center()[dim - 1] > upper_tendon_upper_limit)
+                face->set_boundary_id(clamped_mesh_id);
               else
                 face->set_boundary_id(do_nothing_boundary);
 
