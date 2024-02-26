@@ -1867,8 +1867,8 @@ namespace FSI
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           {
             // Evaluate deformation gradient
-            //const auto F =
-             // Physics::Elasticity::Kinematics::F(phi.get_gradient(q));
+            // const auto F =
+            // Physics::Elasticity::Kinematics::F(phi.get_gradient(q));
             // Get the value from preCICE
             auto traction =
               precice_adapter->read_on_quadrature_point(q_index,
@@ -1876,14 +1876,14 @@ namespace FSI
                                                         parameters.delta_t);
 
             // pull-back the traction
-            //const auto N = phi.get_normal_vector(q);
+            // const auto N = phi.get_normal_vector(q);
 
             // da/dA * N = det F F^{-T} * N := n_star
             // -> da/dA = n_star.norm()
-            //const auto n_star = determinant(F) * transpose(invert(F)) * N;
+            // const auto n_star = determinant(F) * transpose(invert(F)) * N;
 
             // t_0 = da/dA * t
-            //traction *= n_star.norm();
+            // traction *= n_star.norm();
 
             // Perform pull-back operation and submit value
             phi.submit_value(traction, q);
@@ -1907,7 +1907,8 @@ namespace FSI
         Tensor<1, dim, VectorizedArrayType> traction;
         // The function os constant in space
         traction = evaluate_function<dim, VectorizedArrayType, dim>(
-          *testcase->neumann[boundary_id].get(), Point<dim, VectorizedArrayType>());
+          *testcase->neumann[boundary_id].get(),
+          Point<dim, VectorizedArrayType>());
 
         // Read out the total displacment
         phi.reinit(face);
