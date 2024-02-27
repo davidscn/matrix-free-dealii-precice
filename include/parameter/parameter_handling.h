@@ -127,7 +127,7 @@ namespace Parameters
         testcase,
         "Testcase to compute",
         Patterns::Selection(
-          "mesh_in|turek_hron|cook|tube3d|bending_flap|Wall_beam|perpendicular_flap|"
+          "pulling_tendon|mesh_in|turek_hron|cook|tube3d|bending_flap|Wall_beam|perpendicular_flap|"
           "partitioned_heat_dirichlet|partitioned_heat_neumann"));
 
       prm.add_parameter("Meshfile name",

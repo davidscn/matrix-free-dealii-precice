@@ -6,6 +6,7 @@
 #include <cases/elasticity/cook_membrane.h>
 #include <cases/elasticity/mesh_in.h>
 #include <cases/elasticity/perpendicular_flap.h>
+#include <cases/elasticity/pulling_tendon.h>
 #include <cases/elasticity/tube_3d.h>
 #include <cases/elasticity/turek_hron.h>
 #include <cases/heat_transfer/partitioned_heat.h>
@@ -46,6 +47,8 @@ namespace TestCases
             return std::make_shared<PerpendicularFlap<dim>>();
           else if (testcase_name == "mesh_in")
             return std::make_shared<MeshIn<dim>>();
+          else if (testcase_name == "pulling_tendon")
+            return std::make_shared<PullingTendon<dim>>();
           // Add your case here
         }
       if (simulation_type == "heat_transfer")
