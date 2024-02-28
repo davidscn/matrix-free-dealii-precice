@@ -397,6 +397,16 @@ NeoHookOperator<dim, Number>::cache()
 
   FECellIntegrator phi_reference(*data_reference);
 
+  const unsigned int material_id =
+    data_reference->get_cell_iterator(0, 0)->material_id();
+  Assert(material_id == 0, ExcNotImplemented());
+  Tensor<1, dim, VectorizedArrayType> structural_tensor =
+    evaluate_function<dim, VectorizedArrayType, dim>(
+      material->m_x, Point<dim, VectorizedArrayType>());
+
+  const SymmetricTensor<2, dim, VectorizedArrayType> structural_matrix =
+    outer_product(structural_tensor);
+
   for (unsigned int cell = 0; cell < n_cells; ++cell)
     {
       const unsigned int material_id =
@@ -484,14 +494,48 @@ NeoHookOperator<dim, Number>::cache()
                       for (unsigned int d = 0; d < dim; ++d)
                         tau[d][d] -= scalar;
                     }
+
+                    // for the tendons
+                    const SymmetricTensor<2, dim, VectorizedArrayType> C =
+                      Physics::Elasticity::Kinematics::C(F);
+                    // I_4 is lambda_f^2
+                    VectorizedArrayType I_4 =
+                      scalar_product(C, structural_matrix);
+
+                    // the stress contribution from the tendons
+                    VectorizedArrayType dpsi_dI;
+                    VectorizedArrayType d2psi_dI2;
+                    // Need to de-vectorize to have the conditional lambda_f
+                    // contribution store the result of dPsi/df directly in I_4
+                    for (unsigned int v = 0; v < VectorizedArrayType::size();
+                         ++v)
+                      {
+                        dpsi_dI   = 2 * cell_mat->get_dPsi_f_dI_4(I_4[v]);
+                        d2psi_dI2 = 4 * cell_mat->get_d2Psi_f_dI2_4(I_4[v]);
+                      }
+                    // Note that the factor two is already included above
+                    // the second Piola-Kirchhoff stress
+                    Tensor<2, dim, VectorizedArrayType> S =
+                      dpsi_dI * structural_matrix;
+                    // Transform to the first Piola-Kirchhoff stress and
+                    // submit/add up
+                    auto P          = F * S;
+                    auto tau_tendon = P * transpose(F);
+
+                    // the tangential operator contribution of the tensile
+                    // tendon
+                    SymmetricTensor<4, dim, VectorizedArrayType> C_x =
+                      outer_product(structural_matrix, structural_matrix);
+
                     cached_second_scalar(cell, q) =
                       make_vectorized_array<Number>(1.) / det_F;
-                    cached_tensor2(cell, q) = tau / det_F;
+                    cached_tensor2(cell, q) = (tau + tau_tendon) / det_F;
                     cached_tensor4(cell, q) =
                       (scalar * 2. / det_F) *
                         Physics::Elasticity::StandardTensors<dim>::S +
                       (cell_mat->lambda * 2. / det_F) *
-                        Physics::Elasticity::StandardTensors<dim>::IxI;
+                        Physics::Elasticity::StandardTensors<dim>::IxI +
+                      (d2psi_dI2 / det_F) * C_x;
                     break;
                   }
                   case MFCaching::tensor4_ns: {
