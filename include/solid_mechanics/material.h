@@ -1,5 +1,7 @@
 #pragma once
 
+#include <deal.II/base/function.h>
+
 #include <deal.II/physics/elasticity/kinematics.h>
 #include <deal.II/physics/elasticity/standard_tensors.h>
 
@@ -42,6 +44,48 @@ divide_by_dim(const VectorizedArrayType &x, const int dim)
 
   return res;
 }
+
+// Helper function in order to evaluate the vectorized point
+template <int dim, typename VectorizedArrayType, int n_components = dim>
+Tensor<1, n_components, VectorizedArrayType>
+evaluate_function(const Function<dim>                   &function,
+                  const Point<dim, VectorizedArrayType> &p_vectorized)
+{
+  AssertDimension(function.n_components, n_components);
+  Tensor<1, n_components, VectorizedArrayType> result;
+  for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
+    {
+      Point<dim> p;
+      for (unsigned int d = 0; d < dim; ++d)
+        p[d] = p_vectorized[d][v];
+      for (unsigned int d = 0; d < n_components; ++d)
+        result[d][v] = function.value(p, d);
+    }
+  return result;
+}
+
+
+// An outer product of a vector with itself a \bigO a
+template <int dim, typename Number>
+constexpr SymmetricTensor<2, dim, Number>
+outer_product(const Tensor<1, dim, Number> &a)
+{
+  SymmetricTensor<2, dim, Number> result;
+  for (unsigned int i = 0; i < dim; ++i)
+    for (unsigned int j = 0; j < dim; ++j)
+      result[i][j] = a[i] * a[j];
+  return result;
+}
+
+// Fiber directions in reference coordinates (m_x)
+template <int dim, typename Number>
+class FiberDirections : public Functions::ConstantFunction<dim>
+{
+public:
+  FiberDirections(const std::vector<Number> &direction_vector)
+    : Functions::ConstantFunction<dim, Number>(direction_vector)
+  {}
+};
 
 // As discussed in the literature and step-44, Neo-Hookean materials are a type
 // of hyperelastic materials.  The entire domain is assumed to be composed of a
@@ -87,10 +131,38 @@ public:
     , rho_alpha(rho * alpha_1)
     , lambda((2.0 * mu * nu) / (1.0 - 2.0 * nu))
     , formulation(formulation)
+    , m_x(std::vector<double>{0., 0., 1.})
+    , k1_tendon(92.779e2) //[N/cm^2 = 1e-2 MPa]
+    , k2_tendon(305.87e2) //[N/cm^2 = 1e-2 MPa]
   {
     Assert(kappa > 0, ExcInternalError());
     Assert(std::abs((lambda + 2.0 * mu / 3.0) - kappa) < 1e-6,
            ExcInternalError());
+  }
+
+  template <typename T>
+  T
+  get_dPsi_f_dI_4(T I_4) const
+  {
+    T dPsi_dI = 0;
+    if (I_4 >= 1)
+      {
+        dPsi_dI = 2 * k1_tendon * (I_4 - 1) +
+                  3 * k2_tendon * Utilities::fixed_power<2>(I_4 - 1);
+      }
+    return dPsi_dI;
+  }
+
+  template <typename T>
+  T
+  get_d2Psi_f_dI2_4(T I_4) const
+  {
+    T d2Psi_dI2 = 0;
+    if (I_4 >= 1)
+      {
+        d2Psi_dI2 = 2 * k1_tendon + 6 * k2_tendon * (I_4 - 1);
+      }
+    return d2Psi_dI2;
   }
 
   // The first function is the total energy
@@ -249,13 +321,16 @@ public:
 
   // Define constitutive model parameters $\kappa$ (bulk modulus) and the
   // neo-Hookean model parameter $c_1$:
-  const double       kappa;
-  const double       c_1;
-  const double       mu;
-  const double       rho;
-  const double       rho_alpha;
-  const double       lambda;
-  const unsigned int formulation;
+  const double                       kappa;
+  const double                       c_1;
+  const double                       mu;
+  const double                       rho;
+  const double                       rho_alpha;
+  const double                       lambda;
+  const unsigned int                 formulation;
+  const FiberDirections<dim, double> m_x;
+  const double                       k1_tendon;
+  const double                       k2_tendon;
 
 private:
   // Value of the volumetric free energy

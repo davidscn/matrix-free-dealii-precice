@@ -1630,28 +1630,6 @@ namespace FSI
   }
 
 
-
-  // Helper function in order to evaluate the vectorized point
-  template <int dim, typename VectorizedArrayType, int n_components = dim>
-  Tensor<1, n_components, VectorizedArrayType>
-  evaluate_function(const Function<dim>                   &function,
-                    const Point<dim, VectorizedArrayType> &p_vectorized)
-  {
-    AssertDimension(function.n_components, n_components);
-    Tensor<1, n_components, VectorizedArrayType> result;
-    for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
-      {
-        Point<dim> p;
-        for (unsigned int d = 0; d < dim; ++d)
-          p[d] = p_vectorized[d][v];
-        for (unsigned int d = 0; d < n_components; ++d)
-          result[d][v] = function.value(p, d);
-      }
-    return result;
-  }
-
-
-
   // Note that we must ensure that
   // the matrix is reset before any assembly operations can occur.
   template <int dim, typename Number>
@@ -1777,6 +1755,15 @@ namespace FSI
         constant_body_force = evaluate_function<dim, VectorizedArrayType, dim>(
           *testcase->body_force.get(), Point<dim, VectorizedArrayType>());
 
+        const unsigned int material_id =
+          mf_data_reference->get_cell_iterator(0, 0)->material_id();
+        Assert(material_id == 0, ExcNotImplemented());
+        Tensor<1, dim, VectorizedArrayType> structural_tensor =
+          evaluate_function<dim, VectorizedArrayType, dim>(
+            material_vec->m_x, Point<dim, VectorizedArrayType>());
+
+        const SymmetricTensor<2, dim, VectorizedArrayType> structural_matrix =
+          outer_product(structural_tensor);
         // The FEEvaluation objects
         FECellIntegrator   phi_reference(*mf_data_reference);
         FECellIntegrator   phi_acc(phi_reference);
@@ -1838,10 +1825,27 @@ namespace FSI
                 SymmetricTensor<2, dim, VectorizedArrayType> tau;
                 cell_mat->get_tau(tau, det_F, b_bar, b);
 
-                const Tensor<2, dim, VectorizedArrayType> res =
-                  Tensor<2, dim, VectorizedArrayType>(tau);
+                Tensor<2, dim, VectorizedArrayType> res =
+                  tau * transpose(F_inv);
 
-                phi_reference.submit_gradient(-res * transpose(F_inv), q_point);
+                // Now the contribution from the tendons
+                const SymmetricTensor<2, dim, VectorizedArrayType> C =
+                  Physics::Elasticity::Kinematics::C(F);
+                // I_4 is lambda_f^2
+                VectorizedArrayType I_4 = scalar_product(C, structural_matrix);
+
+                // Need to de-vectorize to have the conditional lambda_f
+                // contribution store the result of dPsi/df directly in I_4
+                for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
+                  I_4[v] = 2 * cell_mat->get_dPsi_f_dI_4(I_4[v]);
+
+                // Note that the factor two is already included above
+                // the second Piola-Kirchhoff stress
+                Tensor<2, dim, VectorizedArrayType> S = I_4 * structural_matrix;
+                // Transform to the first Piola-Kirchhoff stress and submit/add
+                // up
+                auto P = F * S;
+                phi_reference.submit_gradient(-(res + P), q_point);
                 phi_acc.submit_value((-phi_acc.get_value(q_point) +
                                       constant_body_force) *
                                        cell_mat->rho,
