@@ -132,8 +132,8 @@ public:
     , lambda((2.0 * mu * nu) / (1.0 - 2.0 * nu))
     , formulation(formulation)
     , m_x(std::vector<double>{0., 0., 1.})
-    , k1_tendon(92.779e2) //[N/cm^2 = 1e-2 MPa]
-    , k2_tendon(305.87e2) //[N/cm^2 = 1e-2 MPa]
+    , k1_tendon(42.217e3) //[N/cm^2 = 1e-2 MPa]
+    , k2_tendon(411.360e3) //[N/cm^2 = 1e-2 MPa]
   {
     Assert(kappa > 0, ExcInternalError());
     Assert(std::abs((lambda + 2.0 * mu / 3.0) - kappa) < 1e-6,
