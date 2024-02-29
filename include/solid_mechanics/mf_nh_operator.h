@@ -10,48 +10,66 @@
 #include <deal.II/matrix_free/fe_evaluation.h>
 #include <deal.II/matrix_free/matrix_free.h>
 #include <deal.II/matrix_free/tools.h>
-#include <deal.II/physics/transformations.h>
 
 #include <deal.II/multigrid/mg_constrained_dofs.h>
+
+#include <deal.II/physics/transformations.h>
 
 #include <base/fe_integrator.h>
 #include <solid_mechanics/material.h>
 
 template <int dimensionSize, typename T>
-void printTensor(const T& tensor) {
-for (unsigned int v = 0; v < 4; ++v)
-    for (int i = 0; i < dimensionSize; ++i) {
-        for (int j = 0; j < dimensionSize; ++j) {
-            for (int k = 0; k < dimensionSize; ++k) {
-                for (int l = 0; l < dimensionSize; ++l) {
-                    std::cout << "tensor[" << i << "][" << j << "][" << k << "][" << l << "] = "
-                              << tensor[i][j][k][l][v] << std::endl;
-                }
-                std::cout << "----" << std::endl; // Delimiter for better readability
-            }
-            std::cout << "========" << std::endl; // Delimiter for better readability
-        }
-        std::cout << "============" << std::endl; // Delimiter for better readability
-    }
+void
+printTensor(const T &tensor)
+{
+  for (unsigned int v = 0; v < 4; ++v)
+    for (int i = 0; i < dimensionSize; ++i)
+      {
+        for (int j = 0; j < dimensionSize; ++j)
+          {
+            for (int k = 0; k < dimensionSize; ++k)
+              {
+                for (int l = 0; l < dimensionSize; ++l)
+                  {
+                    std::cout << "tensor[" << i << "][" << j << "][" << k
+                              << "][" << l << "] = " << tensor[i][j][k][l][v]
+                              << std::endl;
+                  }
+                std::cout << "----"
+                          << std::endl; // Delimiter for better readability
+              }
+            std::cout << "========"
+                      << std::endl; // Delimiter for better readability
+          }
+        std::cout << "============"
+                  << std::endl; // Delimiter for better readability
+      }
 }
 
 template <int dim, typename Number>
-dealii::Tensor<2,dim, Number> manualDoubleContraction(const dealii::SymmetricTensor<4,dim, Number> &A, const dealii::Tensor<2,dim, Number> &B) {
-    dealii::Tensor<2,dim, Number> result;
+dealii::Tensor<2, dim, Number>
+manualDoubleContraction(const dealii::SymmetricTensor<4, dim, Number> &A,
+                        const dealii::Tensor<2, dim, Number>          &B)
+{
+  dealii::Tensor<2, dim, Number> result;
 
-    for (unsigned int i = 0; i < dim; ++i) {
-        for (unsigned int j = 0; j < dim; ++j) {
-            result[i][j] = Number(0); // Initialize to ensure clean summation
-            for (unsigned int k = 0; k < dim; ++k) {
-                for (unsigned int l = 0; l < dim; ++l) {
-                    // Perform the double contraction
-                    result[i][j] += A[i][j][k][l] * B[k][l];
+  for (unsigned int i = 0; i < dim; ++i)
+    {
+      for (unsigned int j = 0; j < dim; ++j)
+        {
+          result[i][j] = Number(0); // Initialize to ensure clean summation
+          for (unsigned int k = 0; k < dim; ++k)
+            {
+              for (unsigned int l = 0; l < dim; ++l)
+                {
+                  // Perform the double contraction
+                  result[i][j] += A[i][j][k][l] * B[k][l];
                 }
             }
         }
     }
 
-    return result;
+  return result;
 }
 
 // Define an operation that takes two tensors $ \mathbf{A} $ and
@@ -559,18 +577,23 @@ NeoHookOperator<dim, Number>::cache()
                       dpsi_dI * structural_matrix;
                     // Transform to the first Piola-Kirchhoff stress and
                     // submit/add up
-                    //auto P          = F * S;
+                    // auto P          = F * S;
                     // auto tau_tendon = P * transpose(F);
 
-		    auto tau_tendon = Physics::Transformations::Contravariant::push_forward(S, F);
+                    auto tau_tendon =
+                      Physics::Transformations::Contravariant::push_forward(S,
+                                                                            F);
                     // the tangential operator contribution of the tensile
                     // tendon
                     SymmetricTensor<4, dim, VectorizedArrayType> C_x =
                       outer_product(structural_matrix, structural_matrix);
-		    //printTensor<dim>(C_x);
-		    
-		    //AssertThrow(C_x[dim][dim][dim][dim][0] == 1, ExcInternalError());
-		    auto tmp = Physics::Transformations::Contravariant::push_forward(C_x, F);
+                    // printTensor<dim>(C_x);
+
+                    // AssertThrow(C_x[dim][dim][dim][dim][0] == 1,
+                    // ExcInternalError());
+                    auto tmp =
+                      Physics::Transformations::Contravariant::push_forward(C_x,
+                                                                            F);
                     cached_second_scalar(cell, q) =
                       make_vectorized_array<Number>(1.) / det_F;
                     cached_tensor2(cell, q) = (tau + tau_tendon) / det_F;
@@ -579,7 +602,7 @@ NeoHookOperator<dim, Number>::cache()
                         Physics::Elasticity::StandardTensors<dim>::S +
                       (cell_mat->lambda * 2. / det_F) *
                         Physics::Elasticity::StandardTensors<dim>::IxI;
-		    //printTensor<dim>(tmp);
+                    // printTensor<dim>(tmp);
                     cached_tensor5(cell, q) = (d2psi_dI2 / det_F) * tmp;
                     break;
                   }
@@ -595,7 +618,7 @@ NeoHookOperator<dim, Number>::cache()
                     const Tensor<4, dim, VectorizedArrayType> F_inv_t_F_inv =
                       outer_product_iljk(F_inv_t, F_inv);
 
-                   // for the tendons
+                    // for the tendons
                     const SymmetricTensor<2, dim, VectorizedArrayType> C =
                       Physics::Elasticity::Kinematics::C(F);
                     // I_4 is lambda_f^2
@@ -615,16 +638,18 @@ NeoHookOperator<dim, Number>::cache()
                       }
                     // Note that the factor two is already included above
                     // the second Piola-Kirchhoff stress
-                    //Tensor<2, dim, VectorizedArrayType> S =
+                    // Tensor<2, dim, VectorizedArrayType> S =
                     //  dpsi_dI * structural_matrix;
                     // Transform to the first Piola-Kirchhoff stress and
                     // submit/add up
-                    //auto P          = F * S;
+                    // auto P          = F * S;
                     // auto tau_tendon = P * transpose(F);
 
-                    //auto tau_tendon = Physics::Transformations::Contravariant::push_forward(S, F);
-                    // the tangential operator contribution of the tensile
-                    // tendon
+                    // auto tau_tendon =
+                    // Physics::Transformations::Contravariant::push_forward(S,
+                    // F);
+                    //  the tangential operator contribution of the tensile
+                    //  tendon
                     SymmetricTensor<4, dim, VectorizedArrayType> C_x =
                       outer_product(structural_matrix, structural_matrix);
 
@@ -633,7 +658,7 @@ NeoHookOperator<dim, Number>::cache()
                       (2. * cell_mat->lambda) * F_inv_t_otimes_F_inv_t +
                       (cell_mat->mu - 2.0 * cell_mat->lambda * ln_J) *
                         F_inv_t_F_inv +
-                      cell_mat->mu * IxI_ikjl + d2psi_dI2*C_x;
+                      cell_mat->mu * IxI_ikjl + d2psi_dI2 * C_x;
                     break;
                   }
                   case MFCaching::none: {
@@ -1030,6 +1055,34 @@ NeoHookOperator<dim, Number>::do_operation_on_cell(FECellIntegrator &phi) const
                       }
                     F[d][d] += one;
                   }
+
+                Tensor<1, dim, VectorizedArrayType> structural_tensor =
+                  evaluate_function<dim, VectorizedArrayType, dim>(
+                    material->m_x, Point<dim, VectorizedArrayType>());
+
+                const SymmetricTensor<2, dim, VectorizedArrayType>
+                  structural_matrix = outer_product(structural_tensor);
+                const SymmetricTensor<2, dim, VectorizedArrayType> C =
+                  Physics::Elasticity::Kinematics::C(F);
+                // I_4 is lambda_f^2
+                VectorizedArrayType I_4 = scalar_product(C, structural_matrix);
+                // the stress contribution from the tendons
+                VectorizedArrayType dpsi_dI;
+                VectorizedArrayType d2psi_dI2;
+                // Need to de-vectorize to have the conditional lambda_f
+                // contribution store the result of dPsi/df directly in I_4
+                for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
+                  {
+                    dpsi_dI[v]   = 2 * cell_mat->get_dPsi_f_dI_4(I_4[v]);
+                    d2psi_dI2[v] = 4 * cell_mat->get_d2Psi_f_dI2_4(I_4[v]);
+                  }
+                SymmetricTensor<2, dim, VectorizedArrayType> S =
+                  dpsi_dI * structural_matrix;
+                auto tau_tendon =
+                  Physics::Transformations::Contravariant::push_forward(S, F);
+                SymmetricTensor<4, dim, VectorizedArrayType> C_x =
+                  outer_product(structural_matrix, structural_matrix);
+
                 const SymmetricTensor<2, dim, VectorizedArrayType> b =
                   Physics::Elasticity::Kinematics::b(F);
 
@@ -1063,9 +1116,12 @@ NeoHookOperator<dim, Number>::do_operation_on_cell(FECellIntegrator &phi) const
                 }
 
                 Tensor<2, dim, VectorizedArrayType> queued =
-                  jc_part +
-                  (grad_Nx_v * Tensor<2, dim, VectorizedArrayType>(tau));
-                phi.submit_gradient(queued * transpose(F_inv), q);
+                  jc_part + (grad_Nx_v * Tensor<2, dim, VectorizedArrayType>(
+                                           tau + tau_tendon));
+                phi.submit_gradient(queued * transpose(F_inv) +
+                                      d2psi_dI2 * C_x *
+                                        symmetrize(phi.get_gradient(q)),
+                                    q);
                 phi.submit_value(phi.get_value(q) * cell_mat->rho_alpha, q);
               }
             break;
@@ -1113,7 +1169,8 @@ NeoHookOperator<dim, Number>::do_operation_on_cell(FECellIntegrator &phi) const
                   &symm_grad_Nx_v = symmetrize(grad_Nx_v);
 
                 phi.submit_gradient(grad_Nx_v * cached_tensor2(cell, q) +
-                                      cached_tensor4(cell, q) * symm_grad_Nx_v + cached_tensor5(cell,q) *  symm_grad_Nx_v,
+                                      cached_tensor4(cell, q) * symm_grad_Nx_v +
+                                      cached_tensor5(cell, q) * symm_grad_Nx_v,
                                     q);
                 phi.submit_value(phi.get_value(q) * cell_mat->rho_alpha *
                                    cached_second_scalar(cell, q),

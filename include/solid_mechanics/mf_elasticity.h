@@ -1647,7 +1647,7 @@ namespace FSI
     // the first five iterations and return to the more accurate assembly
     // afterwards. However, most of the cases will already be converged at this
     // stage.
-    const bool assemble_fast = true; //it_nr < 5;
+    const bool assemble_fast = true; // it_nr < 5;
 
     Assert(testcase->body_force.get() != nullptr, ExcNotInitialized());
     testcase->body_force->set_time(time.current());
@@ -1844,16 +1844,20 @@ namespace FSI
                 Tensor<2, dim, VectorizedArrayType> S = I_4 * structural_matrix;
                 // Transform to the first Piola-Kirchhoff stress and submit/add
                 // up
-                //auto P = F * S;
+                // auto P = F * S;
                 /*for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
-		{
-		for(int i = 0;i<dim;++i)
-		for(int j = 0;j<dim;++j)
-		 std::cout<<"Entry: "<<v<<"  Sij >> "<<S[i][j][v]<<" for i "<<i<<" and j "<<j<<std::endl;
+    {
+    for(int i = 0;i<dim;++i)
+    for(int j = 0;j<dim;++j)
+     std::cout<<"Entry: "<<v<<"  Sij >> "<<S[i][j][v]<<" for i "<<i<<" and j
+    "<<j<<std::endl;
                 }*/
-		
-		auto tau_tendon = Physics::Transformations::Contravariant::push_forward(S, F);
-		phi_reference.submit_gradient(-(res+tau_tendon)* transpose(F_inv), q_point);
+
+                auto tau_tendon =
+                  Physics::Transformations::Contravariant::push_forward(S, F);
+                phi_reference.submit_gradient(-(res + tau_tendon) *
+                                                transpose(F_inv),
+                                              q_point);
                 phi_acc.submit_value((-phi_acc.get_value(q_point) +
                                       constant_body_force) *
                                        cell_mat->rho,
