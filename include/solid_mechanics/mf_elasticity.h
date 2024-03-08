@@ -1094,10 +1094,10 @@ namespace FSI
 
     // need to cache prior to diagonal computations:
     nh_operator.cache();
+    nh_operator.compute_diagonal();
 
     if (debug_level > 0)
       {
-        nh_operator.compute_diagonal();
         deallog
           << "Number of constrained DoFs "
           << Utilities::MPI::sum(mf_data_current->get_constrained_dofs().size(),
