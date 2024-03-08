@@ -18,33 +18,6 @@
 #include <base/fe_integrator.h>
 #include <solid_mechanics/material.h>
 
-template <int dimensionSize, typename T>
-void
-printTensor(const T &tensor)
-{
-  for (unsigned int v = 0; v < 4; ++v)
-    for (int i = 0; i < dimensionSize; ++i)
-      {
-        for (int j = 0; j < dimensionSize; ++j)
-          {
-            for (int k = 0; k < dimensionSize; ++k)
-              {
-                for (int l = 0; l < dimensionSize; ++l)
-                  {
-                    std::cout << "tensor[" << i << "][" << j << "][" << k
-                              << "][" << l << "] = " << tensor[i][j][k][l][v]
-                              << std::endl;
-                  }
-                std::cout << "----"
-                          << std::endl; // Delimiter for better readability
-              }
-            std::cout << "========"
-                      << std::endl; // Delimiter for better readability
-          }
-        std::cout << "============"
-                  << std::endl; // Delimiter for better readability
-      }
-}
 
 template <int dim, typename Number>
 dealii::Tensor<2, dim, Number>
@@ -267,7 +240,6 @@ private:
   Table<2, VectorizedArrayType>                          cached_second_scalar;
   Table<2, Tensor<2, dim, VectorizedArrayType>>          cached_tensor2;
   Table<2, SymmetricTensor<4, dim, VectorizedArrayType>> cached_tensor4;
-  Table<2, SymmetricTensor<4, dim, VectorizedArrayType>> cached_tensor5;
   Table<2, Tensor<4, dim, VectorizedArrayType>>          cached_tensor4_ns;
 
   bool diagonal_is_available;
@@ -427,7 +399,6 @@ NeoHookOperator<dim, Number>::initialize(
       data_in_use = data_current_;
       cached_tensor2.reinit(n_cells, phi.n_q_points);
       cached_tensor4.reinit(n_cells, phi.n_q_points);
-      cached_tensor5.reinit(n_cells, phi.n_q_points);
       cached_second_scalar.reinit(n_cells, phi.n_q_points);
     }
   else if (caching == "tensor4_ns")
@@ -575,11 +546,7 @@ NeoHookOperator<dim, Number>::cache()
                     // the second Piola-Kirchhoff stress
                     Tensor<2, dim, VectorizedArrayType> S =
                       dpsi_dI * structural_matrix;
-                    // Transform to the first Piola-Kirchhoff stress and
-                    // submit/add up
-                    // auto P          = F * S;
-                    // auto tau_tendon = P * transpose(F);
-
+                    // push to deformed configuration
                     auto tau_tendon =
                       Physics::Transformations::Contravariant::push_forward(S,
                                                                             F);
@@ -587,13 +554,10 @@ NeoHookOperator<dim, Number>::cache()
                     // tendon
                     SymmetricTensor<4, dim, VectorizedArrayType> C_x =
                       outer_product(structural_matrix, structural_matrix);
-                    // printTensor<dim>(C_x);
 
-                    // AssertThrow(C_x[dim][dim][dim][dim][0] == 1,
-                    // ExcInternalError());
                     auto tmp =
-                      Physics::Transformations::Contravariant::push_forward(C_x,
-                                                                            F);
+                      Physics::Transformations::Contravariant::push_forward(
+                        d2psi_dI2 * C_x, F);
                     cached_second_scalar(cell, q) =
                       make_vectorized_array<Number>(1.) / det_F;
                     cached_tensor2(cell, q) = (tau + tau_tendon) / det_F;
@@ -601,9 +565,8 @@ NeoHookOperator<dim, Number>::cache()
                       (scalar * 2. / det_F) *
                         Physics::Elasticity::StandardTensors<dim>::S +
                       (cell_mat->lambda * 2. / det_F) *
-                        Physics::Elasticity::StandardTensors<dim>::IxI;
-                    // printTensor<dim>(tmp);
-                    cached_tensor5(cell, q) = (d2psi_dI2 / det_F) * tmp;
+                        Physics::Elasticity::StandardTensors<dim>::IxI +
+                      (1. / det_F) * tmp;
                     break;
                   }
                   case MFCaching::tensor4_ns: {
@@ -639,17 +602,7 @@ NeoHookOperator<dim, Number>::cache()
                     // Note that the factor two is already included above
                     // the second Piola-Kirchhoff stress
                     // Tensor<2, dim, VectorizedArrayType> S =
-                    //  dpsi_dI * structural_matrix;
-                    // Transform to the first Piola-Kirchhoff stress and
-                    // submit/add up
-                    // auto P          = F * S;
-                    // auto tau_tendon = P * transpose(F);
-
-                    // auto tau_tendon =
-                    // Physics::Transformations::Contravariant::push_forward(S,
-                    // F);
-                    //  the tangential operator contribution of the tensile
-                    //  tendon
+                    //   dpsi_dI * structural_matrix;
                     SymmetricTensor<4, dim, VectorizedArrayType> C_x =
                       outer_product(structural_matrix, structural_matrix);
 
@@ -1114,14 +1067,15 @@ NeoHookOperator<dim, Number>::do_operation_on_cell(FECellIntegrator &phi) const
                   for (unsigned int i = 0; i < dim; ++i)
                     jc_part[i][i] += tmp;
                 }
-
+                auto tmp =
+                  Physics::Transformations::Contravariant::push_forward(
+                    d2psi_dI2 * C_x, F);
                 Tensor<2, dim, VectorizedArrayType> queued =
-                  jc_part + (grad_Nx_v * Tensor<2, dim, VectorizedArrayType>(
-                                           tau + tau_tendon));
-                phi.submit_gradient(queued * transpose(F_inv) +
-                                      d2psi_dI2 * C_x *
-                                        symmetrize(phi.get_gradient(q)),
-                                    q);
+                  jc_part +
+                  (grad_Nx_v *
+                   Tensor<2, dim, VectorizedArrayType>(tau + tau_tendon)) +
+                  tmp * symmetrize(grad_Nx_v);
+                phi.submit_gradient(queued * transpose(F_inv), q);
                 phi.submit_value(phi.get_value(q) * cell_mat->rho_alpha, q);
               }
             break;
@@ -1169,8 +1123,7 @@ NeoHookOperator<dim, Number>::do_operation_on_cell(FECellIntegrator &phi) const
                   &symm_grad_Nx_v = symmetrize(grad_Nx_v);
 
                 phi.submit_gradient(grad_Nx_v * cached_tensor2(cell, q) +
-                                      cached_tensor4(cell, q) * symm_grad_Nx_v +
-                                      cached_tensor5(cell, q) * symm_grad_Nx_v,
+                                      cached_tensor4(cell, q) * symm_grad_Nx_v,
                                     q);
                 phi.submit_value(phi.get_value(q) * cell_mat->rho_alpha *
                                    cached_second_scalar(cell, q),
@@ -1186,7 +1139,7 @@ NeoHookOperator<dim, Number>::do_operation_on_cell(FECellIntegrator &phi) const
               {
                 const Tensor<2, dim, VectorizedArrayType> &grad_Nx_v =
                   phi.get_gradient(q);
-
+                // tensile contribution is still wrong
                 phi.submit_gradient(double_contract<2, 0, 3, 1>(
                                       cached_tensor4_ns(cell, q), grad_Nx_v),
                                     q);
