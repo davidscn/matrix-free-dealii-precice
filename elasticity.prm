@@ -42,7 +42,7 @@ subsection Linear solver
   set MF Chebyshev number CG iterations        = 30
 
   # Type of caching for matrix-free operator
-  set MF caching                               = tensor2
+  set MF caching                               = tensor4
 
   # Linear solver iterations (multiples of the system matrix size)
   set Max iteration multiplier                 = 2
@@ -63,14 +63,14 @@ subsection Material properties
   set Density         = 10
 
   # Formulation of the energy function
-  set Formulation     = 0
+  set Formulation     = 1
 
   # Poisson's ratio
   set Poisson's ratio = 0.49
 
   # Shear modulus
   #set Shear modulus   = 3e2
-  set Shear modulus   = 1370
+  set Shear modulus   = 0.376
 end
 
 
@@ -82,7 +82,7 @@ subsection Nonlinear solver
   set Absolute tolerance force        = 2e-9
 
   # Number of Newton-Raphson iterations allowed
-  set Max iterations Newton-Raphson   = 10
+  set Max iterations Newton-Raphson   = 15
 
   # Displacement error tolerance
   set Tolerance displacement          = 1.0e-6
