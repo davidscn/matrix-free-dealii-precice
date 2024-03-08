@@ -1647,7 +1647,7 @@ namespace FSI
     // the first five iterations and return to the more accurate assembly
     // afterwards. However, most of the cases will already be converged at this
     // stage.
-    const bool assemble_fast = true; // it_nr < 5;
+    const bool assemble_fast = it_nr < 8;
 
     Assert(testcase->body_force.get() != nullptr, ExcNotInitialized());
     testcase->body_force->set_time(time.current());
@@ -1656,8 +1656,13 @@ namespace FSI
     if (!assemble_fast)
       {
         Tensor<1, dim> constant_body_force;
+        Tensor<1, dim> structural_tensor;
         for (uint d = 0; d < dim; ++d)
-          constant_body_force[d] = testcase->body_force->value(Point<dim>(), d);
+          {
+            constant_body_force[d] =
+              testcase->body_force->value(Point<dim>(), d);
+            structural_tensor[d] = material->m_x.value(Point<dim>(), d);
+          }
 
         Vector<double>                       cell_rhs(dofs_per_cell);
         std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
@@ -1673,6 +1678,10 @@ namespace FSI
 
         FEValues<dim> fe_values(
           fe, qf_cell, update_values | update_gradients | update_JxW_values);
+
+
+        const SymmetricTensor<2, dim, Number> structural_matrix =
+          outer_product(structural_tensor);
 
         for (const auto &cell : dof_handler.active_cell_iterators())
           if (cell->is_locally_owned())
@@ -1726,11 +1735,32 @@ namespace FSI
                   cell_mat->get_tau(tau, det_F, b_bar, b);
                   const double JxW = fe_values.JxW(q_point);
 
+                  // Now the contribution from the tendons
+                  const SymmetricTensor<2, dim, Number> C =
+                    Physics::Elasticity::Kinematics::C(F);
+                  // I_4 is lambda_f^2
+                  Number I_4 = scalar_product(C, structural_matrix);
+
+                  // Need to de-vectorize to have the conditional lambda_f
+                  // contribution store the result of dPsi/df directly in I_4
+                  Number dpsi_dI = 2 * cell_mat->get_dPsi_f_dI_4(I_4);
+
+                  // Note that the factor two is already included above
+                  // the second Piola-Kirchhoff stress
+                  SymmetricTensor<2, dim, Number> S =
+                    dpsi_dI * structural_matrix;
+                  // Transform to the first Piola-Kirchhoff stress and
+                  // submit/add up
+                  auto tau_tendon =
+                    Physics::Transformations::Contravariant::push_forward(S, F);
+
                   // loop over j first to make caching a bit more
                   // straight-forward without recourse to symmetry
                   for (unsigned int j = 0; j < dofs_per_cell; ++j)
                     {
-                      cell_rhs(j) -= (symm_grad_Nx[j] * tau) * JxW;
+                      cell_rhs(j) -=
+                        (symm_grad_Nx[j] * tau + symm_grad_Nx[j] * tau_tendon) *
+                        JxW;
                       const unsigned int component_j =
                         fe.system_to_component_index(j).first;
 
@@ -1836,27 +1866,19 @@ namespace FSI
 
                 // Need to de-vectorize to have the conditional lambda_f
                 // contribution store the result of dPsi/df directly in I_4
+                VectorizedArrayType dpsi_dI;
                 for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
-                  I_4[v] = 2 * cell_mat->get_dPsi_f_dI_4(I_4[v]);
+                  dpsi_dI[v] = 2 * cell_mat->get_dPsi_f_dI_4(I_4[v]);
 
                 // Note that the factor two is already included above
                 // the second Piola-Kirchhoff stress
-                Tensor<2, dim, VectorizedArrayType> S = I_4 * structural_matrix;
+                // S is symmetric, but the transformation to P not anymore
+                Tensor<2, dim, VectorizedArrayType> S =
+                  dpsi_dI * structural_matrix;
                 // Transform to the first Piola-Kirchhoff stress and submit/add
                 // up
-                // auto P = F * S;
-                /*for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
-    {
-    for(int i = 0;i<dim;++i)
-    for(int j = 0;j<dim;++j)
-     std::cout<<"Entry: "<<v<<"  Sij >> "<<S[i][j][v]<<" for i "<<i<<" and j
-    "<<j<<std::endl;
-                }*/
-
-                auto tau_tendon =
-                  Physics::Transformations::Contravariant::push_forward(S, F);
-                phi_reference.submit_gradient(-(res + tau_tendon) *
-                                                transpose(F_inv),
+                auto P = F * S;
+                phi_reference.submit_gradient(-(res * transpose(F_inv) + P),
                                               q_point);
                 phi_acc.submit_value((-phi_acc.get_value(q_point) +
                                       constant_body_force) *
@@ -1874,6 +1896,13 @@ namespace FSI
 
     FEFaceIntegrator phi(*mf_data_reference);
     unsigned int     q_index = 0;
+
+    VectorizedArrayType load_factor = make_vectorized_array<Number>(1);
+    if (it_nr < 1)
+      load_factor = make_vectorized_array<Number>(0.35);
+    else if (it_nr < 2)
+      load_factor = make_vectorized_array<Number>(0.7);
+
 
     for (unsigned int face = mf_data_reference->n_inner_face_batches();
          face < mf_data_reference->n_boundary_face_batches() +
@@ -1915,7 +1944,7 @@ namespace FSI
             // traction *= n_star.norm();
 
             // Perform pull-back operation and submit value
-            phi.submit_value(traction, q);
+            phi.submit_value(load_factor * traction, q);
             ++q_index;
           }
         // Integrate the result and write into the rhs vector
@@ -1940,13 +1969,15 @@ namespace FSI
             // The function os constant in space
             traction = evaluate_function<dim, VectorizedArrayType, dim>(
               *f.second.get(), Point<dim, VectorizedArrayType>());
-
+            Tensor<1, dim, VectorizedArrayType> fiber_direction;
+            fiber_direction = evaluate_function<dim, VectorizedArrayType, dim>(
+              material_vec->m_x, Point<dim, VectorizedArrayType>());
             // Read out the total displacment
             phi.reinit(face);
             for (unsigned int q = 0; q < phi.n_q_points; ++q)
               {
                 // Perform pull-back operation and submit value
-                phi.submit_value(traction, q);
+                phi.submit_value(traction.norm() * fiber_direction, q);
               }
             // Integrate the result and write into the rhs vector
             phi.integrate_scatter(EvaluationFlags::values, system_rhs);
