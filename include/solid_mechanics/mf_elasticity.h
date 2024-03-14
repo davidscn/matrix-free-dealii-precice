@@ -1647,7 +1647,7 @@ namespace FSI
     // the first five iterations and return to the more accurate assembly
     // afterwards. However, most of the cases will already be converged at this
     // stage.
-    const bool assemble_fast = it_nr < 8;
+    const bool assemble_fast = true; // it_nr < 8;
 
     Assert(testcase->body_force.get() != nullptr, ExcNotInitialized());
     testcase->body_force->set_time(time.current());
@@ -1873,11 +1873,23 @@ namespace FSI
                 // Note that the factor two is already included above
                 // the second Piola-Kirchhoff stress
                 // S is symmetric, but the transformation to P not anymore
-                Tensor<2, dim, VectorizedArrayType> S =
+                Tensor<2, dim, VectorizedArrayType> S_tendons =
                   dpsi_dI * structural_matrix;
+
+                // Next we have Fung's model contribution
+                SymmetricTensor<2, dim, VectorizedArrayType> epsilon =
+                  cell_mat->get_epsilon(C);
+
+                SymmetricTensor<2, dim, VectorizedArrayType> T_Fung =
+                  cell_mat->get_T_Fung(epsilon);
+                // P in the Miehe paper
+                SymmetricTensor<4, dim, VectorizedArrayType> H_Fung =
+                  cell_mat->get_H_Fung();
+
+                Tensor<2, dim, VectorizedArrayType> S_Fung = T_Fung * H_Fung;
                 // Transform to the first Piola-Kirchhoff stress and submit/add
                 // up
-                auto P = F * S;
+                auto P = F * (S_Fung + S_tendons);
                 phi_reference.submit_gradient(-(res * transpose(F_inv) + P),
                                               q_point);
                 phi_acc.submit_value((-phi_acc.get_value(q_point) +

@@ -544,20 +544,50 @@ NeoHookOperator<dim, Number>::cache()
                       }
                     // Note that the factor two is already included above
                     // the second Piola-Kirchhoff stress
-                    Tensor<2, dim, VectorizedArrayType> S =
+                    Tensor<2, dim, VectorizedArrayType> S_tendons =
                       dpsi_dI * structural_matrix;
+
+                    // contribution from Fung's model
+                    SymmetricTensor<2, dim, VectorizedArrayType> epsilon =
+                      cell_mat->get_epsilon(C);
+
+                    // the stress contribution
+                    SymmetricTensor<2, dim, VectorizedArrayType> T_Fung =
+                      cell_mat->get_T_Fung(epsilon);
+                    // P in the Miehe paper
+                    SymmetricTensor<4, dim, VectorizedArrayType> H_Fung =
+                      cell_mat->get_H_Fung();
+                    Tensor<2, dim, VectorizedArrayType> S_Fung =
+                      T_Fung * H_Fung;
+
                     // push to deformed configuration
                     auto tau_tendon =
-                      Physics::Transformations::Contravariant::push_forward(S,
-                                                                            F);
+                      Physics::Transformations::Contravariant::push_forward(
+                        S_tendons + S_Fung, F);
+
                     // the tangential operator contribution of the tensile
                     // tendon
-                    SymmetricTensor<4, dim, VectorizedArrayType> C_x =
+                    SymmetricTensor<4, dim, VectorizedArrayType> d2psi_dI2_C_x =
+                      d2psi_dI2 *
                       outer_product(structural_matrix, structural_matrix);
+
+                    // the tangential operator of Fung's model
+                    SymmetricTensor<4, dim, VectorizedArrayType> E_Fung =
+                      cell_mat->get_E_Fung(epsilon);
+
+                    SymmetricTensor<4, dim, VectorizedArrayType> H_E_H_Fung{};
+                    {
+                      SymmetricTensor<4, dim, VectorizedArrayType> H_E_Fung =
+                        H_Fung * E_Fung;
+                      H_E_H_Fung = H_E_Fung * H_Fung;
+                    }
+
+                    SymmetricTensor<4, dim, VectorizedArrayType> T_L_Fung =
+                      cell_mat->get_T_L_Fung(T_Fung, C);
 
                     auto tmp =
                       Physics::Transformations::Contravariant::push_forward(
-                        d2psi_dI2 * C_x, F);
+                        H_E_H_Fung + T_L_Fung + d2psi_dI2_C_x, F);
                     cached_second_scalar(cell, q) =
                       make_vectorized_array<Number>(1.) / det_F;
                     cached_tensor2(cell, q) = (tau + tau_tendon) / det_F;
