@@ -592,6 +592,7 @@ namespace FSI
         if (write_velocities)
           {
             update_velocity(delta_displacement);
+            velocity.update_ghost_values();
           }
         {
           TimerOutput::Scope t(timer, "Advance preCICE");

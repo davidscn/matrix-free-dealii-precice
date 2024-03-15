@@ -597,11 +597,11 @@ public:
 
 private:
   // fung model
-  static constexpr double                 fung_c   = 0.998;
-  static constexpr double                 fung_ca  = 0.1492;
-  static constexpr double                 fung_ct  = 0.147;
-  static constexpr double                 fung_cat = 0.964;
-  static constexpr double                 fung_ctt = 0.1124;
+  static constexpr double                 fung_c   = 9.98e-1;
+  static constexpr double                 fung_ca  = 14.92e-1;
+  static constexpr double                 fung_ct  = 14.70e-1;
+  static constexpr double                 fung_cat = 9.64e-1;
+  static constexpr double                 fung_ctt = 11.24e-1;
   std::array<Number, dim>                 eigenvalues_;
   std::array<Tensor<1, dim, Number>, dim> eigenvectors_;
   // corresponding eigenbase
