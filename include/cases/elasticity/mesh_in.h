@@ -26,7 +26,7 @@ namespace TestCases
   {
   public:
     StretchRamp(const double load, const double ramp_end_time)
-      : Function<dim>()
+      : Function<dim>(dim)
       , load(load)
       , ramp_end_time(ramp_end_time)
     {}
