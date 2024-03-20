@@ -2038,6 +2038,7 @@ namespace FSI
 
     constraints.clear();
     constraints.reinit(locally_relevant_dofs);
+    DoFTools::make_hanging_node_constraints(dof_handler, constraints);
 
     mg_constrained_dofs.clear();
     mg_constrained_dofs.initialize(dof_handler);
