@@ -239,6 +239,7 @@ private:
   Table<2, VectorizedArrayType>                          cached_scalar;
   Table<2, VectorizedArrayType>                          cached_second_scalar;
   Table<2, Tensor<2, dim, VectorizedArrayType>>          cached_tensor2;
+  Table<2, Tensor<2, dim, VectorizedArrayType>>          cached_tensor2a;
   Table<2, SymmetricTensor<4, dim, VectorizedArrayType>> cached_tensor4;
   Table<2, Tensor<4, dim, VectorizedArrayType>>          cached_tensor4_ns;
 
@@ -391,6 +392,8 @@ NeoHookOperator<dim, Number>::initialize(
       cached_scalar.reinit(n_cells, phi.n_q_points);
       cached_second_scalar.reinit(n_cells, phi.n_q_points);
       cached_tensor2.reinit(n_cells, phi.n_q_points);
+      cached_tensor2a.reinit(n_cells, phi.n_q_points);
+      cached_tensor4.reinit(n_cells, phi.n_q_points);
     }
   else if (caching == "tensor4")
     {
@@ -473,8 +476,74 @@ NeoHookOperator<dim, Number>::cache()
                        0,
                      ExcMessage("det_F is not positive. "));
 
-              cached_scalar(cell, q)  = std::pow(det_F, Number(-1.0 / dim));
-              cached_tensor2(cell, q) = F;
+
+              // for the tendons
+              const SymmetricTensor<2, dim, VectorizedArrayType> C =
+                Physics::Elasticity::Kinematics::C(F);
+              // I_4 is lambda_f^2
+              VectorizedArrayType I_4 = scalar_product(C, structural_matrix);
+
+              // the stress contribution from the tendons
+              VectorizedArrayType dpsi_dI;
+              VectorizedArrayType d2psi_dI2;
+              // Need to de-vectorize to have the conditional lambda_f
+              // contribution store the result of dPsi/df directly in I_4
+              for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
+                {
+                  dpsi_dI[v]   = 2 * cell_mat->get_dPsi_f_dI_4(I_4[v]);
+                  d2psi_dI2[v] = 4 * cell_mat->get_d2Psi_f_dI2_4(I_4[v]);
+                }
+              // Note that the factor two is already included above
+              // the second Piola-Kirchhoff stress
+              Tensor<2, dim, VectorizedArrayType> S_tendons =
+                dpsi_dI * structural_matrix;
+
+              // contribution from Fung's model
+              SymmetricTensor<2, dim, VectorizedArrayType> epsilon =
+                cell_mat->get_epsilon(C);
+
+              // the stress contribution
+              SymmetricTensor<2, dim, VectorizedArrayType> T_Fung =
+                cell_mat->get_T_Fung(epsilon);
+              // P in the Miehe paper
+              SymmetricTensor<4, dim, VectorizedArrayType> H_Fung =
+                cell_mat->get_H_Fung();
+              Tensor<2, dim, VectorizedArrayType> S_Fung = T_Fung * H_Fung;
+
+              // push to deformed configuration
+              auto tau_tendon =
+                Physics::Transformations::Contravariant::push_forward(
+                  S_tendons + S_Fung, F);
+
+              // the tangential operator contribution of the tensile
+              // tendon
+              SymmetricTensor<4, dim, VectorizedArrayType> d2psi_dI2_C_x =
+                d2psi_dI2 * outer_product(structural_matrix, structural_matrix);
+
+              // the tangential operator of Fung's model
+              SymmetricTensor<4, dim, VectorizedArrayType> E_Fung =
+                cell_mat->get_E_Fung(epsilon);
+
+              SymmetricTensor<4, dim, VectorizedArrayType> H_E_H_Fung{};
+              {
+                SymmetricTensor<4, dim, VectorizedArrayType> H_E_Fung =
+                  H_Fung * E_Fung;
+                H_E_H_Fung = H_E_Fung * H_Fung;
+              }
+
+              SymmetricTensor<4, dim, VectorizedArrayType> T_L_Fung =
+                cell_mat->get_T_L_Fung(T_Fung, C);
+
+              auto tmp = Physics::Transformations::Contravariant::push_forward(
+                H_E_H_Fung + T_L_Fung + d2psi_dI2_C_x, F);
+              cached_second_scalar(cell, q) =
+                make_vectorized_array<Number>(1.) / det_F;
+
+
+              cached_scalar(cell, q)   = std::pow(det_F, Number(-1.0 / dim));
+              cached_tensor2(cell, q)  = F;
+              cached_tensor2a(cell, q) = (tau_tendon) / det_F;
+              cached_tensor4(cell, q)  = (1. / det_F) * tmp;
             }
         }
       else
@@ -953,7 +1022,9 @@ NeoHookOperator<dim, Number>::do_operation_on_cell(FECellIntegrator &phi) const
         const VectorizedArrayType inv_det_F = Number(1.0) / det_F;
         const Tensor<2, dim, VectorizedArrayType> tau_ns(tau);
         const Tensor<2, dim, VectorizedArrayType> geo = grad_Nx_v * tau_ns;
-        phi.submit_gradient((jc_part + geo) * inv_det_F
+        phi.submit_gradient((jc_part + geo) * inv_det_F +
+                              grad_Nx_v * cached_tensor2a(cell, q) +
+                              cached_tensor4(cell, q) * symm_grad_Nx_v
                             // Note: We need to integrate over the reference
                             // element, thus we divide by det_F so that
                             // FEEvaluation with mapping does the right thing.
