@@ -209,15 +209,21 @@ namespace Adapter
             data_vector,
             UpdateFlags::update_gradients,
             [this](auto &fe_evaluator, auto &local_values, auto i) {
-              Assert(data_dim == 1, ExcNotImplemented());
-              fe_evaluator.evaluate(make_array_view(local_values),
-                                    EvaluationFlags::gradients);
-              const auto val = fe_evaluator.get_gradient(0);
-              this->precice->writeData(this->mesh_name,
-                                       this->write_data_name,
-                                       {&interface_nodes_ids[i], 1},
-                                       {val.begin_raw(),
-                                        static_cast<std::size_t>(data_dim)});
+              if constexpr (data_dim == 1)
+                {
+                  fe_evaluator.evaluate(make_array_view(local_values),
+                                        EvaluationFlags::gradients);
+                  const auto val = fe_evaluator.get_gradient(0);
+                  this->precice->writeData(
+                    this->mesh_name,
+                    this->write_data_name,
+                    {&interface_nodes_ids[i], 1},
+                    {val.begin_raw(), static_cast<std::size_t>(data_dim)});
+                }
+              else
+                {
+                  Assert(data_dim == 1, ExcNotImplemented());
+                }
             });
           break;
         default:
