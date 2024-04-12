@@ -32,6 +32,6 @@ jobs:
          echo $command
 
          docker pull dealii/dealii:master-jammy
-         docker pull precice/precice:develop
+         docker pull precice/precice:nightly
          docker build -t dealii-precice:develop -f ./utilities/Dockerfile .
          docker run -t dealii-precice:develop /bin/sh -c "$command";
