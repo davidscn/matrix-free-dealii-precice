@@ -71,7 +71,7 @@ The programs generates `vtu` output files after every `Output tick` of simulatio
 
 
 ## How to add a test case ?
-All test cases are located in the (sub)directory `./include/cases/`. You can add your own case by copying one of the existing cases or editing the `./include/cases/case_template.h` file. Have a look at the description in the respective files for further information. Afterwards, you need to add your new case to the `./include/cases/case_selector.h` and recompile the program.
+All test cases are located in the (sub)directory `./include/cases/`. You can add your own case by copying one of the existing cases or editing the `./include/cases/case_template.h` file. Have a look at the description in the respective files for further information. Afterwards, you need to add your new case to the `./include/cases/case_selector.h` and `./include/parameter/parameter_handling.h`, and then recompile the program.
 
 ## I still have open questions
 If you still have questions, you can ask them preferably on [GitHub discussions](https://github.com/DavidSCN/matrix-free-dealii-precice/discussions) here or alternatively in one of the [preCICE community channels](https://precice.org/community-channels.htm).
