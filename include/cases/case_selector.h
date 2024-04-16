@@ -27,39 +27,62 @@ namespace TestCases
     get_test_case(const std::string &testcase_name,
                   const std::string &simulation_type)
     {
-      Assert(simulation_type == "elasticity" ||
-               simulation_type == "heat_transfer",
-             ExcNotImplemented());
-      if (simulation_type == "elasticity")
+      // Add your solid case to the list here
+      static const std::map<std::string,
+                            std::function<std::shared_ptr<TestCaseBase<dim>>()>>
+        elasticity_cases{
+          {"turek_hron", [] { return std::make_shared<TurekHron<dim>>(); }},
+          {"cook", [] { return std::make_shared<CookMembrane<dim>>(); }},
+          {"tube3d", [] { return std::make_shared<Tube3D<dim>>(); }},
+          {"bending_flap", [] { return std::make_shared<BendingFlap<dim>>(); }},
+          {"Wall_beam", [] { return std::make_shared<WallBeam<dim>>(); }},
+          {"perpendicular_flap",
+           [] { return std::make_shared<PerpendicularFlap<dim>>(); }}};
+
+      // Add your heat case to the list here
+      static const std::map<std::string,
+                            std::function<std::shared_ptr<TestCaseBase<dim>>()>>
+        heat_transfer_cases{
+          {"partitioned_heat_dirichlet",
+           [] { return std::make_shared<PartitionedHeat<dim>>(true); }},
+          {"partitioned_heat_neumann",
+           [] { return std::make_shared<PartitionedHeat<dim>>(false); }}};
+
+      // Ensure the simulation type is valid
+      AssertThrow(simulation_type == "elasticity" ||
+                    simulation_type == "heat_transfer",
+                  ExcNotImplemented());
+
+      // Choose the appropriate map based on the simulation type
+      const auto &cases = simulation_type == "elasticity" ? elasticity_cases :
+                                                            heat_transfer_cases;
+
+      // Attempt to find the test case in the map
+      auto it = cases.find(testcase_name);
+      if (it != cases.end())
         {
-          if (testcase_name == "turek_hron")
-            return std::make_shared<TurekHron<dim>>();
-          else if (testcase_name == "cook")
-            return std::make_shared<CookMembrane<dim>>();
-          else if (testcase_name == "tube3d")
-            return std::make_shared<Tube3D<dim>>();
-          else if (testcase_name == "bending_flap")
-            return std::make_shared<BendingFlap<dim>>();
-          else if (testcase_name == "Wall_beam")
-            return std::make_shared<WallBeam<dim>>();
-          else if (testcase_name == "perpendicular_flap")
-            return std::make_shared<PerpendicularFlap<dim>>();
-          // Add your case here
+          return it->second(); // Execute the corresponding factory function
         }
-      if (simulation_type == "heat_transfer")
+
+      // Prepare a list of valid case names for the error message
+      std::string available_options;
+      for (const auto &pair : cases)
         {
-          if (testcase_name == "partitioned_heat_dirichlet")
-            return std::make_shared<PartitionedHeat<dim>>(true);
-          else if (testcase_name == "partitioned_heat_neumann")
-            return std::make_shared<PartitionedHeat<dim>>(false);
+          if (!available_options.empty())
+            available_options += ", ";
+          available_options += "\"" + pair.first + "\"";
         }
+
+      // If the test case was not found, throw an exception with the available
+      // options
       AssertThrow(
         false,
         ExcMessage(
           "Unable to configure your case \"" + testcase_name +
           "\". Make sure you use the right executable for the selected case, "
           "namely the \"solid\" executable for FSI cases and the \"heat\" "
-          "executable for heat transfer simulation."));
+          "executable for heat transfer simulation. Available options are: " +
+          available_options + "."));
     }
   };
 } // namespace TestCases

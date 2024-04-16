@@ -121,11 +121,10 @@ namespace Parameters
                         "Dimension of the problem",
                         Patterns::Integer(2, 3));
 
-      prm.add_parameter(
-        "Testcase",
-        testcase,
-        "Testcase to compute",
-        Patterns::Anything());
+      prm.add_parameter("Testcase",
+                        testcase,
+                        "Testcase to compute",
+                        Patterns::Anything());
     }
     prm.leave_subsection();
   }
