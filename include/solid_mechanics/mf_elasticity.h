@@ -234,8 +234,9 @@ namespace FSI
 
     IndexSet locally_owned_dofs, locally_relevant_dofs;
 
-    static constexpr double beta  = 0.25;
-    static constexpr double gamma = 0.5;
+    static constexpr double beta  = 0.330625;
+    static constexpr double gamma = 0.65;
+
 
     const double alpha_1 = 1. / (beta * std::pow(parameters.delta_t, 2));
     const double alpha_2 = 1. / (beta * parameters.delta_t);
@@ -1382,8 +1383,8 @@ namespace FSI
 
     bool converged = false;
 
-    // do at least 3 NR iterations before converging,
-    if (newton_iteration > 2)
+    // do at least 4 NR iterations before converging,
+    if (newton_iteration > 3)
       {
         // first check abosolute tolerance
         if (error_residual.e <= parameters.tol_f_abs ||
@@ -1912,9 +1913,11 @@ namespace FSI
 
     VectorizedArrayType load_factor = make_vectorized_array<Number>(1);
     if (it_nr < 1)
-      load_factor = make_vectorized_array<Number>(0.35);
+      load_factor = make_vectorized_array<Number>(0.2);
     else if (it_nr < 2)
-      load_factor = make_vectorized_array<Number>(0.7);
+      load_factor = make_vectorized_array<Number>(0.4);
+    else if (it_nr < 3)
+      load_factor = make_vectorized_array<Number>(0.66);
 
 
     for (unsigned int face = mf_data_reference->n_inner_face_batches();

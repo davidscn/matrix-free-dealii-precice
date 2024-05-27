@@ -95,7 +95,7 @@ namespace TestCases
     const types::boundary_id stretched_mesh_id   = 5;
     const types::boundary_id do_nothing_boundary = 2;
 
-    const double upper_tendon_upper_limit = -33.5;
+    const double upper_tendon_upper_limit = -33.55;
     const double upper_tendon_lower_limit = -41.4;
 
     const double bottom_tendon_upper_limit = -56.5;
