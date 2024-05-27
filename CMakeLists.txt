@@ -1,7 +1,6 @@
 # Set the name of the project and target:
 SET(TARGET "matrix-free-dealii-precice")
 SET(SOLVER1 "solid")
-SET(SOLVER2 "heat")
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.10.2)
 
@@ -83,13 +82,8 @@ ADD_EXECUTABLE(${SOLVER1}
     src/${SOLVER1}.cc
   )
 
-ADD_EXECUTABLE(${SOLVER2}
-    src/${SOLVER2}.cc
-  )
-
 # Setup targets
 DEAL_II_SETUP_TARGET(${SOLVER1})
-DEAL_II_SETUP_TARGET(${SOLVER2})
 
 # the environment variable precice_DIR is searched by default
 FIND_PACKAGE(precice 3.0
@@ -107,7 +101,6 @@ MESSAGE(STATUS "Found preCICE version ${precice_VERSION} at ${precice_DIR}")
 
 # Link targets to preCICE
 TARGET_LINK_LIBRARIES(${SOLVER1} version precice::precice)
-TARGET_LINK_LIBRARIES(${SOLVER2} version precice::precice)
 
 INCLUDE_DIRECTORIES (${CMAKE_CURRENT_BINARY_DIR}/include)
 

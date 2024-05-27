@@ -1,5 +1,4 @@
 # A matrix-free high performance solid solver for coupled fluid-structure interactions
-[![Heat transfer CI](https://github.com/DavidSCN/matrix-free-dealii-precice/actions/workflows/heat_transfer_ci.yml/badge.svg)](https://github.com/DavidSCN/matrix-free-dealii-precice/actions/workflows/heat_transfer_ci.yml)
 [![Solid mechanics CI](https://github.com/DavidSCN/matrix-free-dealii-precice/actions/workflows/solid_mechanics_ci.yml/badge.svg)](https://github.com/DavidSCN/matrix-free-dealii-precice/actions/workflows/solid_mechanics_ci.yml)
 [![v9.4](https://github.com/DavidSCN/matrix-free-dealii-precice/actions/workflows/backward_compatibility.yml/badge.svg)](https://github.com/DavidSCN/matrix-free-dealii-precice/actions/workflows/backward_compatibility.yml)
 
