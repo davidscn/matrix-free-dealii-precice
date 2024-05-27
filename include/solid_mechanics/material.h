@@ -228,9 +228,15 @@ public:
     , rho_alpha(rho * alpha_1)
     , lambda((2.0 * mu * nu) / (1.0 - 2.0 * nu))
     , formulation(formulation)
+/*
+    Might be a better approximation for the bottom tendon, as it is not axis aligned
     , m_x(std::vector<double>{-0.4523865912591927,
                               -0.05863679298792379,
                               -0.8898921836700103})
+*/
+    , m_x(std::vector<double>{0,
+                              0,
+                              1})
     , k1_tendon(92.779e2) //[N/cm^2 = 1e-2 MPa]
     , k2_tendon(305.87e2) //[N/cm^2 = 1e-2 MPa]
   {
