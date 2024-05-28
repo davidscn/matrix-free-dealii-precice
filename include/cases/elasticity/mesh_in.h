@@ -84,8 +84,7 @@ namespace TestCases
     // bottom tendon: -56.5 < z --> coupling interface
     // the fixed traction: surface area: 0.4907550026758
     // 100 N /0.4907550026758 = 203.76766299835657
-    // let's assume 0.5 --> 200
-    // ramping it up to this value in 100 ms
+    // let's assume 0.5 --> 500 for 1000N in total
     this->body_force = std::make_unique<Functions::ConstantFunction<dim>>(
       std::vector<double>{0, 0, -9.81e-4});
 
@@ -106,7 +105,7 @@ namespace TestCases
     this->dirichlet[clamped_mesh_id] =
       std::make_unique<Functions::ZeroFunction<dim>>(dim);
     this->neumann[stretched_mesh_id] =
-      std::make_unique<StretchRamp<dim>>(-100, 1000);
+      std::make_unique<StretchRamp<dim>>(-1000, 1000);
     this->neumann[stretched_mesh_id]->set_time(0.0);
 
     // Iterate over all cells and set the IDs
