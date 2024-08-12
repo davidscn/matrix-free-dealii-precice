@@ -22,7 +22,7 @@ jobs:
       uses: precice/setup-precice-action@main
       with:
         precice-version: 3.1.2
-        install-prefix: /usr/local
+        install-prefix: $HOME/local
     - uses: actions/checkout@v4
     - name: run test
       run: cd tests/heat && ./run_tests.sh
