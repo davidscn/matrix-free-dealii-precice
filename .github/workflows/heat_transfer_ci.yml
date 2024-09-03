@@ -27,9 +27,8 @@ jobs:
     - uses: actions/checkout@v4
     - name: Adjust user rights
       run: |
-        cd tests
         chown -R dealii .
-        cd heat
+        cd tests/heat
         echo "WORK_DIR=$(pwd)" >> $GITHUB_ENV
     - name: run test
       run: |
