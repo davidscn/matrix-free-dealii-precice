@@ -18,17 +18,18 @@ jobs:
     timeout-minutes: 30
 
     steps:
-    - name: prepare container
-      run: sudo apt-get -y update && sudo apt-get -y upgrade && sudo apt-get -y install libboost-all-dev
-    - name: build preCICE
-      uses: precice/setup-precice-action@main
-      with:
-        precice-version: develop
+    #- name: prepare container
+    #  run: sudo apt-get -y update && sudo apt-get -y upgrade && sudo apt-get -y install libboost-all-dev
+    #- name: build preCICE
+    #  uses: precice/setup-precice-action@main
+    #  with:
+    #    precice-version: develop
     - uses: actions/checkout@v4
     - name: Adjust user rights
       run: |
-        cd tests/heat
+        cd tests
         chown -R dealii .
+        cd heat
     - name: run test
       run: |
         sudo -u dealii ./run_tests.sh
