@@ -12,26 +12,27 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
+    container:
+      image: dealii/dealii:master-jammy
+      options: --user root
     timeout-minutes: 30
 
     steps:
+    - name: prepare container
+      run: sudo apt-get -y update && sudo apt-get -y upgrade && sudo apt-get -y install libboost-all-dev
+    - name: build preCICE
+      uses: precice/setup-precice-action@main
+      with:
+        precice-version: v3.1.2
+        install-prefix: /usr/local
     - uses: actions/checkout@v4
-    - name: run test
-
+    - name: Adjust user rights
       run: |
-         command="sudo apt-get -y update && \
-                  sudo apt-get -y upgrade && \
-                  sudo apt-get -y install libboost-all-dev && \
-                  git clone https://github.com/${{ github.repository }} && \
-                  cd matrix-free-dealii-precice && \
-                  git fetch origin ${{ github.ref }} && \
-                  git checkout FETCH_HEAD && \
-                  cd tests/heat && \
-                  ./run_tests.sh";
-
-         echo $command
-
-         docker pull dealii/dealii:master-jammy
-         docker pull precice/precice:nightly
-         docker build -t dealii-precice:develop -f ./utilities/Dockerfile .
-         docker run -t dealii-precice:develop /bin/sh -c "$command";
+        chown -R dealii .
+        cd tests/heat
+        echo "WORK_DIR=$(pwd)" >> $GITHUB_ENV
+    - name: run test
+      run: |
+        cd $WORK_DIR && sudo -u dealii ./run_tests.sh
+      env:
+        WORK_DIR: ${{ env.WORK_DIR }}
