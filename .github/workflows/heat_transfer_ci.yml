@@ -30,6 +30,9 @@ jobs:
         cd tests
         chown -R dealii .
         cd heat
+        echo "WORK_DIR=$(pwd)" >> $GITHUB_ENV
     - name: run test
       run: |
-        sudo -u dealii ./run_tests.sh
+        cd $WORK_DIR && sudo -u dealii ./run_tests.sh
+      env:
+        WORK_DIR: ${{ env.WORK_DIR }}
