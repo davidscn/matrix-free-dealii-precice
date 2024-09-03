@@ -30,4 +30,5 @@ jobs:
         cd tests/heat
         chown -R dealii .
     - name: run test
-      run: export WORK_DIR=$(pwd) && su -c -p "cd $WORK_DIR && ./run_tests.sh" dealii
+      run: |
+        sudo -u dealii ./run_tests.sh
