@@ -21,7 +21,7 @@ jobs:
     - name: install preCICE
       run: |
         wget -O /tmp/libprecice3_3.1.2_jammy.deb https://github.com/precice/precice/releases/download/v3.1.2/libprecice3_3.1.2_jammy.deb
-        sudo dpkg -i libprecice3_3.1.2_jammy.deb
+        sudo dpkg -i /tmp/libprecice3_3.1.2_jammy.deb
         sudo apt-get install -f  # to fix any missing dependencies
     - uses: actions/checkout@v4
     - name: run test
