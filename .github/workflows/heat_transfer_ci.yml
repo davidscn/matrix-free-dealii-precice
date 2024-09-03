@@ -21,9 +21,9 @@ jobs:
     - name: prepare container
       run: sudo apt-get -y update && sudo apt-get -y upgrade && sudo apt-get -y install libboost-all-dev
     - name: build preCICE
-      uses: precice/setup-precice-action@main
+      uses: precice/setup-precice-action@fix-install-path
       with:
-        precice-version: v3.1.2
+        precice-version: develop
         install-prefix: /usr/local
     - uses: actions/checkout@v4
     - name: Adjust user rights
