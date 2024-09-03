@@ -26,6 +26,9 @@ jobs:
         precice-version: develop
     - uses: actions/checkout@v4
     - name: Adjust user rights
-      run: cd tests/heat && chown -R dealii . && ls -la && pwd
+      run: |
+        cd tests/heat
+        chown -R dealii .
+        export WORK_DIR=$(pwd)
     - name: run test
-      run: su -c "./run_tests.sh" dealii
+      run: su -c "cd $WORK_DIR && ./run_tests.sh" dealii
