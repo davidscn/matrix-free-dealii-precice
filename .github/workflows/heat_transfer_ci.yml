@@ -24,6 +24,7 @@ jobs:
       uses: precice/setup-precice-action@main
       with:
         precice-version: develop
+        install-prefix: /usr/local
     - uses: actions/checkout@v4
     - name: Adjust user rights
       run: |
