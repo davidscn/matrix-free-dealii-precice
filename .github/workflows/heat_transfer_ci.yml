@@ -23,14 +23,8 @@ jobs:
         wget -O /tmp/libprecice3_3.1.2_jammy.deb https://github.com/precice/precice/releases/download/v3.1.2/libprecice3_3.1.2_jammy.deb
         sudo dpkg -i /tmp/libprecice3_3.1.2_jammy.deb
         sudo apt-get install -f  # to fix any missing dependencies
-    - name: Checkout code as root
-      run: |
-        sudo su root <<EOF
-        actions/checkout@v4
-        EOF
-    - name: Switch back to dealii user and run tests
-      run: |
-        sudo su dealii <<EOF
-        cd tests/heat
-        ./run_tests.sh
-        EOF
+    - name: Set permissions for dealii user
+      run: sudo chown -R dealii:dealii /__w/
+    - uses: actions/checkout@v4
+    - name: run test
+      run: cd tests/heat && ./run_tests.sh
