@@ -385,9 +385,11 @@ namespace Heat_Transfer
     // Valid options are none, jacobi and gmg
     std::string preconditioner_type = "gmg";
 
-    Time               time;
+    Time time;
+
     std::ofstream      output_file;
     ConditionalOStream bcout;
+    const bool         disable_precice = true;
   };
 
 
@@ -409,7 +411,6 @@ namespace Heat_Transfer
     , total_n_cg_iterations(0)
     , total_n_cg_solve(0)
     , time(parameters.end_time, parameters.delta_t)
-
     , bcout(output_file, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
   {
     const int ierr = Utilities::create_directory(parameters.output_folder);
@@ -430,7 +431,7 @@ namespace Heat_Transfer
     Assert(testcase.get() != nullptr, ExcInternalError());
     testcase->make_coarse_grid_and_bcs(triangulation);
     triangulation.refine_global(parameters.n_global_refinement);
-    if (testcase->is_dirichlet && parameters.rotate)
+    if (testcase->is_dirichlet && false)
       {
         auto edge_length = CaseUtilities::getMaxEdgeLengthAtBoundary(
           triangulation, int(TestCases::TestCaseBase<dim>::interface_id));
@@ -695,7 +696,8 @@ namespace Heat_Transfer
     // First, fill the constraint object with the constraints at the interface
     if (testcase->is_dirichlet)
       {
-        Assert((precice_adapter.get() != nullptr) || initialize,
+        Assert((precice_adapter.get() != nullptr) || initialize ||
+                 disable_precice,
                ExcNotInitialized());
         // That's a bit odd: we need to fill the constraint object at the
         // coupling interface initially in order to tell MatrixFree during the
@@ -706,14 +708,15 @@ namespace Heat_Transfer
         // dummy zero boundary condition, which is only relevant for the
         // initialization of MatrixFree. Afterwards, we use the adapter as
         // usual.
-        initialize ?
-          VectorTools::interpolate_boundary_values(
-            mapping,
-            dof_handler,
-            int(TestCases::TestCaseBase<dim>::interface_id),
-            Functions::ZeroFunction<dim>(),
-            constraints) :
-          precice_adapter->apply_dirichlet_bcs(constraints, time.get_delta_t());
+        if (!disable_precice)
+          initialize ? VectorTools::interpolate_boundary_values(
+                         mapping,
+                         dof_handler,
+                         int(TestCases::TestCaseBase<dim>::interface_id),
+                         Functions::ZeroFunction<dim>(),
+                         constraints) :
+                       precice_adapter->apply_dirichlet_bcs(constraints,
+                                                            time.get_delta_t());
       }
 
     for (const auto &el : testcase->dirichlet)
@@ -743,6 +746,7 @@ namespace Heat_Transfer
     TimerOutput::Scope t(timer, "solve system");
 
     SolverControl solver_control(system_rhs.size(), 1e-16);
+
     if (preconditioner_type == "jacobi")
       {
         // FIXME: Leads currently to more iterations compared to "none"
@@ -920,9 +924,7 @@ namespace Heat_Transfer
     pcout << "Error^2: " << error << "\n" << std::endl;
 
     // The dirichlet ID in the function map (in the case) is 1
-    auto id = testcase->is_dirichlet ?
-                int(TestCases::TestCaseBase<dim>::interface_id) :
-                1;
+    auto id = 1;
     bcout << time.current() << ","
           << CaseUtilities::getMaxEdgeLengthAtBoundary(triangulation, id) << ","
           << error << std::endl;
@@ -1020,32 +1022,63 @@ namespace Heat_Transfer
     output_results(0);
     time.increment();
 
-    precice_adapter = std::make_unique<
-      Adapter::Adapter<dim, 1, VectorType, VectorizedArray<double>>>(
-      parameters,
-      int(TestCases::TestCaseBase<dim>::interface_id),
-      system_matrix.get_matrix_free(),
-      0 /*MF dof index*/,
-      0 /*MF quad index*/,
-      testcase->is_dirichlet);
-    precice_adapter->initialize(get_coupling_data_write_vector(parameters));
-
-
-    while (precice_adapter->is_coupling_ongoing())
+    if (!disable_precice)
       {
+        precice_adapter = std::make_unique<
+          Adapter::Adapter<dim, 1, VectorType, VectorizedArray<double>>>(
+          parameters,
+          int(TestCases::TestCaseBase<dim>::interface_id),
+          system_matrix.get_matrix_free(),
+          0 /*MF dof index*/,
+          0 /*MF quad index*/,
+          testcase->is_dirichlet);
+
+    if (!disable_precice)
+      {
+        if (testcase->is_dirichlet)
+          {
+            // We misuse the system_rhs in the flux evaluation
+            evaluate_boundary_flux();
+            precice_adapter->initialize(system_rhs);
+          }
+        else
+          precice_adapter->initialize(solution);
+      }
+  }
+
+  while (time.current() < time.end())
+    {
+      if (!disable_precice)
         precice_adapter->save_current_state_if_required([&]() {});
 
-        assemble_rhs();
-        solve();
+      assemble_rhs();
+      solve();
+      {
+        TimerOutput::Scope t(timer, "advance preCICE");
+        precice_adapter->advance(get_coupling_data_write_vector(parameters),
+                                 time.get_delta_t());
+      }
+      precice_adapter->reload_old_state_if_required(
+        [&]() { solution = solution_old; });
+
+      if (!disable_precice)
         {
           TimerOutput::Scope t(timer, "advance preCICE");
-          precice_adapter->advance(get_coupling_data_write_vector(parameters),
-                                   time.get_delta_t());
-        }
-        precice_adapter->reload_old_state_if_required(
-          [&]() { solution = solution_old; });
+          if (testcase->is_dirichlet)
+            {
+              // We misuse the system_rhs in the flux evaluation
+              evaluate_boundary_flux();
+              precice_adapter->advance(solution, time.get_delta_t());
+            }
+          else
+            precice_adapter->advance(solution, time.get_delta_t());
 
-        if (precice_adapter->is_time_window_complete())
+          precice_adapter->reload_old_state_if_required(
+            [&]() { solution = solution_old; });
+        }
+
+      {
+        if (disable_precice)
           {
             if (static_cast<int>(Utilities::round_to_precision(
                   time.current() / parameters.output_tick, 12)) !=
@@ -1056,18 +1089,32 @@ namespace Heat_Transfer
                 time.current() >= time.end() - 1e-12)
               output_results(static_cast<unsigned int>(
                 std::round(time.current() / parameters.output_tick)));
-
+            solution_old = solution;
+            time.increment();
+          }
+        else if (precice_adapter->is_time_window_complete())
+          {
+            if (static_cast<int>(Utilities::round_to_precision(
+                  time.current() / parameters.output_tick, 12)) !=
+                  static_cast<int>(Utilities::round_to_precision(
+                    (time.current() - time.get_delta_t()) /
+                      parameters.output_tick,
+                    12)) ||
+                time.current() >= time.end() - 1e-12)
+              output_results(static_cast<unsigned int>(
+                std::round(time.current() / parameters.output_tick)));
             // Increment and update
             solution_old = solution;
             time.increment();
           }
       }
-    pcout << std::endl
-          << "Average CG iter = " << (total_n_cg_iterations / total_n_cg_solve)
-          << std::endl
-          << "Total CG iter = " << total_n_cg_iterations << std::endl
-          << "Total CG solve = " << total_n_cg_solve << std::endl;
-    timer.print_wall_time_statistics(MPI_COMM_WORLD);
-    pcout << std::endl;
-  }
+    }
+  pcout << std::endl
+        << "Average CG iter = " << (total_n_cg_iterations / total_n_cg_solve)
+        << std::endl
+        << "Total CG iter = " << total_n_cg_iterations << std::endl
+        << "Total CG solve = " << total_n_cg_solve << std::endl;
+  timer.print_wall_time_statistics(MPI_COMM_WORLD);
+  pcout << std::endl;
+}
 } // namespace Heat_Transfer

@@ -131,34 +131,23 @@ namespace TestCases
     const bool         colorize = false;
     // const double       tol      = 1e-10; // Tolerance for matching radii
 
-    if (this->is_dirichlet)
+    const bool disable_precice = true;
+    Triangulation<dim> tria1, tria2;
+    if (disable_precice)
       {
-        GridGenerator::hyper_ball_balanced(triangulation,
+        GridGenerator::hyper_ball_balanced(tria1,
                                            /*center=*/Point<dim>(0, 0),
                                            /*outer_radius=*/r_in);
-        /*const bool  	attach_spherical_manifold_on_boundary_cells = */
-        // true);
-        // GridGenerator::cylinder(triangulation, r_in, r_in);
-        //  /*inner_radius=*/0.0,
-        //  /*n_cells=*/n_cells,
-        //  /*colorize=*/colorize);
-      }
-    else
-      {
+
+
         GridGenerator::hyper_cube_with_cylindrical_hole(
-          triangulation, r_in, r_out, n_cells, 1, colorize);
+          tria2, r_in, r_out, n_cells, 1, colorize);
       }
 
-
-
+    GridGenerator::merge_triangulations(
+      tria1, tria2, triangulation, 1.0e-12, true, false);
     // The Dirichlet domain is located on the left, the Neumann domain is
     // located on the right
-    // const double root_location = this->is_dirichlet ? 0 : 1;
-    // Assert(dim == 2, ExcNotImplemented());
-    // GridGenerator::hyper_rectangle(triangulation,
-    //                                Point<dim>{0 + root_location, 0},
-    //                                Point<dim>{1 + root_location, 1},
-    //                                false);
 
     const types::boundary_id dirichlet_id = 1;
 
@@ -166,22 +155,7 @@ namespace TestCases
       for (const auto &face : cell->face_iterators())
         if (face->at_boundary())
           {
-            // for the cylinder: cylinder: 0 = interface_id
-            if (this->is_dirichlet)
-              {
-                face->set_boundary_id(this->interface_id);
-              }
-            else
-              {
-                if (face->boundary_id() == 1)
-                  {
-                    face->set_boundary_id(this->interface_id);
-                  }
-                else
-                  {
-                    face->set_boundary_id(dirichlet_id);
-                  }
-              }
+            face->set_boundary_id(dirichlet_id);
           }
 
     // const double tol_boundary = 1e-6;
