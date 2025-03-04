@@ -341,6 +341,10 @@ namespace Heat_Transfer
     void
     evaluate_boundary_flux();
 
+    const VectorType &
+    get_coupling_data_write_vector(
+      const Parameters::HeatParameters<dim> &parameters);
+
     const Parameters::HeatParameters<dim> &parameters;
 
     parallel::distributed::Triangulation<dim> triangulation;
@@ -935,6 +939,33 @@ namespace Heat_Transfer
     projector.project(residual);
   }
 
+  template <int dim>
+  const typename LaplaceProblem<dim>::VectorType &
+  LaplaceProblem<dim>::get_coupling_data_write_vector(
+    const Parameters::HeatParameters<dim> &parameters)
+  {
+    // Decide whether or not we need to evaluate boundary flux
+    // that's the case if we are the Dirichlet participant and decide
+    // to write something on 'values'
+    // this code is equivalent to .startswith("values_")
+    const bool need_flux =
+      testcase->is_dirichlet &&
+      (parameters.write_data_specification.rfind("values_", 0) == 0);
+
+    // Else we have either gradient (compute on the solution) or we are a
+    // Neumann participant
+
+    //  We misuse the system_rhs in the flux evaluation such that we don't need
+    //  to reallocate a global vector
+    if (need_flux)
+      evaluate_boundary_flux();
+
+    // Return the right vector for precice_adapter:
+    if (need_flux)
+      return system_rhs;
+    else
+      return solution;
+  }
 
   template <int dim>
   void
@@ -962,16 +993,8 @@ namespace Heat_Transfer
       0 /*MF dof index*/,
       0 /*MF quad index*/,
       testcase->is_dirichlet);
-    // TODO: The if block here is ugly and it is actually repeated furhter down,
-    // replace it
-    if (testcase->is_dirichlet)
-      {
-        // We misuse the system_rhs in the flux evaluation
-        evaluate_boundary_flux();
-        precice_adapter->initialize(system_rhs);
-      }
-    else
-      precice_adapter->initialize(solution);
+    precice_adapter->initialize(get_coupling_data_write_vector(parameters));
+
 
     while (precice_adapter->is_coupling_ongoing())
       {
@@ -981,14 +1004,8 @@ namespace Heat_Transfer
         solve();
         {
           TimerOutput::Scope t(timer, "advance preCICE");
-          if (testcase->is_dirichlet)
-            {
-              // We misuse the system_rhs in the flux evaluation
-              evaluate_boundary_flux();
-              precice_adapter->advance(system_rhs, time.get_delta_t());
-            }
-          else
-            precice_adapter->advance(solution, time.get_delta_t());
+          precice_adapter->advance(get_coupling_data_write_vector(parameters),
+                                   time.get_delta_t());
         }
         precice_adapter->reload_old_state_if_required(
           [&]() { solution = solution_old; });
