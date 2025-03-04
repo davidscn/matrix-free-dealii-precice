@@ -13,7 +13,7 @@ jobs:
 
     runs-on: ubuntu-latest
     container:
-      image: dealii/dealii:master-jammy
+      image: dealii/dealii:master-noble
       options: --user root
     timeout-minutes: 30
 
