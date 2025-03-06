@@ -403,7 +403,7 @@ namespace Heat_Transfer
     , fe(parameters.poly_degree)
     , quadrature_1d(parameters.quad_order)
     , dof_handler(triangulation)
-    , mapping(parameters.mapping)
+    , mapping(parameters.mapping_degree)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
     , timer(pcout, TimerOutput::never, TimerOutput::wall_times)
     , total_n_cg_iterations(0)
@@ -418,7 +418,7 @@ namespace Heat_Transfer
     Utilities::print_configuration(pcout);
     output_file.open(parameters.output_folder + "h-vs-error.txt",
                      std::ofstream::out | std::ofstream::trunc);
-    bcout << "h"
+    bcout << "h,"
           << "error^2" << std::endl;
   }
 
