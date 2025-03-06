@@ -418,8 +418,7 @@ namespace Heat_Transfer
     Utilities::print_configuration(pcout);
     output_file.open(parameters.output_folder + "h-vs-error.txt",
                      std::ofstream::out | std::ofstream::trunc);
-    bcout << "h,"
-          << "error^2" << std::endl;
+    bcout << "t,h,error^2" << std::endl;
   }
 
 
@@ -924,7 +923,8 @@ namespace Heat_Transfer
     auto id = testcase->is_dirichlet ?
                 int(TestCases::TestCaseBase<dim>::interface_id) :
                 1;
-    bcout << CaseUtilities::getMaxEdgeLengthAtBoundary(triangulation, id) << ","
+    bcout << time.current() << ","
+          << CaseUtilities::getMaxEdgeLengthAtBoundary(triangulation, id) << ","
           << error << std::endl;
   }
 
