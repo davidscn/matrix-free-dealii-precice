@@ -431,7 +431,7 @@ namespace Heat_Transfer
     Assert(testcase.get() != nullptr, ExcInternalError());
     testcase->make_coarse_grid_and_bcs(triangulation);
     triangulation.refine_global(parameters.n_global_refinement);
-    if (testcase->is_dirichlet && false)
+    if (testcase->is_dirichlet && !disable_precice)
       {
         auto edge_length = CaseUtilities::getMaxEdgeLengthAtBoundary(
           triangulation, int(TestCases::TestCaseBase<dim>::interface_id));
@@ -1033,51 +1033,48 @@ namespace Heat_Transfer
           0 /*MF quad index*/,
           testcase->is_dirichlet);
 
-    if (!disable_precice)
-      {
-        if (testcase->is_dirichlet)
+        if (!disable_precice)
           {
-            // We misuse the system_rhs in the flux evaluation
-            evaluate_boundary_flux();
-            precice_adapter->initialize(system_rhs);
+            if (testcase->is_dirichlet)
+              {
+                // We misuse the system_rhs in the flux evaluation
+                evaluate_boundary_flux();
+                precice_adapter->initialize(system_rhs);
+              }
+            else
+              precice_adapter->initialize(solution);
           }
-        else
-          precice_adapter->initialize(solution);
       }
-  }
 
-  while (time.current() < time.end())
-    {
-      if (!disable_precice)
-        precice_adapter->save_current_state_if_required([&]() {});
-
-      assemble_rhs();
-      solve();
+    while (time.current() < time.end())
       {
-        TimerOutput::Scope t(timer, "advance preCICE");
-        precice_adapter->advance(get_coupling_data_write_vector(parameters),
-                                 time.get_delta_t());
-      }
-      precice_adapter->reload_old_state_if_required(
-        [&]() { solution = solution_old; });
+        if (!disable_precice)
+          precice_adapter->save_current_state_if_required([&]() {});
 
-      if (!disable_precice)
-        {
-          TimerOutput::Scope t(timer, "advance preCICE");
-          if (testcase->is_dirichlet)
-            {
-              // We misuse the system_rhs in the flux evaluation
-              evaluate_boundary_flux();
-              precice_adapter->advance(solution, time.get_delta_t());
-            }
-          else
-            precice_adapter->advance(solution, time.get_delta_t());
+        assemble_rhs();
+        solve();
 
-          precice_adapter->reload_old_state_if_required(
-            [&]() { solution = solution_old; });
-        }
 
-      {
+        if (!disable_precice)
+          {
+            TimerOutput::Scope t(timer, "advance preCICE");
+            if (testcase->is_dirichlet)
+              {
+                // We misuse the system_rhs in the flux evaluation
+                evaluate_boundary_flux();
+                precice_adapter->advance(get_coupling_data_write_vector(
+                                           parameters),
+                                         time.get_delta_t());
+              }
+            else
+              precice_adapter->advance(
+                get_coupling_data_write_vector(parameters), time.get_delta_t());
+
+            precice_adapter->reload_old_state_if_required(
+              [&]() { solution = solution_old; });
+          }
+
+
         if (disable_precice)
           {
             if (static_cast<int>(Utilities::round_to_precision(
@@ -1108,13 +1105,12 @@ namespace Heat_Transfer
             time.increment();
           }
       }
-    }
-  pcout << std::endl
-        << "Average CG iter = " << (total_n_cg_iterations / total_n_cg_solve)
-        << std::endl
-        << "Total CG iter = " << total_n_cg_iterations << std::endl
-        << "Total CG solve = " << total_n_cg_solve << std::endl;
-  timer.print_wall_time_statistics(MPI_COMM_WORLD);
-  pcout << std::endl;
-}
+    pcout << std::endl
+          << "Average CG iter = " << (total_n_cg_iterations / total_n_cg_solve)
+          << std::endl
+          << "Total CG iter = " << total_n_cg_iterations << std::endl
+          << "Total CG solve = " << total_n_cg_solve << std::endl;
+    timer.print_wall_time_statistics(MPI_COMM_WORLD);
+    pcout << std::endl;
+  }
 } // namespace Heat_Transfer

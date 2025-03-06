@@ -131,7 +131,7 @@ namespace TestCases
     const bool         colorize = false;
     // const double       tol      = 1e-10; // Tolerance for matching radii
 
-    const bool disable_precice = true;
+    const bool         disable_precice = true;
     Triangulation<dim> tria1, tria2;
     if (disable_precice)
       {
@@ -146,6 +146,12 @@ namespace TestCases
 
     GridGenerator::merge_triangulations(
       tria1, tria2, triangulation, 1.0e-12, true, false);
+
+    // By default, the manifold_id is set to 0 on the boundary faces, 1 on the
+    // boundary cells, and numbers::flat_manifold_id on the central cell and on
+    // internal faces.
+    PolarManifold<dim> polar_manifold(Point<dim>(0, 0));
+    triangulation.set_manifold(0, polar_manifold);
     // The Dirichlet domain is located on the left, the Neumann domain is
     // located on the right
 
