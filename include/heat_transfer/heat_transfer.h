@@ -356,7 +356,7 @@ namespace Heat_Transfer
     const QGauss<1> quadrature_1d;
     DoFHandler<dim> dof_handler;
 
-    MappingQ1<dim> mapping;
+    MappingQ<dim> mapping;
 
     AffineConstraints<double> constraints;
     using SystemMatrixType = LaplaceOperator<dim, double>;
@@ -385,7 +385,9 @@ namespace Heat_Transfer
     // Valid options are none, jacobi and gmg
     std::string preconditioner_type = "gmg";
 
-    Time time;
+    Time               time;
+    std::ofstream      output_file;
+    ConditionalOStream bcout;
   };
 
 
@@ -401,17 +403,23 @@ namespace Heat_Transfer
     , fe(parameters.poly_degree)
     , quadrature_1d(parameters.quad_order)
     , dof_handler(triangulation)
+    , mapping(parameters.mapping)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
     , timer(pcout, TimerOutput::never, TimerOutput::wall_times)
     , total_n_cg_iterations(0)
     , total_n_cg_solve(0)
     , time(parameters.end_time, parameters.delta_t)
 
+    , bcout(output_file, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
   {
     const int ierr = Utilities::create_directory(parameters.output_folder);
     (void)ierr;
     Assert(ierr == 0, ExcMessage("can't create: " + parameters.output_folder));
     Utilities::print_configuration(pcout);
+    output_file.open(parameters.output_folder + "h-vs-error.txt",
+                     std::ofstream::out | std::ofstream::trunc);
+    bcout << "h"
+          << "error^2" << std::endl;
   }
 
 
@@ -423,6 +431,21 @@ namespace Heat_Transfer
     Assert(testcase.get() != nullptr, ExcInternalError());
     testcase->make_coarse_grid_and_bcs(triangulation);
     triangulation.refine_global(parameters.n_global_refinement);
+    if (testcase->is_dirichlet && parameters.rotate)
+      {
+        auto edge_length = CaseUtilities::getMaxEdgeLengthAtBoundary(
+          triangulation, int(TestCases::TestCaseBase<dim>::interface_id));
+        double radius = 0.35;
+        // Compute the angle between two cells of the inner circle
+        double cos_alpha = (2 * radius * radius - edge_length * edge_length) /
+                           (2 * radius * radius);
+
+        // then we rotate by half of the angle
+        double angle = std::acos(cos_alpha);
+
+        // Note: incompatible in parallel runs
+        GridTools::rotate(angle / 2, triangulation);
+      }
   }
 
 
@@ -489,10 +512,14 @@ namespace Heat_Transfer
       // ... the second matrix-free operator for inhomogenous BCs
       AffineConstraints<double> no_constraints;
       no_constraints.close();
+      const std::vector<const AffineConstraints<double> *> constr = {
+        &no_constraints};
+      std::vector<Quadrature<1>>               quadratures = {quadrature_1d,
+                                                              QGauss<1>(fe.degree + 2)};
       std::shared_ptr<MatrixFree<dim, double>> matrix_free(
         new MatrixFree<dim, double>());
       matrix_free->reinit(
-        mapping, dof_handler, no_constraints, quadrature_1d, additional_data);
+        mapping, {&dof_handler}, constr, quadratures, additional_data);
       inhomogeneous_operator.initialize(matrix_free);
 
 
@@ -716,8 +743,7 @@ namespace Heat_Transfer
   {
     TimerOutput::Scope t(timer, "solve system");
 
-    SolverControl solver_control(system_rhs.size(),
-                                 1e-12 * system_rhs.l2_norm());
+    SolverControl solver_control(system_rhs.size(), 1e-16);
     if (preconditioner_type == "jacobi")
       {
         // FIXME: Leads currently to more iterations compared to "none"
@@ -821,7 +847,9 @@ namespace Heat_Transfer
     TimerOutput::Scope t(timer, "compute errors");
     double             errors_squared = 0;
     const auto         data = inhomogeneous_operator.get_matrix_free();
-    FECellIntegrator   phi(*data);
+    // To compute the error, we select the second quadrature formula
+    // of degree N + 2 by default
+    FECellIntegrator phi(*data, 0, 1);
 
     for (unsigned int cell = 0; cell < data->n_cell_batches(); ++cell)
       {
@@ -844,7 +872,7 @@ namespace Heat_Transfer
       }
     const double global_error =
       Utilities::MPI::sum(errors_squared, MPI_COMM_WORLD);
-    return std::sqrt(global_error);
+    return global_error;
   }
 
 
@@ -890,7 +918,14 @@ namespace Heat_Transfer
     // Compute error
     testcase->initial_condition->set_time(time.current());
     const auto error = compute_error(*(testcase->initial_condition), solution);
-    pcout << "Error: " << error << "\n" << std::endl;
+    pcout << "Error^2: " << error << "\n" << std::endl;
+
+    // The dirichlet ID in the function map (in the case) is 1
+    auto id = testcase->is_dirichlet ?
+                int(TestCases::TestCaseBase<dim>::interface_id) :
+                1;
+    bcout << CaseUtilities::getMaxEdgeLengthAtBoundary(triangulation, id) << ","
+          << error << std::endl;
   }
 
 

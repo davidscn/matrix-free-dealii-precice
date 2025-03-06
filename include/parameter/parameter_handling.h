@@ -67,8 +67,9 @@ namespace Parameters
   // The quadrature order should be adjusted accordingly.
   struct FESystem
   {
-    unsigned int poly_degree = 2;
-    unsigned int quad_order  = 3;
+    unsigned int poly_degree    = 2;
+    unsigned int quad_order     = 3;
+    unsigned int mapping_degree = 1;
 
     void
     add_parameters(ParameterHandler &prm);
@@ -89,6 +90,10 @@ namespace Parameters
                         quad_order,
                         "Gauss quadrature order",
                         Patterns::Integer(1));
+      prm.add_parameter("Mapping degree",
+                        mapping_degree,
+                        "Mapping degree",
+                        Patterns::Integer(1));
     }
     prm.leave_subsection();
   }
@@ -101,6 +106,7 @@ namespace Parameters
     unsigned int dimension           = 2;
     unsigned int n_global_refinement = 0;
     std::string  testcase            = "turek_hron";
+    bool         rotate              = false;
 
     void
     add_parameters(ParameterHandler &prm);
@@ -125,6 +131,10 @@ namespace Parameters
                         testcase,
                         "Testcase to compute",
                         Patterns::Anything());
+      prm.add_parameter("Rotate",
+                        rotate,
+                        "Rotate the inner circle",
+                        Patterns::Bool());
     }
     prm.leave_subsection();
   }
