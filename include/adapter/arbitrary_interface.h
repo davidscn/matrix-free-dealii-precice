@@ -125,7 +125,14 @@ namespace Adapter
                                        const std::vector<Point<dim>> points_in,
                                        double tolerance = 1e-10);
 
-    std::vector<int> interface_nodes_ids;
+    Tensor<1, dim>
+    compute_face_normal(
+      const typename Triangulation<dim>::active_cell_iterator &cell,
+      Point<dim>                                               real_point);
+
+
+    std::vector<Tensor<1, dim>> face_normals;
+    std::vector<int>            interface_nodes_ids;
     std::vector<
       std::pair<typename Triangulation<dim>::active_cell_iterator, Point<dim>>>
       locally_relevant_points;
@@ -213,12 +220,13 @@ namespace Adapter
                 {
                   fe_evaluator.evaluate(make_array_view(local_values),
                                         EvaluationFlags::gradients);
-                  const auto val = fe_evaluator.get_gradient(0);
+                  const auto val =
+                    fe_evaluator.get_gradient(0) * face_normals[i];
                   this->precice->writeData(
                     this->mesh_name,
                     this->write_data_name,
                     {&interface_nodes_ids[i], 1},
-                    {val.begin_raw(), static_cast<std::size_t>(data_dim)});
+                    {&val, static_cast<std::size_t>(data_dim)});
                 }
               else
                 {
@@ -396,6 +404,7 @@ namespace Adapter
             {
               unique_points.emplace_back(cell);
               relevant_interface_ids.emplace_back(interface_nodes_ids[i]);
+              face_normals.push_back(compute_face_normal(cell.first, point));
               break;
             }
       }
@@ -407,4 +416,42 @@ namespace Adapter
     return unique_points;
   }
 
+
+  template <int dim, int data_dim, typename VectorizedArrayType>
+  Tensor<1, dim>
+  ArbitraryInterface<dim, data_dim, VectorizedArrayType>::compute_face_normal(
+    const typename Triangulation<dim>::active_cell_iterator &cell,
+    Point<dim>                                               real_point)
+  {
+    unsigned int matching_face = numbers::invalid_unsigned_int;
+    // Check that this can only apply to one face
+    for (const auto face_no : cell->face_indices())
+      {
+        if (cell->face(face_no)->at_boundary() &&
+            cell->face(face_no)->boundary_id() ==
+              this->dealii_boundary_interface_id)
+          {
+            Assert(
+              matching_face = numbers::invalid_unsigned_int,
+              ExcMessage(
+                "Only valid if we have exactly one face match for the coupling boundary."));
+            matching_face = face_no;
+          }
+      }
+
+    const auto face_ref_point =
+      this->mf_data->get_mapping_info()
+        .mapping->project_real_point_to_unit_point_on_face(cell,
+                                                           matching_face,
+                                                           real_point);
+    Quadrature<dim - 1> single_point_quadrature(face_ref_point);
+    FEFaceValues<dim>   fe_face_values(
+      *(this->mf_data->get_mapping_info().mapping),
+      this->mf_data->get_dof_handler(/*dof_index*/ 0).get_fe(),
+      single_point_quadrature,
+      UpdateFlags::update_normal_vectors);
+    fe_face_values.reinit(cell, matching_face);
+
+    return fe_face_values.normal_vector(0);
+  }
 } // namespace Adapter
