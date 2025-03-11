@@ -109,7 +109,7 @@ BoundaryProjector<dim, n_components, VectorType, VectorizedArrayType>::project(
     rhs[i] = residual[i];
 
   // And solve the system
-  ReductionControl               control(500, 0., 1e-12, false, false);
+  ReductionControl               control(rhs.size(), 0., 1e-14, false, false);
   SolverCG<VectorType>           cg(control);
   PreconditionJacobi<MatrixType> preconditioner;
   preconditioner.initialize(b_mass_matrix, 0.8);
