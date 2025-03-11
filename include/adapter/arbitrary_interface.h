@@ -171,9 +171,10 @@ namespace Adapter
     for (const auto &box : bounding_box)
       for (uint d = 0; d < dim; ++d)
         {
-          // Emplace direction-wise
-          precice_bounding_box.emplace_back(box.lower_bound(d));
-          precice_bounding_box.emplace_back(box.upper_bound(d));
+          // Emplace direction-wise, we need a generous safety margin for the
+          // non-matching circles
+          precice_bounding_box.emplace_back(box.lower_bound(d) * 5);
+          precice_bounding_box.emplace_back(box.upper_bound(d) * 5);
         }
 
     // Finally pass the bounding box to preCICE
@@ -321,7 +322,8 @@ namespace Adapter
     locally_relevant_points = filter_vertices_to_local_partition(
       *(this->mf_data->get_mapping_info().mapping),
       this->mf_data->get_dof_handler(0).get_triangulation(),
-      received_points);
+      received_points,
+      0.1);
 
     // Some consistency checks: we can only write data using this interface,
     // reading doesn't make sense
