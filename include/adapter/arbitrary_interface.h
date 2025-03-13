@@ -319,11 +319,15 @@ namespace Adapter
     // TODO: Maybe perform some coarse pre-filtering here
     // Now filter the received points using the consensus algorithm (have a look
     // at the description of the function)
+    // The tolerance is here set rather high due to the non-matching circles.
+    // Might be adjusted for other scenarios
     locally_relevant_points = filter_vertices_to_local_partition(
       *(this->mf_data->get_mapping_info().mapping),
       this->mf_data->get_dof_handler(0).get_triangulation(),
       received_points,
-      0.1);
+      0.2 / this->mf_data->get_dof_handler(0)
+              .get_triangulation()
+              .n_global_levels());
 
     // Some consistency checks: we can only write data using this interface,
     // reading doesn't make sense
@@ -360,7 +364,17 @@ namespace Adapter
     // Set up the relevant data objects
     GridTools::Cache<dim>                             cache(tria, mapping);
     typename Triangulation<dim>::active_cell_iterator cell_hint;
-    const std::vector<bool>                           marked_vertices;
+
+    // We cut down the search space to vertices at the interface (since we do
+    // surface coupling)
+    std::vector<bool> marked_vertices(tria.n_vertices(), false);
+    for (const auto &cell : tria.active_cell_iterators())
+      for (auto const &f : cell->face_indices())
+        if (cell->face(f)->at_boundary() &&
+            cell->face(f)->boundary_id() == this->dealii_boundary_interface_id)
+          for (const auto v : cell->face(f)->vertex_indices())
+            marked_vertices[cell->face(f)->vertex_index(v)] = true;
+
 
     const unsigned int my_rank =
       Utilities::MPI::this_mpi_process(tria.get_communicator());
@@ -369,7 +383,7 @@ namespace Adapter
     // Loop over all received points
     for (size_t i = 0; i < points_in.size(); ++i)
       {
-        // First look for all cells around the given point
+        // First look for the best fitting cell we can find
         const auto &point      = points_in[i];
         const auto  first_cell = GridTools::find_active_cell_around_point(
           cache, point, cell_hint, marked_vertices, tolerance);
@@ -379,12 +393,18 @@ namespace Adapter
         if (cell_hint.state() != IteratorState::valid)
           continue;
 
+        // For parallel runs, we have to make sure that our best fit is not
+        // already mapped by other processors: we do this by finding other cells
+        // adjacent to the cell we found above. If the vertex fits also into
+        // other cells (e.g. it's at a boundary) we make the lowest rank the
+        // owner. If we are the lowest rank and own the cell it lies in we map
+        // this vertex
         const auto active_cells_around_point =
           GridTools::find_all_active_cells_around_point(
             cache.get_mapping(),
             cache.get_triangulation(),
             point,
-            tolerance,
+            1e-10,
             first_cell);
 
         unsigned int lowest_rank = numbers::invalid_unsigned_int;
@@ -404,6 +424,11 @@ namespace Adapter
         for (const auto &cell : active_cells_around_point)
           if (cell.first->is_locally_owned())
             {
+              // Might be necessary or useful for more complex scenarios:
+              // it maps the vertex (given in reference coordinates) to the
+              // closest surface
+              // cell.second =
+              //   ReferenceCells::get_hypercube<dim>().closest_point(cell.second);
               unique_points.emplace_back(cell);
               relevant_interface_ids.emplace_back(interface_nodes_ids[i]);
               face_normals.push_back(compute_face_normal(cell.first, point));

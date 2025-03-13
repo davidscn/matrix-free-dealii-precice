@@ -640,10 +640,12 @@ namespace Heat_Transfer
       }
 
     FEFaceIntegrator phi_face(*data);
-    Assert(
-      phi_face.fast_evaluation_supported(fe.degree, quadrature_1d.size()),
-      ExcMessage(
-        "The given combination of the polynomial degree and quadrature order is not supported by default."));
+
+    if (!phi_face.fast_evaluation_supported(fe.degree, quadrature_1d.size()))
+      pcout
+        << "WARNING: The given combination of polynomial degree and quadrature order was not precompiled. Evaluation operator follow slow code path. See the \"FEEvaluation\" deal.II doxygen documentation for more information."
+        << std::endl;
+
     unsigned int q_index = 0;
 
     if (!testcase->is_dirichlet)
