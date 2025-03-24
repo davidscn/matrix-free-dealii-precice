@@ -87,7 +87,7 @@ namespace TestCases
 
     // Transform the hyper-rectangle into the beam shape
     GridTools::transform(
-      [](auto &pt_in) {
+      [](const Point<dim> &pt_in) -> Point<dim> {
         const double &x = pt_in[0];
         const double &y = pt_in[1];
 
