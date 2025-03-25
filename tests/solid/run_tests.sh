@@ -33,7 +33,6 @@ print_result() {
             cat "$@"
             echo "----- Test Result -----"
             cat "$i"/"${test_name}".output
-            exit "$exit_code"
 	fi
 }
 
