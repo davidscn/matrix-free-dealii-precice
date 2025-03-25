@@ -31,14 +31,15 @@ print_result() {
             echo -ne "${RED} failed ${NOCOLOR}\n"
             exit_code=$(( exit_code +1))
             cat "$@"
-	    exit 1
+            echo "----- Test Result -----"
+            cat "$i"/output
 	fi
 }
 
 test_name="building"
 print_start ${test_name}
 mkdir -p "${work_dir}"/build && cd "${work_dir}"/build
-(cmake ../../../ && make debug && make solid) >${test_name}.log
+(cmake ../../../ && make debug && make solid) 2>&1 | tee "${test_name}.log"
  if [ $? -eq 0 ]
     then
     echo -ne "${GREEN} passed ${NOCOLOR}\n"
@@ -60,12 +61,38 @@ for i in "${tests[@]}"
     do
     test_name="${i}_serial"
     print_start "${test_name}"
-    ./solid "$i"/"$i".prm > "$i"/"${test_name}".log & ./dummy_tester > "$i"/tester-"${test_name}".log
+    timeout 120s ./solid "$i"/"$i".prm > "$i"/"${test_name}".log 2>&1 &
+    pid_solid=$!
+    timeout 120s ./dummy_tester > "$i"/tester-"${test_name}".log 2>&1 &
+    pid_dummy=$!
+    wait $pid_solid; rc_solid=$?
+    wait $pid_dummy; rc_dummy=$?
+    if [ "$rc_solid" -ne 0 ] || [ "$rc_dummy" -ne 0 ]; then
+        echo "Test $test_name failed (solid=$rc_solid, dummy=$rc_dummy)."
+        echo "----- solid.log -----"
+        cat "$i"/"${test_name}".log
+        echo "----- tester.log -----"
+        cat "$i"/tester-"${test_name}".log
+        exit 1
+    fi
     numdiff  "$i"/output "$i"/"${test_name}".output > "$i"/"${test_name}".diff
     print_result "$i"/"${test_name}".diff
     test_name="${i}_parallel"
     print_start "${test_name}"
-    mpirun --oversubscribe -np 4 ./solid "$i"/"$i".prm > "$i"/"${test_name}".log & ./dummy_tester > "$i"/tester-"${test_name}".log
+    timeout 120s mpirun --oversubscribe -np 4 ./solid "$i"/"$i".prm > "$i"/"${test_name}".log 2>&1 &
+    pid_solid=$!
+    timeout 120s ./dummy_tester > "$i"/tester-"${test_name}".log 2>&1 &
+    pid_dummy=$!
+    wait $pid_solid; rc_solid=$?
+    wait $pid_dummy; rc_dummy=$?
+    if [ "$rc_solid" -ne 0 ] || [ "$rc_dummy" -ne 0 ]; then
+        echo "Test $test_name failed (solid=$rc_solid, dummy=$rc_dummy)."
+        echo "----- solid.log -----"
+        cat "$i"/"${test_name}".log
+        echo "----- tester.log -----"
+        cat "$i"/tester-"${test_name}".log
+        exit 1
+    fi
     numdiff  "$i"/output "$i"/"${test_name}".output > "$i"/"${test_name}".diff
     print_result "$i"/"${test_name}".diff
 done
