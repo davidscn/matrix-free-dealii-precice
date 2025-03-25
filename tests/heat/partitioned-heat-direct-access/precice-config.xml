@@ -51,7 +51,7 @@
     <acceleration:IQN-ILS>
       <data name="Temperature" mesh="Dirichlet-Mesh" />
       <data name="Heat-Flux" mesh="Neumann-Mesh" />
-      <preconditioner type="residual-sum" />
+      <preconditioner type="residual-sum" update-on-threshold="false" />
       <filter type="QR1" limit="1e-5" />
       <initial-relaxation value="0.5" />
       <max-used-iterations value="100" />
