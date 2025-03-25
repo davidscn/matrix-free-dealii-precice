@@ -31,14 +31,16 @@ print_result() {
             echo -ne "${RED} failed ${NOCOLOR}\n"
             exit_code=$(( exit_code +1))
             cat "$@"
-	    exit 1
+            echo "----- Test Result -----"
+            cat "$i"/"${test_name}".output
+            exit "$exit_code"
 	fi
 }
 
 test_name="building"
 print_start ${test_name}
 mkdir -p "${work_dir}"/build && cd "${work_dir}"/build || exit 1
-(cmake ../../../ && make debug && make heat) >${test_name}.log
+(cmake ../../../ && make debug && make heat) 2>&1 | tee "${test_name}.log"
  if [ $? -eq 0 ]
     then
     echo -ne "${GREEN} passed ${NOCOLOR}\n"
