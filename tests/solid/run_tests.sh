@@ -32,7 +32,7 @@ print_result() {
             exit_code=$(( exit_code +1))
             cat "$@"
             echo "----- Test Result -----"
-            cat "$i"/"${test_name}".output
+            cat "$i"/output
 	fi
 }
 
@@ -61,12 +61,38 @@ for i in "${tests[@]}"
     do
     test_name="${i}_serial"
     print_start "${test_name}"
-    ./solid "$i"/"$i".prm > "$i"/"${test_name}".log & ./dummy_tester > "$i"/tester-"${test_name}".log
+    timeout 120s ./solid "$i"/"$i".prm > "$i"/"${test_name}".log 2>&1 &
+    pid_solid=$!
+    timeout 120s ./dummy_tester > "$i"/tester-"${test_name}".log 2>&1 &
+    pid_dummy=$!
+    wait $pid_solid; rc_solid=$?
+    wait $pid_dummy; rc_dummy=$?
+    if [ "$rc_solid" -ne 0 ] || [ "$rc_dummy" -ne 0 ]; then
+        echo "Test $test_name failed (solid=$rc_solid, dummy=$rc_dummy)."
+        echo "----- solid.log -----"
+        cat "$i"/"${test_name}".log
+        echo "----- tester.log -----"
+        cat "$i"/tester-"${test_name}".log
+        exit 1
+    fi
     numdiff  "$i"/output "$i"/"${test_name}".output > "$i"/"${test_name}".diff
     print_result "$i"/"${test_name}".diff
     test_name="${i}_parallel"
     print_start "${test_name}"
-    mpirun --oversubscribe -np 4 ./solid "$i"/"$i".prm > "$i"/"${test_name}".log & ./dummy_tester > "$i"/tester-"${test_name}".log
+    timeout 120s mpirun --oversubscribe -np 4 ./solid "$i"/"$i".prm > "$i"/"${test_name}".log 2>&1 &
+    pid_solid=$!
+    timeout 120s ./dummy_tester > "$i"/tester-"${test_name}".log 2>&1 &
+    pid_dummy=$!
+    wait $pid_solid; rc_solid=$?
+    wait $pid_dummy; rc_dummy=$?
+    if [ "$rc_solid" -ne 0 ] || [ "$rc_dummy" -ne 0 ]; then
+        echo "Test $test_name failed (solid=$rc_solid, dummy=$rc_dummy)."
+        echo "----- solid.log -----"
+        cat "$i"/"${test_name}".log
+        echo "----- tester.log -----"
+        cat "$i"/tester-"${test_name}".log
+        exit 1
+    fi
     numdiff  "$i"/output "$i"/"${test_name}".output > "$i"/"${test_name}".diff
     print_result "$i"/"${test_name}".diff
 done

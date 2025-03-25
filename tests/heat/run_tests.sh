@@ -32,7 +32,7 @@ print_result() {
             exit_code=$(( exit_code +1))
             cat "$@"
             echo "----- Test Result -----"
-            cat "$i"/"${test_name}".output
+            cat "$i"/output
 	fi
 }
 
@@ -55,16 +55,49 @@ cp ./build/heat .
 # Specify the precice-config
 for i in "${tests[@]}"
     do
+    # Serial
     test_name="${i}_serial"
     print_start "${test_name}"
     ./heat "$i"/dirichlet.prm > "$i"/dirichlet.log & ./heat "$i"/neumann.prm > "$i"/neumann.log
+    timeout 120s ./heat "$i"/dirichlet.prm > "$i"/dirichlet.log 2>&1 &
+    pid_dirichlet=$!
+    timeout 120s ./heat "$i"/neumann.prm > "$i"/neumann.log 2>&1 &
+    pid_neumann=$!
+
+    # Wait for both processes to finish and capture exit codes
+    wait $pid_dirichlet; rc_dirichlet=$?
+    wait $pid_neumann; rc_neumann=$?
+    if [ "$rc_dirichlet" -ne 0 ] || [ "$rc_neumann" -ne 0 ]; then
+        echo "Test ${test_name} failed (dirichlet exit code: $rc_dirichlet, neumann exit code: $rc_neumann)."
+        echo "----- dirichlet.log -----"
+        cat "$i"/dirichlet.log
+        echo "----- neumann.log -----"
+        cat "$i"/neumann.log
+        exit 1
+    fi
     grep 'Error' "$i"/dirichlet.log > "$i"/output
     grep 'Error' "$i"/neumann.log >> "$i"/output
     numdiff --absolute-tolerance=9e-14 "$i"/output "$i"/"${test_name}".output > "$i"/"${test_name}".diff
     print_result "$i"/"${test_name}".diff
+
+    # Parallel
     test_name="${i}_parallel"
     print_start "${test_name}"
-    mpirun --oversubscribe -np 4 ./heat "$i"/dirichlet.prm > "$i"/dirichlet.log & mpirun --oversubscribe -np 4 ./heat "$i"/neumann.prm > "$i"/neumann.log
+    timeout 120s mpirun --oversubscribe -np 4 ./heat "$i"/dirichlet.prm > "$i"/dirichlet.log 2>&1 &
+    pid_dirichlet=$!
+    timeout 120s mpirun --oversubscribe -np 4 ./heat "$i"/neumann.prm > "$i"/neumann.log 2>&1 &
+    pid_neumann=$!
+
+    wait $pid_dirichlet; rc_dirichlet=$?
+    wait $pid_neumann; rc_neumann=$?
+    if [ "$rc_dirichlet" -ne 0 ] || [ "$rc_neumann" -ne 0 ]; then
+        echo "Test ${test_name} failed (dirichlet exit code: $rc_dirichlet, neumann exit code: $rc_neumann)."
+        echo "----- dirichlet.log -----"
+        cat "$i"/dirichlet.log
+        echo "----- neumann.log -----"
+        cat "$i"/neumann.log
+        exit 1
+    fi
     grep 'Error' "$i"/dirichlet.log > "$i"/output
     grep 'Error' "$i"/neumann.log >> "$i"/output
     numdiff --absolute-tolerance=9e-14 "$i"/output "$i"/"${test_name}".output > "$i"/"${test_name}".diff
