@@ -627,22 +627,23 @@ namespace Heat_Transfer
         system_matrix.initialize_dof_vector(update);
         system_matrix.initialize_dof_vector(rhs);
         update = 0;
-
+        TimerOutput::Scope t1(timer, "memory transfer CPU to GPU");
         // transfer the vectors to the device
         LinearAlgebra::ReadWriteVector<double> rw_vector(
           dof_handler.locally_owned_dofs());
         rw_vector.import(system_rhs, VectorOperation::insert);
         rhs.import(rw_vector, VectorOperation::insert);
-
+        t1.stop();
         // Solve
         SolverCG<DeviceVector> cg(solver_control);
         cg.solve(system_matrix, update, rhs, PreconditionIdentity());
 
+        TimerOutput::Scope t2(timer, "memory transfer GPU to CPU");
         // transfer the solution back, using VectorOperation::add to the
         // solution could be faster/save the addition later on
         rw_vector.import(update, VectorOperation::insert);
         solution_update.import(rw_vector, VectorOperation::insert);
-
+        t2.stop();
         n_iterations = solver_control.last_step();
       }
     else
