@@ -105,7 +105,7 @@ DEAL_II_SETUP_TARGET(${SOLVER1})
 DEAL_II_SETUP_TARGET(${SOLVER2})
 
 # the environment variable precice_DIR is searched by default
-FIND_PACKAGE(precice 2.0
+FIND_PACKAGE(precice 3.0
         HINTS ${precice_DIR} ${PRECICE_DIR} $ENV{PRECICE_DIR}
   )
 IF(NOT ${precice_FOUND})
@@ -117,19 +117,6 @@ IF(NOT ${precice_FOUND})
     )
 ENDIF()
 MESSAGE(STATUS "Found preCICE version ${precice_VERSION} at ${precice_DIR}")
-
-# Add a define for experimental preCICE features
-IF(${precice_VERSION} GREATER_EQUAL "2.3.0")
-  SET(SUPPORT_EXPERIMENTAL ON)
-ELSE()
-  SET(SUPPORT_EXPERIMENTAL OFF)
-ENDIF()
-OPTION(PRECICE_EXPERIMENTAL "Enable experimental preCICE (>=v2.3.0) features, which require the \"experimental\" tag within the preCICE configuration file." ${SUPPORT_EXPERIMENTAL})
-
-if(PRECICE_EXPERIMENTAL)
-    ADD_DEFINITIONS(-DPRECICE_EXPERIMENTAL)
-ENDIF(PRECICE_EXPERIMENTAL)
-MESSAGE(STATUS "Support for experimental preCICE features: ${PRECICE_EXPERIMENTAL}")
 
 # Link targets to preCICE
 TARGET_LINK_LIBRARIES(${SOLVER1} version precice::precice)

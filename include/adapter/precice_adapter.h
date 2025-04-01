@@ -8,14 +8,13 @@
 #include <deal.II/fe/mapping_q_generic.h>
 
 #include <deal.II/matrix_free/matrix_free.h>
-#if PRECICE_EXPERIMENTAL
-#  include <adapter/arbitrary_interface.h>
-#endif
+
+#include <adapter/arbitrary_interface.h>
 #include <adapter/dof_interface.h>
-#include <adapter/overlapping-interface.h>
+// #include <adapter/overlapping-interface.h>
 #include <adapter/quad_interface.h>
 #include <base/q_equidistant.h>
-#include <precice/SolverInterface.hpp>
+#include <precice/precice.hpp>
 
 #include <ostream>
 
@@ -39,7 +38,7 @@ namespace Adapter
       typename CouplingInterface<dim, data_dim, VectorizedArrayType>::
         value_type;
     /**
-     * @brief      Constructor, which sets up the precice Solverinterface
+     * @brief      Constructor, which sets up the precice Participant
      *
      * @tparam     data_dim Dimension of the coupling data. Equivalent to n_components
      *             in the deal.II documentation
@@ -134,14 +133,16 @@ namespace Adapter
      */
     value_type
     read_on_quadrature_point(const unsigned int id_number,
-                             const unsigned int active_faces) const;
+                             const unsigned int active_faces,
+                             double             relative_read_time) const;
     /**
      * @brief Public API adapter method, which calls the respective implementation
      *        in derived classes of the CouplingInterface. Have a look at the
      *        documentation there.
      */
     void
-    apply_dirichlet_bcs(AffineConstraints<double> &constraints) const;
+    apply_dirichlet_bcs(AffineConstraints<double> &constraints,
+                        double                     relative_read_time) const;
 
     /**
      * @brief is_coupling_ongoing Calls the preCICE API function isCouplingOnGoing
@@ -170,9 +171,9 @@ namespace Adapter
 
 
   private:
-    // public precice solverinterface, needed in order to steer the time loop
+    // public precice Participant, needed in order to steer the time loop
     // inside the solver.
-    std::shared_ptr<precice::SolverInterface> precice;
+    std::shared_ptr<precice::Participant> precice;
     /// The objects handling reading and writing data
     std::shared_ptr<CouplingInterface<dim, data_dim, VectorizedArrayType>>
       writer;
@@ -200,13 +201,14 @@ namespace Adapter
     const bool         is_dirichlet)
     : dealii_boundary_interface_id(dealii_boundary_interface_id)
   {
-    precice = std::make_shared<precice::SolverInterface>(
+    precice = std::make_shared<precice::Participant>(
       parameters.participant_name,
       parameters.config_file,
       Utilities::MPI::this_mpi_process(MPI_COMM_WORLD),
       Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD));
 
-    AssertThrow(dim == precice->getDimensions(), ExcInternalError());
+    AssertThrow(dim == precice->getMeshDimensions(parameters.read_mesh_name),
+                ExcInternalError());
     AssertThrow(dim > 1, ExcNotImplemented());
 
     // 1. Set the reader, which is defined in the Adapter constructor
@@ -233,17 +235,17 @@ namespace Adapter
     // 2. Set the writer, which is defined in the parameter file
     if (parameters.write_mesh_name == parameters.read_mesh_name)
       writer = reader;
-    else
-      {
-        writer = std::make_shared<
-          OverlappingInterface<dim, data_dim, VectorizedArrayType>>(
-          data,
-          precice,
-          parameters.write_mesh_name,
-          dealii_boundary_interface_id,
-          dof_index,
-          parameters.write_quad_index);
-      }
+    // else
+    //   {
+    //     writer = std::make_shared<
+    //       OverlappingInterface<dim, data_dim, VectorizedArrayType>>(
+    //       data,
+    //       precice,
+    //       parameters.write_mesh_name,
+    //       dealii_boundary_interface_id,
+    //       dof_index,
+    //       parameters.write_quad_index);
+    //   }
 
     reader->add_read_data(parameters.read_data_name);
     writer->add_write_data(parameters.write_data_name,
@@ -269,17 +271,16 @@ namespace Adapter
     reader->define_coupling_mesh();
     writer->define_coupling_mesh();
 
-    // Only the writer needs potentially to process the coupling mesh, if the
-    // mapping is carried out in the solver
-    writer->process_coupling_mesh();
-
     // write initial writeData to preCICE if required
     if (precice->requiresInitialData())
       writer->write_data(dealii_to_precice);
 
-
     // Initialize preCICE internally
     precice->initialize();
+
+    // Only the writer needs potentially to process the coupling mesh, if the
+    // mapping is carried out in the solver
+    writer->process_coupling_mesh();
 
     // Maybe, read block-wise and work with an AlignedVector since the read data
     // (forces) is multiple times required during the Newton iteration
@@ -322,9 +323,12 @@ namespace Adapter
     typename Adapter<dim, data_dim, VectorType, VectorizedArrayType>::value_type
     Adapter<dim, data_dim, VectorType, VectorizedArrayType>::
       read_on_quadrature_point(const unsigned int id_number,
-                               const unsigned int active_faces) const
+                               const unsigned int active_faces,
+                               double             relative_read_time) const
   {
-    return reader->read_on_quadrature_point(id_number, active_faces);
+    return reader->read_on_quadrature_point(id_number,
+                                            active_faces,
+                                            relative_read_time);
   }
 
 
@@ -335,9 +339,10 @@ namespace Adapter
             typename VectorizedArrayType>
   void
   Adapter<dim, data_dim, VectorType, VectorizedArrayType>::apply_dirichlet_bcs(
-    AffineConstraints<double> &constraints) const
+    AffineConstraints<double> &constraints,
+    double                     relative_read_time) const
   {
-    reader->apply_Dirichlet_bcs(constraints);
+    reader->apply_Dirichlet_bcs(constraints, relative_read_time);
   }
 
 

@@ -20,7 +20,7 @@ interfaces
     mesh              Fluid-Mesh-Nodes;
     patches           (flap);
     locations         faceNodes;
-    
+
     readData
     (
       Displacement

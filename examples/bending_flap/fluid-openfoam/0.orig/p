@@ -28,7 +28,7 @@ boundaryField
     {
         type            zeroGradient;
     }
-    
+
     upperWall
     {
         type            zeroGradient;

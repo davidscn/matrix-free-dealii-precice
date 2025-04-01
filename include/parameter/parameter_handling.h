@@ -121,13 +121,10 @@ namespace Parameters
                         "Dimension of the problem",
                         Patterns::Integer(2, 3));
 
-      prm.add_parameter(
-        "Testcase",
-        testcase,
-        "Testcase to compute",
-        Patterns::Selection(
-          "turek_hron|cook|tube3d|bending_flap|Wall_beam|perpendicular_flap|"
-          "partitioned_heat_dirichlet|partitioned_heat_neumann"));
+      prm.add_parameter("Testcase",
+                        testcase,
+                        "Testcase to compute",
+                        Patterns::Anything());
     }
     prm.leave_subsection();
   }
@@ -339,10 +336,10 @@ namespace Parameters
   {
     template <typename CLASS>
     void
-    process_parameter_handler(ParameterHandler & prm,
+    process_parameter_handler(ParameterHandler  &prm,
                               const std::string &input_file,
                               const int          dim,
-                              CLASS *            owning_class)
+                              CLASS             *owning_class)
     {
       try
         {

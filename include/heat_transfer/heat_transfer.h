@@ -73,7 +73,7 @@ namespace Heat_Transfer
   }
   template <int dim>
   double
-  Coefficient<dim>::value(const Point<dim> & p,
+  Coefficient<dim>::value(const Point<dim>  &p,
                           const unsigned int component) const
   {
     return value<double>(p, component);
@@ -90,6 +90,7 @@ namespace Heat_Transfer
     class MatrixFree;
   }
 #endif
+
 
   template <int dim, bool use_cuda = false>
   class LaplaceProblem
@@ -111,7 +112,7 @@ namespace Heat_Transfer
       std::conditional_t<use_cuda, CUDASystemMatrixType, CPUSystemMatrixType>;
 
     using DeviceVector =
-      LinearAlgebra::distributed::Vector<double, ::dealii::MemorySpace::CUDA>;
+      LinearAlgebra::distributed::Vector<double, ::dealii::MemorySpace::Default>;
 
     LaplaceProblem(const Parameters::HeatParameters<dim> &parameters);
 
@@ -169,7 +170,7 @@ namespace Heat_Transfer
      */
     double
     compute_error(
-      const Function<dim> &                             function,
+      const Function<dim>                              &function,
       const LinearAlgebra::distributed::Vector<double> &solution) const;
     /**
      * @brief output_results Output the generated results.
@@ -181,6 +182,10 @@ namespace Heat_Transfer
 
     void
     evaluate_boundary_flux();
+
+    const VectorType &
+    get_coupling_data_write_vector(
+      const Parameters::HeatParameters<dim> &parameters);
 
     const Parameters::HeatParameters<dim> &parameters;
 
@@ -500,7 +505,8 @@ namespace Heat_Transfer
               // Get the value from preCICE
               const auto heat_flux =
                 precice_adapter->read_on_quadrature_point(q_index,
-                                                          active_faces);
+                                                          active_faces,
+                                                          time.get_delta_t());
               phi_face.submit_value(-heat_flux * dt, q);
               ++q_index;
             }
@@ -536,13 +542,14 @@ namespace Heat_Transfer
         // dummy zero boundary condition, which is only relevant for the
         // initialization of MatrixFree. Afterwards, we use the adapter as
         // usual.
-        initialize ? VectorTools::interpolate_boundary_values(
-                       mapping,
-                       dof_handler,
-                       int(TestCases::TestCaseBase<dim>::interface_id),
-                       Functions::ZeroFunction<dim>(),
-                       constraints) :
-                     precice_adapter->apply_dirichlet_bcs(constraints);
+        initialize ?
+          VectorTools::interpolate_boundary_values(
+            mapping,
+            dof_handler,
+            int(TestCases::TestCaseBase<dim>::interface_id),
+            Functions::ZeroFunction<dim>(),
+            constraints) :
+          precice_adapter->apply_dirichlet_bcs(constraints, time.get_delta_t());
       }
 
     for (const auto &el : testcase->dirichlet)
@@ -740,7 +747,7 @@ namespace Heat_Transfer
   template <int dim, bool use_cuda>
   double
   LaplaceProblem<dim, use_cuda>::compute_error(
-    const Function<dim> &                             function,
+    const Function<dim>                              &function,
     const LinearAlgebra::distributed::Vector<double> &solution) const
   {
     TimerOutput::Scope t(timer, "compute errors");
@@ -867,6 +874,34 @@ namespace Heat_Transfer
 
 
   template <int dim, bool use_cuda>
+  const typename LaplaceProblem<dim, use_cuda>::VectorType &
+  LaplaceProblem<dim, use_cuda>::get_coupling_data_write_vector(
+    const Parameters::HeatParameters<dim> &parameters)
+  {
+    // Decide whether or not we need to evaluate boundary flux
+    // that's the case if we are the Dirichlet participant and decide
+    // to write something on 'values'
+    // this code is equivalent to .startswith("values_")
+    const bool need_flux =
+      testcase->is_dirichlet &&
+      (parameters.write_data_specification.rfind("values_", 0) == 0);
+
+    // Else we have either gradient (compute on the solution) or we are a
+    // Neumann participant
+
+    //  We misuse the system_rhs in the flux evaluation such that we don't need
+    //  to reallocate a global vector
+    if (need_flux)
+      evaluate_boundary_flux();
+
+    // Return the right vector for precice_adapter:
+    if (need_flux)
+      return system_rhs;
+    else
+      return solution;
+  }
+
+  template <int dim, bool use_cuda>
   void
   LaplaceProblem<dim, use_cuda>::run(
     std::shared_ptr<TestCases::TestCaseBase<dim>> testcase_)
@@ -895,17 +930,10 @@ namespace Heat_Transfer
     // TODO: The if block here is ugly and it is actually repeated furhter down,
     // replace it
     {
-      TimerOutput::Scope t(timer, "initialize preCICE");
-
-      if (testcase->is_dirichlet)
-        {
-          // We misuse the system_rhs in the flux evaluation
-          // evaluate_boundary_flux();
-          precice_adapter->initialize(solution);
-        }
-      else
-        precice_adapter->initialize(solution);
+    TimerOutput::Scope t(timer, "initialize preCICE");
+    precice_adapter->initialize(get_coupling_data_write_vector(parameters));
     }
+    // Main time loop
     while (precice_adapter->is_coupling_ongoing())
       {
         precice_adapter->save_current_state_if_required([&]() {});
@@ -914,14 +942,8 @@ namespace Heat_Transfer
         solve();
         {
           TimerOutput::Scope t(timer, "advance preCICE");
-          if (testcase->is_dirichlet)
-            {
-              // We misuse the system_rhs in the flux evaluation
-              // evaluate_boundary_flux();
-              precice_adapter->advance(solution, time.get_delta_t());
-            }
-          else
-            precice_adapter->advance(solution, time.get_delta_t());
+          precice_adapter->advance(get_coupling_data_write_vector(parameters),
+                                   time.get_delta_t());
         }
         precice_adapter->reload_old_state_if_required(
           [&]() { solution = solution_old; });

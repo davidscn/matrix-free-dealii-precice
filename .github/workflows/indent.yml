@@ -11,13 +11,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
-    - uses: DoozyX/clang-format-lint-action@v0.15
+    - uses: actions/checkout@v4
+    - uses: DoozyX/clang-format-lint-action@v0.18
       with:
         source: '.'
         exclude: ''
         extensions: 'h,cc'
-        clangFormatVersion: 11
+        clangFormatVersion: 14
         inplace: true
     - run: |
         git diff

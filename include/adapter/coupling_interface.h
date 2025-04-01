@@ -6,7 +6,7 @@
 #include <deal.II/matrix_free/matrix_free.h>
 
 #include <base/fe_integrator.h>
-#include <precice/SolverInterface.hpp>
+#include <precice/precice.hpp>
 
 namespace Adapter
 {
@@ -37,9 +37,9 @@ namespace Adapter
   public:
     CouplingInterface(
       std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
-      std::shared_ptr<precice::SolverInterface> precice,
-      std::string                               mesh_name,
-      types::boundary_id                        interface_id);
+      std::shared_ptr<precice::Participant> precice,
+      std::string                           mesh_name,
+      types::boundary_id                    interface_id);
 
     virtual ~CouplingInterface() = default;
 
@@ -87,12 +87,14 @@ namespace Adapter
      *             works on.
      * @param[in]  active_faces Number of active faces the matrix-free object
      *             works on
+     * @param[in]  relativeReadTime time where the coupling data is required
      *
      * @return dim dimensional data associated to the interface node
      */
     virtual value_type
     read_on_quadrature_point(const unsigned int id_number,
-                             const unsigned int active_faces) const;
+                             const unsigned int active_faces,
+                             double             relative_read_time) const;
 
     /**
      * @brief apply_Dirichlet_bcs Read data from preCICE and fill a constraint
@@ -102,7 +104,8 @@ namespace Adapter
      * @param constraint associated constraint object
      */
     virtual void
-    apply_Dirichlet_bcs(AffineConstraints<double> &constraints) const;
+    apply_Dirichlet_bcs(AffineConstraints<double> &constraints,
+                        double                     relativeReadTime) const;
 
     /**
      * @brief Queries data IDs from preCICE for the given read data name
@@ -133,16 +136,13 @@ namespace Adapter
     /// The MatrixFree object (preCICE can only handle double precision)
     std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> mf_data;
 
-    /// public precice solverinterface
-    std::shared_ptr<precice::SolverInterface> precice;
+    /// public precice Participant
+    std::shared_ptr<precice::Participant> precice;
 
     /// Configuration parameters
     const std::string mesh_name;
     std::string       read_data_name  = "";
     std::string       write_data_name = "";
-    int               mesh_id         = -1;
-    int               read_data_id    = -1;
-    int               write_data_id   = -1;
 
     const types::boundary_id dealii_boundary_interface_id;
 
@@ -157,7 +157,7 @@ namespace Adapter
   template <int dim, int data_dim, typename VectorizedArrayType>
   CouplingInterface<dim, data_dim, VectorizedArrayType>::CouplingInterface(
     std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
-    std::shared_ptr<precice::SolverInterface>                           precice,
+    std::shared_ptr<precice::Participant>                               precice,
     std::string              mesh_name,
     const types::boundary_id interface_id)
     : mf_data(data)
@@ -167,9 +167,6 @@ namespace Adapter
   {
     Assert(data.get() != nullptr, ExcNotInitialized());
     Assert(precice.get() != nullptr, ExcNotInitialized());
-
-    // Ask preCICE already in the constructor for the IDs
-    mesh_id = precice->getMeshID(mesh_name);
   }
 
 
@@ -178,9 +175,8 @@ namespace Adapter
   CouplingInterface<dim, data_dim, VectorizedArrayType>::add_read_data(
     const std::string &read_data_name_)
   {
-    Assert(mesh_id != -1, ExcNotInitialized());
+    Assert(!mesh_name.empty(), ExcNotInitialized());
     read_data_name = read_data_name_;
-    read_data_id   = precice->getDataID(read_data_name, mesh_id);
   }
 
 
@@ -191,9 +187,8 @@ namespace Adapter
     const std::string &write_data_name_,
     const std::string &write_data_specification)
   {
-    Assert(mesh_id != -1, ExcNotInitialized());
+    Assert(!mesh_name.empty(), ExcNotInitialized());
     write_data_name = write_data_name_;
-    write_data_id   = precice->getDataID(write_data_name, mesh_id);
 
     if (write_data_specification == "values_on_dofs")
       write_data_type = WriteDataType::values_on_dofs;
@@ -224,7 +219,8 @@ namespace Adapter
   typename CouplingInterface<dim, data_dim, VectorizedArrayType>::value_type
   CouplingInterface<dim, data_dim, VectorizedArrayType>::
     read_on_quadrature_point(const unsigned int /*id_number*/,
-                             const unsigned int /*active_faces*/) const
+                             const unsigned int /*active_faces*/,
+                             double /*relative_read_time*/) const
   {
     AssertThrow(false, ExcNotImplemented());
   }
@@ -234,7 +230,8 @@ namespace Adapter
   template <int dim, int data_dim, typename VectorizedArrayType>
   void
   CouplingInterface<dim, data_dim, VectorizedArrayType>::apply_Dirichlet_bcs(
-    AffineConstraints<double> &) const
+    AffineConstraints<double> &,
+    double) const
   {
     AssertThrow(false, ExcNotImplemented());
   }

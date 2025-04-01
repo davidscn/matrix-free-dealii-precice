@@ -77,7 +77,7 @@ template <typename Number>
 void
 adjust_ghost_range_if_necessary(
   const std::shared_ptr<const Utilities::MPI::Partitioner> &partitioner,
-  const LinearAlgebra::distributed::Vector<Number> &        vec)
+  const LinearAlgebra::distributed::Vector<Number>         &vec)
 {
   if (vec.get_partitioner().get() != partitioner.get())
     {
@@ -115,8 +115,8 @@ public:
   void
   initialize(std::shared_ptr<const MatrixFree<dim, Number>> data_current,
              std::shared_ptr<const MatrixFree<dim, Number>> data_reference,
-             const VectorType &                             displacement,
-             const std::string &                            caching);
+             const VectorType                              &displacement,
+             const std::string                             &caching);
 
   void
   set_material(
@@ -150,7 +150,7 @@ public:
   el(const unsigned int row, const unsigned int col) const;
 
   void
-  precondition_Jacobi(VectorType &      dst,
+  precondition_Jacobi(VectorType       &dst,
                       const VectorType &src,
                       const Number      omega) const;
 
@@ -178,9 +178,9 @@ private:
    */
   void
   local_apply_cell(
-    const MatrixFree<dim, Number> &              data,
-    VectorType &                                 dst,
-    const VectorType &                           src,
+    const MatrixFree<dim, Number>               &data,
+    VectorType                                  &dst,
+    const VectorType                            &src,
     const std::pair<unsigned int, unsigned int> &cell_range) const;
 
   /**
@@ -280,7 +280,7 @@ NeoHookOperator<dim, Number>::NeoHookOperator()
 
 template <int dim, typename Number>
 void
-NeoHookOperator<dim, Number>::precondition_Jacobi(VectorType &      dst,
+NeoHookOperator<dim, Number>::precondition_Jacobi(VectorType       &dst,
                                                   const VectorType &src,
                                                   const Number      omega) const
 {
@@ -333,8 +333,8 @@ void
 NeoHookOperator<dim, Number>::initialize(
   std::shared_ptr<const MatrixFree<dim, Number>> data_current_,
   std::shared_ptr<const MatrixFree<dim, Number>> data_reference_,
-  const VectorType &                             displacement_,
-  const std::string &                            caching)
+  const VectorType                              &displacement_,
+  const std::string                             &caching)
 {
   data_current   = data_current_;
   data_reference = data_reference_;
@@ -542,7 +542,7 @@ NeoHookOperator<dim, Number>::set_material(
 
 template <int dim, typename Number>
 void
-NeoHookOperator<dim, Number>::vmult(VectorType &      dst,
+NeoHookOperator<dim, Number>::vmult(VectorType       &dst,
                                     const VectorType &src) const
 {
   dst = 0;
@@ -553,7 +553,7 @@ NeoHookOperator<dim, Number>::vmult(VectorType &      dst,
 
 template <int dim, typename Number>
 void
-NeoHookOperator<dim, Number>::Tvmult(VectorType &      dst,
+NeoHookOperator<dim, Number>::Tvmult(VectorType       &dst,
                                      const VectorType &src) const
 {
   dst = 0;
@@ -564,7 +564,7 @@ NeoHookOperator<dim, Number>::Tvmult(VectorType &      dst,
 
 template <int dim, typename Number>
 void
-NeoHookOperator<dim, Number>::Tvmult_add(VectorType &      dst,
+NeoHookOperator<dim, Number>::Tvmult_add(VectorType       &dst,
                                          const VectorType &src) const
 {
   vmult_add(dst, src);
@@ -574,7 +574,7 @@ NeoHookOperator<dim, Number>::Tvmult_add(VectorType &      dst,
 
 template <int dim, typename Number>
 void
-NeoHookOperator<dim, Number>::vmult_add(VectorType &      dst,
+NeoHookOperator<dim, Number>::vmult_add(VectorType       &dst,
                                         const VectorType &src) const
 {
   const std::shared_ptr<const Utilities::MPI::Partitioner> &partitioner =
@@ -622,8 +622,8 @@ template <int dim, typename Number>
 void
 NeoHookOperator<dim, Number>::local_apply_cell(
   const MatrixFree<dim, Number> & /*data*/,
-  VectorType &                                 dst,
-  const VectorType &                           src,
+  VectorType                                  &dst,
+  const VectorType                            &src,
   const std::pair<unsigned int, unsigned int> &cell_range) const
 {
   Assert(data_in_use.get() != nullptr, ExcInternalError());
@@ -871,10 +871,18 @@ NeoHookOperator<dim, Number>::do_operation_on_cell(FECellIntegrator &phi) const
                       {
                         VectorizedArrayType sum =
                           inv_jac[e][0] *
+#if DEAL_II_VERSION_GTE(9, 6, 0)
+                          ref_grads[(d * n_q_points + q) * dim + 0];
+#else
                           ref_grads[(d * dim + 0) * n_q_points + q];
+#endif
                         for (unsigned int f = 1; f < dim; ++f)
                           sum += inv_jac[e][f] *
+#if DEAL_II_VERSION_GTE(9, 6, 0)
+                                 ref_grads[(d * n_q_points + q) * dim + f];
+#else
                                  ref_grads[(d * dim + f) * n_q_points + q];
+#endif
                         F[d][e] = sum;
 
                         // since we already have the inverse Jacobian,
@@ -883,10 +891,18 @@ NeoHookOperator<dim, Number>::do_operation_on_cell(FECellIntegrator &phi) const
                         // same otherwise)
                         VectorizedArrayType sum2 =
                           inv_jac[e][0] *
+#if DEAL_II_VERSION_GTE(9, 6, 0)
+                          x_grads[(d * n_q_points + q) * dim + 0];
+#else
                           x_grads[(d * dim + 0) * n_q_points + q];
+#endif
                         for (unsigned int f = 1; f < dim; ++f)
                           sum2 += inv_jac[e][f] *
+#if DEAL_II_VERSION_GTE(9, 6, 0)
+                                  x_grads[(d * n_q_points + q) * dim + f];
+#else
                                   x_grads[(d * dim + f) * n_q_points + q];
+#endif
                         grad_Nx_v[d][e] = sum2;
                       }
                     F[d][d] += one;

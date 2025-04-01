@@ -1,8 +1,9 @@
 #include <math.h>
-#include <precice/SolverInterface.hpp>
+#include <precice/precice.hpp>
 
 #include <iomanip>
 #include <iostream>
+#include <vector>
 
 using Vector = std::vector<double>;
 
@@ -47,10 +48,10 @@ public:
 
   void
   solve(const Vector &forces,
-        Vector &      vertices,
-        double &      old_moment,
-        double &      theta,
-        double &      theta_dot,
+        Vector       &vertices,
+        double       &old_moment,
+        double       &theta,
+        double       &theta_dot,
         const double  delta_t)
   {
     // Leapfrog update
@@ -129,16 +130,13 @@ main()
   constexpr double inertia_moment =
     (1. / 12) * mass * (4 * std::pow(length, 2) + std::pow(height, 2));
 
-  // Create Solverinterface
-  precice::SolverInterface precice(solver_name,
-                                   config_file_name,
-                                   /*comm_rank*/ 0,
-                                   /*comm_size*/ 1);
+  // Create Participant
+  precice::Participant precice(solver_name,
+                               config_file_name,
+                               /*comm_rank*/ 0,
+                               /*comm_size*/ 1);
 
-  const int mesh_id  = precice.getMeshID(mesh_name);
-  const int dim      = precice.getDimensions();
-  const int write_id = precice.getDataID(data_write_name, mesh_id);
-  const int read_id  = precice.getDataID(data_read_name, mesh_id);
+  const int dim = precice.getMeshDimensions(mesh_name);
 
   // Set up data structures
   Vector           displacement(dim * n_nodes);
@@ -190,10 +188,7 @@ main()
 
   const Vector initial_vertices = vertices;
   // Pass the vertices to preCICE
-  precice.setMeshVertices(mesh_id, n_nodes, vertices.data(), vertex_ids.data());
-
-  // initialize the Solverinterface
-  double dt = precice.initialize();
+  precice.setMeshVertices(mesh_name, vertices, vertex_ids);
 
   for (uint i = 0; i < dummy_stress.size() / dim; ++i)
     {
@@ -201,24 +196,16 @@ main()
       dummy_stress[2 * i + 1] = -4;
     }
 
-  if (precice.isActionRequired(precice::constants::actionWriteInitialData()))
-    {
-      precice.writeBlockVectorData(write_id,
-                                   n_nodes,
-                                   vertex_ids.data(),
-                                   dummy_stress.data());
+  if (precice.requiresInitialData())
+    precice.writeData(mesh_name, data_write_name, vertex_ids, dummy_stress);
 
-      precice.markActionFulfilled(precice::constants::actionWriteInitialData());
 
-      precice.initializeData();
-    }
+  // initialize the Solverinterface
+  precice.initialize();
+  double dt = precice.getMaxTimeStepSize();
 
   std::cout << "Dummy tester reading initial data \n";
-  if (precice.isReadDataAvailable())
-    precice.readBlockVectorData(read_id,
-                                n_nodes,
-                                vertex_ids.data(),
-                                displacement.data());
+  precice.readData(mesh_name, data_read_name, vertex_ids, dt, displacement);
 
   DataContainer data_container;
 
@@ -227,43 +214,26 @@ main()
   while (precice.isCouplingOngoing())
     {
       // Store
-      if (precice.isActionRequired(
-            precice::constants::actionWriteIterationCheckpoint()))
-        {
-          data_container.store_data(vertices, old_moment, theta, theta_dot);
+      if (precice.requiresWritingCheckpoint())
+        data_container.store_data(vertices, old_moment, theta, theta_dot);
 
-          precice.markActionFulfilled(
-            precice::constants::actionWriteIterationCheckpoint());
-        }
       // Solve system
       //      solver.solve(forces, vertices, old_moment, theta, theta_dot, dt);
       // Advance
       std::cout << "Dummy tester writing coupling data \n";
-      if (precice.isWriteDataRequired(dt))
-        precice.writeBlockVectorData(write_id,
-                                     n_nodes,
-                                     vertex_ids.data(),
-                                     dummy_stress.data());
+      precice.writeData(mesh_name, data_write_name, vertex_ids, dummy_stress);
 
       std::cout << "Dummy tester advancing in time\n";
-      dt = precice.advance(dt);
+      precice.advance(dt);
+      dt = precice.getMaxTimeStepSize();
 
       std::cout << "Dummy tester reading coupling data \n";
-      if (precice.isReadDataAvailable())
-        precice.readBlockVectorData(read_id,
-                                    n_nodes,
-                                    vertex_ids.data(),
-                                    displacement.data());
+      precice.readData(mesh_name, data_read_name, vertex_ids, dt, displacement);
 
       // Reload
-      if (precice.isActionRequired(
-            precice::constants::actionReadIterationCheckpoint()))
-        {
-          data_container.reload_data(vertices, old_moment, theta, theta_dot);
+      if (precice.requiresReadingCheckpoint())
+        data_container.reload_data(vertices, old_moment, theta, theta_dot);
 
-          precice.markActionFulfilled(
-            precice::constants::actionReadIterationCheckpoint());
-        }
       // Increment
       if (precice.isTimeWindowComplete())
         time += dt;

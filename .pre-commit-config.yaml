@@ -1,0 +1,22 @@
+repos:
+# Official repo for the clang-format hook
+- repo: https://github.com/pre-commit/mirrors-clang-format
+  rev: 'v14.0.6'
+  hooks:
+  - id: clang-format
+    exclude: "^utilities"
+# Official repo for default hooks
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: 'v4.4.0'
+  hooks:
+  - id: check-xml
+  - id: check-merge-conflict
+  - id: mixed-line-ending
+  - id: trailing-whitespace
+    args: [--markdown-linebreak-ext=md]
+  - id: end-of-file-fixer
+# Official repo for default hooks
+- repo: https://github.com/precice/precice-pre-commit-hooks
+  rev: 'v3.1'
+  hooks:
+  - id: format-precice-config

@@ -22,9 +22,9 @@ namespace Adapter
   public:
     ArbitraryInterface(
       std::shared_ptr<const MatrixFree<dim, double, VectorizedArrayType>> data,
-      std::shared_ptr<precice::SolverInterface> precice,
-      std::string                               mesh_name,
-      types::boundary_id                        interface_id)
+      std::shared_ptr<precice::Participant> precice,
+      std::string                           mesh_name,
+      types::boundary_id                    interface_id)
       : CouplingInterface<dim, data_dim, VectorizedArrayType>(data,
                                                               precice,
                                                               mesh_name,
@@ -81,7 +81,7 @@ namespace Adapter
       const UpdateFlags                                 flags,
       const std::function<void(FEPointEvaluation<data_dim, dim> &,
                                const Vector<double> &,
-                               const size_t)> &         write_value) const;
+                               const size_t)>          &write_value) const;
 
     /**
      * @brief get_interface_type A function that returns a description of the
@@ -120,8 +120,8 @@ namespace Adapter
      */
     std::vector<
       std::pair<typename Triangulation<dim>::active_cell_iterator, Point<dim>>>
-    filter_vertices_to_local_partition(const Mapping<dim> &          mapping,
-                                       const Triangulation<dim> &    tria,
+    filter_vertices_to_local_partition(const Mapping<dim>           &mapping,
+                                       const Triangulation<dim>     &tria,
                                        const std::vector<Point<dim>> points_in,
                                        double tolerance = 1e-10);
 
@@ -137,7 +137,7 @@ namespace Adapter
   void
   ArbitraryInterface<dim, data_dim, VectorizedArrayType>::define_coupling_mesh()
   {
-    Assert(this->mesh_id != -1, ExcNotInitialized());
+    Assert(!this->mesh_name.empty(), ExcNotInitialized());
     const auto &triangulation =
       this->mf_data->get_dof_handler().get_triangulation();
 
@@ -170,8 +170,7 @@ namespace Adapter
         }
 
     // Finally pass the bounding box to preCICE
-    this->precice->setMeshAccessRegion(this->mesh_id,
-                                       precice_bounding_box.data());
+    this->precice->setMeshAccessRegion(this->mesh_name, precice_bounding_box);
   }
 
 
@@ -193,13 +192,16 @@ namespace Adapter
                                     EvaluationFlags::values);
               const auto val = fe_evaluator.get_value(0);
               if constexpr (data_dim > 1)
-                this->precice->writeVectorData(this->write_data_id,
-                                               interface_nodes_ids[i],
-                                               val.begin_raw());
+                this->precice->writeData(this->mesh_name,
+                                         this->write_data_name,
+                                         {&interface_nodes_ids[i], 1},
+                                         {val.begin_raw(),
+                                          static_cast<std::size_t>(data_dim)});
               else
-                this->precice->writeScalarData(this->write_data_id,
-                                               interface_nodes_ids[i],
-                                               val);
+                this->precice->writeData(this->mesh_name,
+                                         this->write_data_name,
+                                         {&interface_nodes_ids[i], 1},
+                                         {&val, 1});
             });
           break;
         case WriteDataType::gradients_on_other_mesh:
@@ -207,13 +209,21 @@ namespace Adapter
             data_vector,
             UpdateFlags::update_gradients,
             [this](auto &fe_evaluator, auto &local_values, auto i) {
-              Assert(data_dim == 1, ExcNotImplemented());
-              fe_evaluator.evaluate(make_array_view(local_values),
-                                    EvaluationFlags::gradients);
-              const auto val = fe_evaluator.get_gradient(0);
-              this->precice->writeVectorData(this->write_data_id,
-                                             interface_nodes_ids[i],
-                                             val.begin_raw());
+              if constexpr (data_dim == 1)
+                {
+                  fe_evaluator.evaluate(make_array_view(local_values),
+                                        EvaluationFlags::gradients);
+                  const auto val = fe_evaluator.get_gradient(0);
+                  this->precice->writeData(
+                    this->mesh_name,
+                    this->write_data_name,
+                    {&interface_nodes_ids[i], 1},
+                    {val.begin_raw(), static_cast<std::size_t>(data_dim)});
+                }
+              else
+                {
+                  Assert(data_dim == 1, ExcNotImplemented());
+                }
             });
           break;
         default:
@@ -230,9 +240,9 @@ namespace Adapter
     const UpdateFlags                                 flags,
     const std::function<void(FEPointEvaluation<data_dim, dim> &,
                              const Vector<double> &,
-                             const size_t)> &         write_value) const
+                             const size_t)>          &write_value) const
   {
-    Assert(this->write_data_id != -1, ExcNotInitialized());
+    Assert(!this->write_data_name.empty(), ExcNotInitialized());
 
     // This class allows to evaluate data at arbitrary points
     FEPointEvaluation<data_dim, dim> fe_evaluator(
@@ -272,21 +282,20 @@ namespace Adapter
   ArbitraryInterface<dim, data_dim, VectorizedArrayType>::
     process_coupling_mesh()
   {
-    Assert(this->mesh_id != -1, ExcNotInitialized());
+    Assert(!this->mesh_name.empty(), ExcNotInitialized());
 
     // Ask preCICE for the relevant mesh size we work (preliminary) on
     const int received_mesh_size =
-      this->precice->getMeshVertexSize(this->mesh_id);
+      this->precice->getMeshVertexSize(this->mesh_name);
 
     // Allocate a vector for the vertices and the corresponding IDs
     std::vector<double> received_coordinates(received_mesh_size * dim);
     interface_nodes_ids.resize(received_mesh_size);
 
     // ... and let preCICE fill the data containers
-    this->precice->getMeshVerticesAndIDs(this->mesh_id,
-                                         received_mesh_size,
-                                         interface_nodes_ids.data(),
-                                         received_coordinates.data());
+    this->precice->getMeshVertexIDsAndCoordinates(this->mesh_name,
+                                                  interface_nodes_ids,
+                                                  received_coordinates);
 
     // Transform the received points into a more deal.II like format, which is
     // vector of points
@@ -308,8 +317,8 @@ namespace Adapter
 
     // Some consistency checks: we can only write data using this interface,
     // reading doesn't make sense
-    Assert(this->read_data_id == -1, ExcInternalError());
-    Assert(this->write_data_id != -1, ExcInternalError());
+    Assert(this->read_data_name.empty(), ExcInternalError());
+    Assert(!this->write_data_name.empty(), ExcInternalError());
 
     this->print_info(false, interface_nodes_ids.size());
   }
@@ -329,8 +338,8 @@ namespace Adapter
   std::vector<
     std::pair<typename Triangulation<dim>::active_cell_iterator, Point<dim>>>
   ArbitraryInterface<dim, data_dim, VectorizedArrayType>::
-    filter_vertices_to_local_partition(const Mapping<dim> &          mapping,
-                                       const Triangulation<dim> &    tria,
+    filter_vertices_to_local_partition(const Mapping<dim>           &mapping,
+                                       const Triangulation<dim>     &tria,
                                        const std::vector<Point<dim>> points_in,
                                        double                        tolerance)
   {

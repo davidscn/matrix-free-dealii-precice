@@ -149,7 +149,7 @@ namespace FSI
     // Set up an Additional data object
     template <typename AdditionalData>
     void
-    setup_mf_additional_data(AdditionalData &   data,
+    setup_mf_additional_data(AdditionalData    &data,
                              const unsigned int level,
                              const bool         initialize_indices) const;
 
@@ -807,7 +807,7 @@ namespace FSI
   template <typename AdditionalData>
   void
   Solid<dim, Number>::setup_mf_additional_data(
-    AdditionalData &   data,
+    AdditionalData    &data,
     const unsigned int level,
     const bool         initialize_indices) const
   {
@@ -836,9 +836,20 @@ namespace FSI
           update_JxW_values;
         data.cell_vectorization_category.resize(triangulation.n_active_cells());
         for (const auto &cell : triangulation.active_cell_iterators())
-          if (cell->is_locally_owned())
-            data.cell_vectorization_category[cell->active_cell_index()] =
-              cell->material_id();
+          {
+            if (cell->is_locally_owned())
+              {
+                data.cell_vectorization_category[cell->active_cell_index()] =
+                  cell->material_id();
+#if !DEAL_II_VERSION_GTE(9, 6, 0)
+                // See also https://github.com/dealii/dealii/issues/16250
+                AssertThrow(
+                  cell->material_id() == 0,
+                  ExcMessage(
+                    "The deal.II version you are using doesn't allow for different material_ids(). To use this feature, at least deal.II version 9.6.0 is required."));
+#endif
+              }
+          }
       }
     // Setup MG additinal data
     else
@@ -891,6 +902,10 @@ namespace FSI
     mg_transfer->interpolate_to_mg(dof_handler,
                                    mg_total_displacement,
                                    solution_total_transfer);
+
+    // necessary since deal.II v 9.6
+    for (unsigned int level = 0; level <= max_level; ++level)
+      mg_total_displacement[level].update_ghost_values();
 
     timer.leave_subsection();
   }
@@ -1072,7 +1087,7 @@ namespace FSI
   template <int dim, typename Number>
   template <typename Operator>
   void
-  Solid<dim, Number>::setup_operator_cache(Operator &         nh_operator,
+  Solid<dim, Number>::setup_operator_cache(Operator          &nh_operator,
                                            const unsigned int level)
   {
     timer.enter_subsection("Setup MF: cache() and diagonal()");
@@ -1593,7 +1608,7 @@ namespace FSI
   // Helper function in order to evaluate the vectorized point
   template <int dim, typename VectorizedArrayType, int n_components = dim>
   Tensor<1, n_components, VectorizedArrayType>
-  evaluate_function(const Function<dim> &                  function,
+  evaluate_function(const Function<dim>                   &function,
                     const Point<dim, VectorizedArrayType> &p_vectorized)
   {
     AssertDimension(function.n_components, n_components);
@@ -1843,7 +1858,9 @@ namespace FSI
               Physics::Elasticity::Kinematics::F(phi.get_gradient(q));
             // Get the value from preCICE
             auto traction =
-              precice_adapter->read_on_quadrature_point(q_index, active_faces);
+              precice_adapter->read_on_quadrature_point(q_index,
+                                                        active_faces,
+                                                        parameters.delta_t);
 
             // pull-back the traction
             const auto N = phi.get_normal_vector(q);
@@ -1905,6 +1922,7 @@ namespace FSI
 
     constraints.clear();
     constraints.reinit(locally_relevant_dofs);
+    DoFTools::make_hanging_node_constraints(dof_handler, constraints);
 
     mg_constrained_dofs.clear();
     mg_constrained_dofs.initialize(dof_handler);

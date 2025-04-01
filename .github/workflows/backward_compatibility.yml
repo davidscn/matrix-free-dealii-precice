@@ -1,4 +1,4 @@
-name: deal.II v9.3
+name: deal.II v9.4
 
 on:
   push:
@@ -10,20 +10,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: setup
       run: |
          command="sudo apt-get -y update && \
-                  wget https://github.com/precice/precice/releases/download/v2.5.0/libprecice2_2.5.0_focal.deb && \
-                  sudo apt-get -y install ./libprecice2_2.5.0_focal.deb && \
+                  sudo apt-get -y upgrade && \
+                  sudo apt-get -y install libboost-all-dev && \
                   git clone https://git@github.com/${{ github.repository }} && \
                   cd matrix-free-dealii-precice && \
                   git fetch origin ${{ github.ref }} && \
                   git checkout FETCH_HEAD && \
                   mkdir build && cd build && \
-                  cmake .. && make all"; 
-         
+                  cmake .. && make all";
+
          echo $command
 
-         docker pull dealii/dealii:v9.3.0-focal
-         docker run -t dealii/dealii:v9.3.0-focal /bin/sh -c "$command";
+         docker pull dealii/dealii:v9.4.0-jammy
+         docker pull precice/precice:latest
+         docker build -t dealii-precice:develop -f ./utilities/Dockerfile.dealiiv94 .
+         docker run -t dealii-precice:develop /bin/sh -c "$command";
