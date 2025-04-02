@@ -86,19 +86,9 @@ ADD_EXECUTABLE(${SOLVER1}
   )
 
 # Build the cuda version in case we have cuda support
-IF(${DEAL_II_WITH_CUDA})
-  ADD_EXECUTABLE(${SOLVER2}
-      src/${SOLVER2}.cu
-    )
-  IF(NOT CMAKE_CUDA_HOST_COMPILER)
-       SET(CMAKE_CUDA_HOST_COMPILER "${CMAKE_CXX_COMPILER}")
-  ENDIF()
-  ENABLE_LANGUAGE(CUDA)
-ELSE()
-  ADD_EXECUTABLE(${SOLVER2}
-      src/${SOLVER2}.cc
-    )
-ENDIF()
+ADD_EXECUTABLE(${SOLVER2}
+    src/${SOLVER2}.cc
+  )
 
 # Setup targets
 DEAL_II_SETUP_TARGET(${SOLVER1})

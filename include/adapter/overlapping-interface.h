@@ -229,7 +229,7 @@ namespace Adapter
                              });
           break;
         default:
-          AssertThrow(false, ExcNotImplemented());
+          AssertThrow(false, ExcMessage("Unknown Type"));
       }
   }
 

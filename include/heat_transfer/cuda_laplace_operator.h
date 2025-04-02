@@ -1,22 +1,22 @@
 #pragma once
 
-#ifdef DEAL_II_COMPILER_CUDA_AWARE
+#include <deal.II/base/memory_space.h>
+#include <deal.II/base/table.h>
+#include <deal.II/base/utilities.h>
 
-#  include <deal.II/base/memory_space.h>
-#  include <deal.II/base/table.h>
-#  include <deal.II/base/utilities.h>
+#include <deal.II/lac/la_parallel_vector.h>
 
-#  include <deal.II/lac/la_parallel_vector.h>
+#include <deal.II/matrix_free/portable_fe_evaluation.h>
+#include <deal.II/matrix_free/portable_matrix_free.h>
 
-#  include <deal.II/matrix_free/cuda_fe_evaluation.h>
-#  include <deal.II/matrix_free/cuda_matrix_free.h>
-#  include <deal.II/matrix_free/fe_evaluation.h>
-#  include <deal.II/matrix_free/matrix_free.h>
-#  include <deal.II/matrix_free/operators.h>
-#  include <deal.II/matrix_free/tools.h>
+#include <deal.II/matrix_free/fe_evaluation.h>
+#include <deal.II/matrix_free/matrix_free.h>
+#include <deal.II/matrix_free/operators.h>
+#include <deal.II/matrix_free/tools.h>
+#include <deal.II/matrix_free/operators.h>
 
-#  include <base/fe_integrator.h>
-#  include <heat_transfer/laplace_operator.h>
+#include <base/fe_integrator.h>
+#include <heat_transfer/laplace_operator.h>
 
 namespace Heat_Transfer
 {
@@ -30,10 +30,12 @@ namespace Heat_Transfer
       : coef(coefficient)
     {}
 
-    __device__ void
+    DEAL_II_HOST_DEVICE void
     operator()(
-      const unsigned int                                          cell,
-      const typename CUDAWrappers::MatrixFree<dim, number>::Data *gpu_data);
+      const typename Portable::MatrixFree<dim, number>::Data *gpu_data,
+      const unsigned int                                      cell,
+      const unsigned int                                      q) const
+  ;
 
 
     static const unsigned int n_dofs_1d    = fe_degree + 1;
@@ -46,14 +48,14 @@ namespace Heat_Transfer
 
 
   template <int dim, int fe_degree, typename number>
-  __device__ void
+  DEAL_II_HOST_DEVICE void
   VaryingCoefficientFunctor<dim, fe_degree, number>::operator()(
-    const unsigned int                                          cell,
-    const typename CUDAWrappers::MatrixFree<dim, number>::Data *gpu_data)
-  {
-    const unsigned int pos = CUDAWrappers::local_q_point_id<dim, number>(
-      cell, gpu_data, n_dofs_1d, n_q_points);
+    const typename Portable::MatrixFree<dim, number>::Data *gpu_data,
+    const unsigned int                                      cell,
+    const unsigned int                                      q) const
 
+  {
+    const unsigned int pos = gpu_data->local_q_point_id(cell, n_q_points, q);
     coef[pos] = 1.;
   }
 
@@ -62,31 +64,42 @@ namespace Heat_Transfer
   {
   public:
     using FECellIntegrators =
-      CUDAWrappers::FEEvaluation<dim, fe_degree, fe_degree + 1, 1, number>;
-    __device__
-    LaplaceOperatorQuad(double coef, double delta_t)
-      : coef(coef)
-      , delta_t(delta_t)
+     Portable::FEEvaluation<dim, fe_degree, fe_degree + 1, 1, number>;
+    DEAL_II_HOST_DEVICE
+    LaplaceOperatorQuad(
+    double                                                 *coef,
+    double                                                delta_t)
+    : coef(coef)
+    , delta_t(delta_t)
     {}
 
-    __device__ void
-    operator()(FECellIntegrators *fe_eval) const;
+    DEAL_II_HOST_DEVICE void
+    operator()(FECellIntegrators *fe_eval, const int q_point) const;
+
+    static const unsigned int n_q_points =  dealii::Utilities::pow(fe_degree + 1, dim);
 
   private:
-    double coef;
-    // TODO: Maybe remove from this class
-    double delta_t;
+    double                                                 *coef;
+    double                                                  delta_t;
   };
 
 
 
   template <int dim, int fe_degree, typename number>
-  __device__ void
+  DEAL_II_HOST_DEVICE void
   LaplaceOperatorQuad<dim, fe_degree, number>::operator()(
-    FECellIntegrators *fe_eval) const
+    FECellIntegrators *fe_eval,
+    const int q_point) const
   {
-    fe_eval->submit_value(fe_eval->get_value());
-    fe_eval->submit_gradient(coef * fe_eval->get_gradient() * delta_t);
+    const int cell_index = fe_eval->get_current_cell_index();
+    const typename Portable::MatrixFree<dim, double>::Data *data =
+      fe_eval->get_matrix_free_data();
+
+    const unsigned int position =
+      data->local_q_point_id(cell_index, n_q_points, q_point);
+
+    fe_eval->submit_value(fe_eval->get_value(q_point), q_point);
+    fe_eval->submit_gradient(coef[position] * fe_eval->get_gradient(q_point) * delta_t, q_point);
   }
 
   template <int dim, int fe_degree, typename number>
@@ -94,20 +107,18 @@ namespace Heat_Transfer
   {
   public:
     using FECellIntegrators =
-      CUDAWrappers::FEEvaluation<dim, fe_degree, fe_degree + 1, 1, number>;
+      Portable::FEEvaluation<dim, fe_degree, fe_degree + 1, 1, number>;
 
     LocalLaplaceOperator(double *coefficient, double delta_t)
       : coef(coefficient)
       , delta_t(delta_t)
     {}
 
-    __device__ void
+    DEAL_II_HOST_DEVICE void
     operator()(
-      const unsigned int                                          cell,
-      const typename CUDAWrappers::MatrixFree<dim, number>::Data *gpu_data,
-      CUDAWrappers::SharedData<dim, number> *                     shared_data,
-      const double *                                              src,
-      double *                                                    dst) const;
+      const typename Portable::MatrixFree<dim, number>::Data *data,
+      const Portable::DeviceVector<number>                   &src,
+      Portable::DeviceVector<number>                         &dst) const;
 
     static const unsigned int n_dofs_1d    = fe_degree + 1;
     static const unsigned int n_local_dofs = Utilities::pow(fe_degree + 1, dim);
@@ -120,24 +131,19 @@ namespace Heat_Transfer
 
 
   template <int dim, int fe_degree, typename number>
-  __device__ void
+  DEAL_II_HOST_DEVICE void
   LocalLaplaceOperator<dim, fe_degree, number>::operator()(
-    const unsigned int                                          cell,
-    const typename CUDAWrappers::MatrixFree<dim, number>::Data *gpu_data,
-    CUDAWrappers::SharedData<dim, number> *                     shared_data,
-    const double *                                              src,
-    double *                                                    dst) const
+    const typename Portable::MatrixFree<dim, number>::Data *data,
+    const Portable::DeviceVector<number>                   &src,
+    Portable::DeviceVector<number>                         &dst) const
   {
-    const unsigned int pos = CUDAWrappers::local_q_point_id<dim, number>(
-      cell, gpu_data, n_dofs_1d, n_q_points);
-
-    FECellIntegrators fe_eval(cell, gpu_data, shared_data);
+    FECellIntegrators fe_eval(data);
 
     fe_eval.read_dof_values(src);
-    fe_eval.evaluate(true, true);
+    fe_eval.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
     fe_eval.apply_for_each_quad_point(
-      LaplaceOperatorQuad<dim, fe_degree, number>(coef[pos], delta_t));
-    fe_eval.integrate(true, true);
+      LaplaceOperatorQuad<dim, fe_degree, number>(coef, delta_t));
+    fe_eval.integrate(EvaluationFlags::values | EvaluationFlags::gradients);
 
     fe_eval.distribute_local_to_global(dst);
   }
@@ -147,13 +153,13 @@ namespace Heat_Transfer
   {
   public:
     using VectorType =
-      LinearAlgebra::distributed::Vector<number, MemorySpace::CUDA>;
+      LinearAlgebra::distributed::Vector<number, MemorySpace::Default>;
 
     CUDALaplaceOperator() = default;
 
     // and initialize the coefficient
     void
-    initialize(std::shared_ptr<CUDAWrappers::MatrixFree<dim, number>> data);
+    initialize(std::shared_ptr<Portable::MatrixFree<dim, number>> data);
 
     void
     evaluate_coefficient();
@@ -171,8 +177,8 @@ namespace Heat_Transfer
     clear();
 
   private:
-    std::shared_ptr<CUDAWrappers::MatrixFree<dim, number>> mf_data;
-    LinearAlgebra::CUDAWrappers::Vector<number>            coef;
+    std::shared_ptr<Portable::MatrixFree<dim, number>> mf_data;
+    LinearAlgebra::distributed::Vector<number, MemorySpace::Default>  coef;
     double                                                 delta_t;
   };
 
@@ -181,7 +187,7 @@ namespace Heat_Transfer
   template <int dim, int fe_degree, typename number>
   void
   CUDALaplaceOperator<dim, fe_degree, number>::initialize(
-    std::shared_ptr<CUDAWrappers::MatrixFree<dim, number>> data)
+    std::shared_ptr<Portable::MatrixFree<dim, number>> data)
   {
     mf_data = data;
 
@@ -249,5 +255,3 @@ namespace Heat_Transfer
     mf_data.reset();
   }
 } // namespace Heat_Transfer
-
-#endif

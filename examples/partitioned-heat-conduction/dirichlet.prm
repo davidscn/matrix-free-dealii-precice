@@ -60,7 +60,7 @@ subsection precice configuration
 
   # Specification of the write data location and the data typeAvailable
   # options are: values_on_dofs, values_on_quads, normal_gradients_on_quads
-  set Write data specification = values_on_dofs
+  set Write data specification = normal_gradients_on_quads
 
   # Name of the precice configuration file
   set precice config-file      = precice-config.xml

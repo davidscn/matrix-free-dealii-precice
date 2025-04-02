@@ -1,5 +1,3 @@
-#include <deal.II/base/cuda.h>
-
 #include <heat_transfer/heat_transfer.h>
 
 // By default, all the MPI ranks
@@ -45,16 +43,6 @@ main(int argc, char *argv[])
       const unsigned int degree    = fesystem.poly_degree;
       const unsigned int dim       = geometry.dimension;
       const std::string  case_name = geometry.testcase;
-
-
-      int         n_devices       = 0;
-      cudaError_t cuda_error_code = cudaGetDeviceCount(&n_devices);
-      AssertCuda(cuda_error_code);
-      const unsigned int my_mpi_id =
-        Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
-      const int device_id = my_mpi_id % n_devices;
-      cuda_error_code     = cudaSetDevice(device_id);
-      AssertCuda(cuda_error_code);
 
       if (degree == 0)
         AssertThrow(degree > 0, ExcInternalError());

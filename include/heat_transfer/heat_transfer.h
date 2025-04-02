@@ -14,6 +14,8 @@
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
 
+#include <deal.II/matrix_free/portable_fe_evaluation.h>
+#include <deal.II/matrix_free/portable_matrix_free.h>
 #include <deal.II/matrix_free/fe_evaluation.h>
 #include <deal.II/matrix_free/matrix_free.h>
 #include <deal.II/matrix_free/operators.h>
@@ -84,7 +86,7 @@ namespace Heat_Transfer
   template <int dim, int fe_degree, typename number>
   class CUDALaplaceOperator;
 
-  namespace CUDAWrappers
+  namespace Portable
   {
     template <int dim, typename number>
     class MatrixFree;
@@ -295,8 +297,8 @@ namespace Heat_Transfer
     {
       using MatrixFreeStorage =
         std::conditional_t<use_cuda,
-                           CUDAWrappers::MatrixFree<dim, double>,
-                           MatrixFree<dim, double>>;
+                           ::dealii::Portable::MatrixFree<dim, double>,
+                           ::dealii::MatrixFree<dim, double>>;
 
       // Set up two matrix-free objects: one for the homogenous part and one for
       // the inhomogenous part (without any constraints)
@@ -927,7 +929,7 @@ namespace Heat_Transfer
       0 /*MF dof index*/,
       0 /*MF quad index*/,
       testcase->is_dirichlet);
-    // TODO: The if block here is ugly and it is actually repeated furhter down,
+    // TODO: The if block here is ugly and it is actually repeated further down,
     // replace it
     {
     TimerOutput::Scope t(timer, "initialize preCICE");
