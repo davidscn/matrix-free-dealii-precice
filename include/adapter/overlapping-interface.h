@@ -86,7 +86,7 @@ namespace Adapter
     virtual value_type
     read_on_quadrature_point(const unsigned int id_number,
                              const unsigned int active_faces,
-                             double             relative_read_time) const override;
+                             double relative_read_time) const override;
 
   private:
     /**
@@ -201,7 +201,8 @@ namespace Adapter
     if (!this->read_data_name.empty())
       this->print_info(true, this->precice->getMeshVertexSize(this->mesh_name));
     if (!this->write_data_name.empty())
-      this->print_info(false, this->precice->getMeshVertexSize(this->mesh_name));
+      this->print_info(false,
+                       this->precice->getMeshVertexSize(this->mesh_name));
   }
 
 

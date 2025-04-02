@@ -14,11 +14,11 @@
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
 
-#include <deal.II/matrix_free/portable_fe_evaluation.h>
-#include <deal.II/matrix_free/portable_matrix_free.h>
 #include <deal.II/matrix_free/fe_evaluation.h>
 #include <deal.II/matrix_free/matrix_free.h>
 #include <deal.II/matrix_free/operators.h>
+#include <deal.II/matrix_free/portable_fe_evaluation.h>
+#include <deal.II/matrix_free/portable_matrix_free.h>
 #include <deal.II/matrix_free/tools.h>
 
 #include <deal.II/multigrid/mg_coarse.h>
@@ -114,7 +114,8 @@ namespace Heat_Transfer
       std::conditional_t<use_cuda, CUDASystemMatrixType, CPUSystemMatrixType>;
 
     using DeviceVector =
-      LinearAlgebra::distributed::Vector<double, ::dealii::MemorySpace::Default>;
+      LinearAlgebra::distributed::Vector<double,
+                                         ::dealii::MemorySpace::Default>;
 
     LaplaceProblem(const Parameters::HeatParameters<dim> &parameters);
 
@@ -932,8 +933,8 @@ namespace Heat_Transfer
     // TODO: The if block here is ugly and it is actually repeated further down,
     // replace it
     {
-    TimerOutput::Scope t(timer, "initialize preCICE");
-    precice_adapter->initialize(get_coupling_data_write_vector(parameters));
+      TimerOutput::Scope t(timer, "initialize preCICE");
+      precice_adapter->initialize(get_coupling_data_write_vector(parameters));
     }
     // Main time loop
     while (precice_adapter->is_coupling_ongoing())

@@ -6,14 +6,12 @@
 
 #include <deal.II/lac/la_parallel_vector.h>
 
-#include <deal.II/matrix_free/portable_fe_evaluation.h>
-#include <deal.II/matrix_free/portable_matrix_free.h>
-
 #include <deal.II/matrix_free/fe_evaluation.h>
 #include <deal.II/matrix_free/matrix_free.h>
 #include <deal.II/matrix_free/operators.h>
+#include <deal.II/matrix_free/portable_fe_evaluation.h>
+#include <deal.II/matrix_free/portable_matrix_free.h>
 #include <deal.II/matrix_free/tools.h>
-#include <deal.II/matrix_free/operators.h>
 
 #include <base/fe_integrator.h>
 #include <heat_transfer/laplace_operator.h>
@@ -31,11 +29,9 @@ namespace Heat_Transfer
     {}
 
     DEAL_II_HOST_DEVICE void
-    operator()(
-      const typename Portable::MatrixFree<dim, number>::Data *gpu_data,
-      const unsigned int                                      cell,
-      const unsigned int                                      q) const
-  ;
+    operator()(const typename Portable::MatrixFree<dim, number>::Data *gpu_data,
+               const unsigned int                                      cell,
+               const unsigned int                                      q) const;
 
 
     static const unsigned int n_dofs_1d    = fe_degree + 1;
@@ -56,7 +52,7 @@ namespace Heat_Transfer
 
   {
     const unsigned int pos = gpu_data->local_q_point_id(cell, n_q_points, q);
-    coef[pos] = 1.;
+    coef[pos]              = 1.;
   }
 
   template <int dim, int fe_degree, typename number>
@@ -64,23 +60,22 @@ namespace Heat_Transfer
   {
   public:
     using FECellIntegrators =
-     Portable::FEEvaluation<dim, fe_degree, fe_degree + 1, 1, number>;
+      Portable::FEEvaluation<dim, fe_degree, fe_degree + 1, 1, number>;
     DEAL_II_HOST_DEVICE
-    LaplaceOperatorQuad(
-    double                                                 *coef,
-    double                                                delta_t)
-    : coef(coef)
-    , delta_t(delta_t)
+    LaplaceOperatorQuad(double *coef, double delta_t)
+      : coef(coef)
+      , delta_t(delta_t)
     {}
 
     DEAL_II_HOST_DEVICE void
     operator()(FECellIntegrators *fe_eval, const int q_point) const;
 
-    static const unsigned int n_q_points =  dealii::Utilities::pow(fe_degree + 1, dim);
+    static const unsigned int n_q_points =
+      dealii::Utilities::pow(fe_degree + 1, dim);
 
   private:
-    double                                                 *coef;
-    double                                                  delta_t;
+    double *coef;
+    double  delta_t;
   };
 
 
@@ -89,7 +84,7 @@ namespace Heat_Transfer
   DEAL_II_HOST_DEVICE void
   LaplaceOperatorQuad<dim, fe_degree, number>::operator()(
     FECellIntegrators *fe_eval,
-    const int q_point) const
+    const int          q_point) const
   {
     const int cell_index = fe_eval->get_current_cell_index();
     const typename Portable::MatrixFree<dim, double>::Data *data =
@@ -99,7 +94,9 @@ namespace Heat_Transfer
       data->local_q_point_id(cell_index, n_q_points, q_point);
 
     fe_eval->submit_value(fe_eval->get_value(q_point), q_point);
-    fe_eval->submit_gradient(coef[position] * fe_eval->get_gradient(q_point) * delta_t, q_point);
+    fe_eval->submit_gradient(coef[position] * fe_eval->get_gradient(q_point) *
+                               delta_t,
+                             q_point);
   }
 
   template <int dim, int fe_degree, typename number>
@@ -115,10 +112,9 @@ namespace Heat_Transfer
     {}
 
     DEAL_II_HOST_DEVICE void
-    operator()(
-      const typename Portable::MatrixFree<dim, number>::Data *data,
-      const Portable::DeviceVector<number>                   &src,
-      Portable::DeviceVector<number>                         &dst) const;
+    operator()(const typename Portable::MatrixFree<dim, number>::Data *data,
+               const Portable::DeviceVector<number>                   &src,
+               Portable::DeviceVector<number> &dst) const;
 
     static const unsigned int n_dofs_1d    = fe_degree + 1;
     static const unsigned int n_local_dofs = Utilities::pow(fe_degree + 1, dim);
@@ -177,9 +173,9 @@ namespace Heat_Transfer
     clear();
 
   private:
-    std::shared_ptr<Portable::MatrixFree<dim, number>> mf_data;
-    LinearAlgebra::distributed::Vector<number, MemorySpace::Default>  coef;
-    double                                                 delta_t;
+    std::shared_ptr<Portable::MatrixFree<dim, number>>               mf_data;
+    LinearAlgebra::distributed::Vector<number, MemorySpace::Default> coef;
+    double                                                           delta_t;
   };
 
 
@@ -225,7 +221,7 @@ namespace Heat_Transfer
   template <int dim, int fe_degree, typename number>
   void
   CUDALaplaceOperator<dim, fe_degree, number>::vmult(
-    VectorType &      dst,
+    VectorType       &dst,
     const VectorType &src) const
   {
     dst = 0.;

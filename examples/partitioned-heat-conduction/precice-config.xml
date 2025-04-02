@@ -32,11 +32,7 @@
     <receive-mesh name="Neumann-write" from="Neumann" />
     <write-data name="Heat-Flux" mesh="Dirichlet-write" />
     <read-data name="Temperature" mesh="Dirichlet-read" />
-    <mapping:rbf
-      direction="read"
-      from="Neumann-write"
-      to="Dirichlet-read"
-      constraint="consistent">
+    <mapping:rbf direction="read" from="Neumann-write" to="Dirichlet-read" constraint="consistent">
       <basis-function:compact-polynomial-c6 support-radius="0.5" />
       <!--executor:cuda gpu-device-id="2" /-->
     </mapping:rbf>

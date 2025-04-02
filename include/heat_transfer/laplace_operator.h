@@ -48,9 +48,9 @@ namespace Heat_Transfer
     apply_add(VectorType &dst, const VectorType &src) const override;
 
     void
-    local_apply(const MatrixFree<dim, number> &              data,
-                VectorType &                                 dst,
-                const VectorType &                           src,
+    local_apply(const MatrixFree<dim, number>               &data,
+                VectorType                                  &dst,
+                const VectorType                            &src,
                 const std::pair<unsigned int, unsigned int> &cell_range) const;
 
     void
@@ -102,9 +102,9 @@ namespace Heat_Transfer
   template <int dim, typename number, typename MemorySpace>
   void
   LaplaceOperator<dim, number, MemorySpace>::local_apply(
-    const MatrixFree<dim, number> &              data,
-    VectorType &                                 dst,
-    const VectorType &                           src,
+    const MatrixFree<dim, number>               &data,
+    VectorType                                  &dst,
+    const VectorType                            &src,
     const std::pair<unsigned int, unsigned int> &cell_range) const
   {
     FECellIntegrator phi(data);
@@ -126,7 +126,7 @@ namespace Heat_Transfer
   template <int dim, typename number, typename MemorySpace>
   void
   LaplaceOperator<dim, number, MemorySpace>::apply_add(
-    VectorType &      dst,
+    VectorType       &dst,
     const VectorType &src) const
   {
     this->data->cell_loop(&LaplaceOperator::local_apply, this, dst, src);
@@ -182,7 +182,7 @@ namespace Heat_Transfer
   // Helper function in order to evaluate the vectorized point
   template <int dim, typename Number>
   VectorizedArray<Number>
-  evaluate_function(const Function<dim> &                      function,
+  evaluate_function(const Function<dim>                       &function,
                     const Point<dim, VectorizedArray<Number>> &p_vectorized,
                     const unsigned int                         component = 0)
   {
