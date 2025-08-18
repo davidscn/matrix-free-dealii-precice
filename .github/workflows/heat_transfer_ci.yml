@@ -25,7 +25,7 @@ jobs:
       with:
         precice-version: develop
         install-prefix: /usr/local
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: Adjust user rights
       run: |
         chown -R dealii .
