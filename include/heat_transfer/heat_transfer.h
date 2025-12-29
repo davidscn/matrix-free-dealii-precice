@@ -540,12 +540,12 @@ namespace Heat_Transfer
 
     for (unsigned int level = 0; level < nlevels; ++level)
       {
-        IndexSet relevant_dofs;
-        DoFTools::extract_locally_relevant_level_dofs(dof_handler,
-                                                      level,
-                                                      relevant_dofs);
+        IndexSet relevant_dofs =
+          DoFTools::extract_locally_relevant_level_dofs(dof_handler, level);
         AffineConstraints<double> level_constraints;
-        level_constraints.reinit(relevant_dofs);
+
+        level_constraints.reinit(dof_handler.locally_owned_mg_dofs(level),
+                                 relevant_dofs);
         level_constraints.add_lines(
           mg_constrained_dofs.get_boundary_indices(level));
         level_constraints.close();
@@ -662,9 +662,9 @@ namespace Heat_Transfer
   {
     // Update the constraints object
     constraints.clear();
-    IndexSet locally_relevant_dofs;
-    DoFTools::extract_locally_relevant_dofs(dof_handler, locally_relevant_dofs);
-    constraints.reinit(locally_relevant_dofs);
+    IndexSet locally_relevant_dofs =
+      DoFTools::extract_locally_relevant_dofs(dof_handler);
+    constraints.reinit(dof_handler.locally_owned_dofs(), locally_relevant_dofs);
 
     // First, fill the constraint object with the constraints at the interface
     if (testcase->is_dirichlet)
@@ -872,7 +872,7 @@ namespace Heat_Transfer
 
     Vector<double> mpi_owner(triangulation.n_active_cells());
     mpi_owner =
-      Utilities::MPI::this_mpi_process(triangulation.get_communicator());
+      Utilities::MPI::this_mpi_process(triangulation.get_mpi_communicator());
     data_out.add_data_vector(mpi_owner, "owner");
 
     data_out.build_patches(mapping,

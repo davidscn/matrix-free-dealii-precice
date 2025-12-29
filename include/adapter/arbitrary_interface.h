@@ -192,16 +192,21 @@ namespace Adapter
                                     EvaluationFlags::values);
               const auto val = fe_evaluator.get_value(0);
               if constexpr (data_dim > 1)
-                this->precice->writeData(this->mesh_name,
-                                         this->write_data_name,
-                                         {&interface_nodes_ids[i], 1},
-                                         {val.begin_raw(),
-                                          static_cast<std::size_t>(data_dim)});
+                {
+                  std::array<double, data_dim> val_array;
+                  val.unroll(val_array.begin(), val_array.end());
+                  this->precice->writeData(this->mesh_name,
+                                           this->write_data_name,
+                                           {&interface_nodes_ids[i], 1},
+                                           val_array);
+                }
               else
-                this->precice->writeData(this->mesh_name,
-                                         this->write_data_name,
-                                         {&interface_nodes_ids[i], 1},
-                                         {&val, 1});
+                {
+                  this->precice->writeData(this->mesh_name,
+                                           this->write_data_name,
+                                           {&interface_nodes_ids[i], 1},
+                                           {&val, 1});
+                }
             });
           break;
         case WriteDataType::gradients_on_other_mesh:
@@ -213,12 +218,13 @@ namespace Adapter
                 {
                   fe_evaluator.evaluate(make_array_view(local_values),
                                         EvaluationFlags::gradients);
-                  const auto val = fe_evaluator.get_gradient(0);
-                  this->precice->writeData(
-                    this->mesh_name,
-                    this->write_data_name,
-                    {&interface_nodes_ids[i], 1},
-                    {val.begin_raw(), static_cast<std::size_t>(data_dim)});
+                  const auto grad = fe_evaluator.get_gradient(0);
+                  std::array<double, data_dim> grad_array;
+                  grad.unroll(grad_array.begin(), grad_array.end());
+                  this->precice->writeData(this->mesh_name,
+                                           this->write_data_name,
+                                           {&interface_nodes_ids[i], 1},
+                                           grad_array);
                 }
               else
                 {
@@ -353,7 +359,7 @@ namespace Adapter
     const std::vector<bool>                           marked_vertices;
 
     const unsigned int my_rank =
-      Utilities::MPI::this_mpi_process(tria.get_communicator());
+      Utilities::MPI::this_mpi_process(tria.get_mpi_communicator());
     std::vector<int> relevant_interface_ids;
 
     // Loop over all received points
