@@ -3,6 +3,12 @@ name: deal.II v9.4
 on:
   push:
     branches: [ master ]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Optional git ref (branch/tag/SHA)."
+        required: false
+        default: ""
 
 jobs:
   build:
