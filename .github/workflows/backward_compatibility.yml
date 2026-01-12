@@ -19,12 +19,14 @@ jobs:
     - uses: actions/checkout@v6
     - name: setup
       run: |
+         REF='${{ inputs.ref || github.ref }}'
+
          command="sudo apt-get -y update && \
                   sudo apt-get -y upgrade && \
                   sudo apt-get -y install libboost-all-dev && \
                   git clone https://git@github.com/${{ github.repository }} && \
                   cd matrix-free-dealii-precice && \
-                  git fetch origin ${{ github.ref }} && \
+                  git fetch origin \"$REF\" && \
                   git checkout FETCH_HEAD && \
                   mkdir build && cd build && \
                   cmake .. && make all";
