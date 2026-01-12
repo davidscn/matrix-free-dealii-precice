@@ -899,13 +899,34 @@ namespace FSI
     LevelVectorType solution_total_transfer;
     solution_total_transfer.reinit(total_displacement);
     solution_total_transfer = total_displacement;
+
+
+    for (unsigned int level = 0; level < max_level; ++level)
+      {
+#if DEAL_II_VERSION_GTE(9, 7, 0)
+        const IndexSet relevant_mg_dofs =
+          DoFTools::extract_locally_relevant_level_dofs(dof_handler, level);
+#else
+        IndexSet relevant_mg_dofs;
+        DoFTools::extract_locally_relevant_level_dofs(dof_handler,
+                                                      level,
+                                                      relevant_mg_dofs);
+#endif
+
+        mg_total_displacement[level].reinit(dof_handler.locally_owned_mg_dofs(
+                                              level),
+                                            relevant_mg_dofs,
+                                            dof_handler.get_mpi_communicator());
+        mg_total_displacement[level].update_ghost_values();
+      }
+
     mg_transfer->interpolate_to_mg(dof_handler,
                                    mg_total_displacement,
                                    solution_total_transfer);
 
     // necessary since deal.II v 9.6
-    for (unsigned int level = 0; level <= max_level; ++level)
-      mg_total_displacement[level].update_ghost_values();
+    // for (unsigned int level = 0; level <= max_level; ++level)
+    //   mg_total_displacement[level].update_ghost_values();
 
     timer.leave_subsection();
   }
@@ -1264,7 +1285,7 @@ namespace FSI
 
 
   // Note: Dirichlet boundary conditions are in structural mechanics usually
-  // zero. Therefore, the constraints are not differently between Newton
+  // zero. Therefore, the constraints are the same across Newton
   // iterations. We keep updating the constraints object anyway, i.e., the
   // assumption is not exploited in make_constraints. However, the MF and GMG
   // constraints are not updated accordingly and in case one wants to utilize
