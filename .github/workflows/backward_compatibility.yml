@@ -1,5 +1,4 @@
-name: deal.II v9.4
-
+name: deal.II v9.6
 on:
   push:
     branches: [ master ]
@@ -12,28 +11,35 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
+    container:
+      image: dealii/dealii:v9.6.2-noble
+      options: --user root
+    timeout-minutes: 45
 
     steps:
-    - uses: actions/checkout@v6
-    - name: setup
-      run: |
-         REF='${{ inputs.ref || github.ref }}'
+      - name: prepare container
+        run: apt-get -y update && apt-get -y upgrade && apt-get -y install libboost-all-dev
 
-         command="sudo apt-get -y update && \
-                  sudo apt-get -y upgrade && \
-                  sudo apt-get -y install libboost-all-dev && \
-                  git clone https://git@github.com/${{ github.repository }} && \
-                  cd matrix-free-dealii-precice && \
-                  git fetch origin \"$REF\" && \
-                  git checkout FETCH_HEAD && \
-                  mkdir build && cd build && \
-                  cmake .. && make all";
+      - name: build preCICE
+        uses: precice/setup-precice-action@main
+        with:
+          precice-version: develop
+          install-prefix: /usr/local
 
-         echo $command
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
 
-         docker pull dealii/dealii:v9.4.0-jammy
-         docker pull precice/precice:latest
-         docker build -t dealii-precice:develop -f ./utilities/Dockerfile.dealiiv94 .
-         docker run -t dealii-precice:develop /bin/sh -c "$command";
+      - name: Adjust user rights
+        run: |
+          chown -R dealii .
+          cd tests/
+          echo "WORK_DIR=$(pwd)" >> $GITHUB_ENV
+
+      - name: run test
+        run: |
+          cd $WORK_DIR && sudo -u dealii ./run_tests.sh
+        env:
+          WORK_DIR: ${{ env.WORK_DIR }}

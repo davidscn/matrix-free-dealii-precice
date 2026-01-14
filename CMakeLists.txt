@@ -30,7 +30,7 @@ ENDIF()
 # Print the current build type
 MESSAGE(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
-FIND_PACKAGE(deal.II 9.3
+FIND_PACKAGE(deal.II 9.6
   HINTS ${deal.II_DIR} ${DEAL_II_DIR} ../ ../../ $ENV{DEAL_II_DIR}
   )
 IF(NOT ${deal.II_FOUND})
