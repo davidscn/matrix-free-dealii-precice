@@ -685,8 +685,8 @@ namespace FSI
     print(bcout);
 
     locally_owned_dofs = dof_handler.locally_owned_dofs();
-    locally_relevant_dofs.clear();
-    DoFTools::extract_locally_relevant_dofs(dof_handler, locally_relevant_dofs);
+    locally_relevant_dofs =
+      DoFTools::extract_locally_relevant_dofs(dof_handler);
 
 
     // We then set up storage vectors
@@ -841,13 +841,6 @@ namespace FSI
               {
                 data.cell_vectorization_category[cell->active_cell_index()] =
                   cell->material_id();
-#if !DEAL_II_VERSION_GTE(9, 6, 0)
-                // See also https://github.com/dealii/dealii/issues/16250
-                AssertThrow(
-                  cell->material_id() == 0,
-                  ExcMessage(
-                    "The deal.II version you are using doesn't allow for different material_ids(). To use this feature, at least deal.II version 9.6.0 is required."));
-#endif
               }
           }
       }
@@ -899,6 +892,31 @@ namespace FSI
     LevelVectorType solution_total_transfer;
     solution_total_transfer.reinit(total_displacement);
     solution_total_transfer = total_displacement;
+
+
+    for (unsigned int level = 0; level < max_level; ++level)
+      {
+#if DEAL_II_VERSION_GTE(9, 7, 0)
+        const IndexSet relevant_mg_dofs =
+          DoFTools::extract_locally_relevant_level_dofs(dof_handler, level);
+#else
+        IndexSet relevant_mg_dofs;
+        DoFTools::extract_locally_relevant_level_dofs(dof_handler,
+                                                      level,
+                                                      relevant_mg_dofs);
+#endif
+
+        mg_total_displacement[level].reinit(dof_handler.locally_owned_mg_dofs(
+                                              level),
+                                            relevant_mg_dofs,
+#if DEAL_II_VERSION_GTE(9, 8, 0)
+                                            dof_handler.get_mpi_communicator());
+#else
+                                            dof_handler.get_communicator());
+#endif
+        mg_total_displacement[level].update_ghost_values();
+      }
+
     mg_transfer->interpolate_to_mg(dof_handler,
                                    mg_total_displacement,
                                    solution_total_transfer);
@@ -996,17 +1014,16 @@ namespace FSI
     const QGauss<1> quad(quad_order);
 
     AffineConstraints<double> level_constraints;
-    IndexSet                  relevant_dofs;
-    DoFTools::extract_locally_relevant_level_dofs(dof_handler,
-                                                  level,
-                                                  relevant_dofs);
+    IndexSet                  relevant_dofs =
+      DoFTools::extract_locally_relevant_level_dofs(dof_handler, level);
 
     // GMG MF operators do not support edge indices yet
     AssertThrow(
       mg_constrained_dofs.get_refinement_edge_indices(level).is_empty(),
       ExcNotImplemented());
 
-    level_constraints.reinit(relevant_dofs);
+    level_constraints.reinit(dof_handler.locally_owned_mg_dofs(level),
+                             relevant_dofs);
     level_constraints.add_lines(
       mg_constrained_dofs.get_boundary_indices(level));
     level_constraints.close();
@@ -1265,7 +1282,7 @@ namespace FSI
 
 
   // Note: Dirichlet boundary conditions are in structural mechanics usually
-  // zero. Therefore, the constraints are not differently between Newton
+  // zero. Therefore, the constraints are the same across Newton
   // iterations. We keep updating the constraints object anyway, i.e., the
   // assumption is not exploited in make_constraints. However, the MF and GMG
   // constraints are not updated accordingly and in case one wants to utilize
@@ -1863,7 +1880,7 @@ namespace FSI
                                                         parameters.delta_t);
 
             // pull-back the traction
-            const auto N = phi.get_normal_vector(q);
+            const auto N = phi.normal_vector(q);
 
             // da/dA * N = det F F^{-T} * N := n_star
             // -> da/dA = n_star.norm()
@@ -1921,7 +1938,7 @@ namespace FSI
       return;
 
     constraints.clear();
-    constraints.reinit(locally_relevant_dofs);
+    constraints.reinit(locally_owned_dofs, locally_relevant_dofs);
     DoFTools::make_hanging_node_constraints(dof_handler, constraints);
 
     mg_constrained_dofs.clear();

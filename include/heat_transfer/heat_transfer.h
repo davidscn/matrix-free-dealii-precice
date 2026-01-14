@@ -540,12 +540,12 @@ namespace Heat_Transfer
 
     for (unsigned int level = 0; level < nlevels; ++level)
       {
-        IndexSet relevant_dofs;
-        DoFTools::extract_locally_relevant_level_dofs(dof_handler,
-                                                      level,
-                                                      relevant_dofs);
+        IndexSet relevant_dofs =
+          DoFTools::extract_locally_relevant_level_dofs(dof_handler, level);
         AffineConstraints<double> level_constraints;
-        level_constraints.reinit(relevant_dofs);
+
+        level_constraints.reinit(dof_handler.locally_owned_mg_dofs(level),
+                                 relevant_dofs);
         level_constraints.add_lines(
           mg_constrained_dofs.get_boundary_indices(level));
         level_constraints.close();
@@ -662,9 +662,9 @@ namespace Heat_Transfer
   {
     // Update the constraints object
     constraints.clear();
-    IndexSet locally_relevant_dofs;
-    DoFTools::extract_locally_relevant_dofs(dof_handler, locally_relevant_dofs);
-    constraints.reinit(locally_relevant_dofs);
+    IndexSet locally_relevant_dofs =
+      DoFTools::extract_locally_relevant_dofs(dof_handler);
+    constraints.reinit(dof_handler.locally_owned_dofs(), locally_relevant_dofs);
 
     // First, fill the constraint object with the constraints at the interface
     if (testcase->is_dirichlet)
@@ -858,11 +858,7 @@ namespace Heat_Transfer
     DataOut<dim> data_out;
 
     DataOutBase::VtkFlags flags;
-#if DEAL_II_VERSION_GTE(9, 5, 0)
-    flags.compression_level = DataOutBase::CompressionLevel::best_speed;
-#else
-    flags.compression_level = DataOutBase::VtkFlags::best_speed;
-#endif
+    flags.compression_level        = DataOutBase::CompressionLevel::best_speed;
     flags.write_higher_order_cells = true;
     data_out.set_flags(flags);
 
@@ -872,7 +868,11 @@ namespace Heat_Transfer
 
     Vector<double> mpi_owner(triangulation.n_active_cells());
     mpi_owner =
+#if DEAL_II_VERSION_GTE(9, 8, 0)
+      Utilities::MPI::this_mpi_process(triangulation.get_mpi_communicator());
+#else
       Utilities::MPI::this_mpi_process(triangulation.get_communicator());
+#endif
     data_out.add_data_vector(mpi_owner, "owner");
 
     data_out.build_patches(mapping,

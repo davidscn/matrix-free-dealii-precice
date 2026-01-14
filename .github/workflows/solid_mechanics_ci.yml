@@ -34,6 +34,7 @@ jobs:
     - name: run test
 
       run: |
-        cd $WORK_DIR && sudo -u dealii ./run_tests.sh
+        cd $WORK_DIR
+        sudo -u dealii ./run_tests.sh
       env:
         WORK_DIR: ${{ env.WORK_DIR }}
