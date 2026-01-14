@@ -869,9 +869,9 @@ namespace Heat_Transfer
     Vector<double> mpi_owner(triangulation.n_active_cells());
     mpi_owner =
 #if DEAL_II_VERSION_GTE(9, 8, 0)
-      Utilities::MPI::this_mpi_process(tria.get_mpi_communicator());
+      Utilities::MPI::this_mpi_process(triangulation.get_mpi_communicator());
 #else
-      Utilities::MPI::this_mpi_process(tria.get_communicator());
+      Utilities::MPI::this_mpi_process(triangulation.get_communicator());
 #endif
     data_out.add_data_vector(mpi_owner, "owner");
 
