@@ -359,7 +359,11 @@ namespace Adapter
     const std::vector<bool>                           marked_vertices;
 
     const unsigned int my_rank =
+#if DEAL_II_VERSION_GTE(9, 8, 0)
       Utilities::MPI::this_mpi_process(tria.get_mpi_communicator());
+#else
+      Utilities::MPI::this_mpi_process(tria.get_communicator());
+#endif
     std::vector<int> relevant_interface_ids;
 
     // Loop over all received points

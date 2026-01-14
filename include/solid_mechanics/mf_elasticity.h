@@ -916,7 +916,11 @@ namespace FSI
         mg_total_displacement[level].reinit(dof_handler.locally_owned_mg_dofs(
                                               level),
                                             relevant_mg_dofs,
+#if DEAL_II_VERSION_GTE(9, 8, 0)
                                             dof_handler.get_mpi_communicator());
+#else
+                                            dof_handler.get_communicator());
+#endif
         mg_total_displacement[level].update_ghost_values();
       }
 
