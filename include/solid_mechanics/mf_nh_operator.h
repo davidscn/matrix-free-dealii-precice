@@ -518,8 +518,8 @@ NeoHookOperator<dim, Number>::cache()
                     break;
                   }
               } // End MFCaching
-          }     // End n_q_points_loop
-    }           // End cell loop
+          } // End n_q_points_loop
+    } // End cell loop
 }
 
 
