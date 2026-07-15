@@ -75,9 +75,8 @@ using namespace dealii;
 
 template <int dim, typename Number>
 void
-adjust_ghost_range_if_necessary(
-  const MatrixFree<dim, Number>                    &matrix_free,
-  LinearAlgebra::distributed::Vector<Number>       &vec)
+adjust_ghost_range_if_necessary(const MatrixFree<dim, Number> &matrix_free,
+                                LinearAlgebra::distributed::Vector<Number> &vec)
 {
   const std::shared_ptr<const Utilities::MPI::Partitioner> &partitioner =
     matrix_free.get_vector_partitioner();
