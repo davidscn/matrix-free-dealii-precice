@@ -73,19 +73,20 @@ outer_product_ikjl(const Tensor<2, dim, Number> &A,
 
 using namespace dealii;
 
-template <typename Number>
+template <int dim, typename Number>
 void
 adjust_ghost_range_if_necessary(
-  const std::shared_ptr<const Utilities::MPI::Partitioner> &partitioner,
-  const LinearAlgebra::distributed::Vector<Number>         &vec)
+  const MatrixFree<dim, Number>                    &matrix_free,
+  LinearAlgebra::distributed::Vector<Number>       &vec)
 {
+  const std::shared_ptr<const Utilities::MPI::Partitioner> &partitioner =
+    matrix_free.get_vector_partitioner();
+
   if (vec.get_partitioner().get() != partitioner.get())
     {
       LinearAlgebra::distributed::Vector<Number> copy(vec);
-      const_cast<LinearAlgebra::distributed::Vector<Number> &>(vec).reinit(
-        partitioner);
-      const_cast<LinearAlgebra::distributed::Vector<Number> &>(vec)
-        .copy_locally_owned_data_from(copy);
+      matrix_free.initialize_dof_vector(vec);
+      vec.copy_locally_owned_data_from(copy);
     }
 }
 
@@ -584,8 +585,16 @@ NeoHookOperator<dim, Number>::vmult_add(VectorType       &dst,
            *data_reference->get_vector_partitioner().get()),
          ExcMessage("Current and reference partitioners are incompatible"));
 
-  adjust_ghost_range_if_necessary(partitioner, dst);
-  adjust_ghost_range_if_necessary(partitioner, src);
+  adjust_ghost_range_if_necessary(*data_current, dst);
+
+  VectorType        src_compatible;
+  const VectorType *src_in_use = &src;
+  if (src.get_partitioner().get() != partitioner.get())
+    {
+      data_current->initialize_dof_vector(src_compatible);
+      src_compatible.copy_locally_owned_data_from(src);
+      src_in_use = &src_compatible;
+    }
 
   // FIXME: use cell_loop, should work even though we need
   // both matrix-free data objects.
@@ -599,12 +608,12 @@ NeoHookOperator<dim, Number>::vmult_add(VectorType       &dst,
   // https://www.dealii.org/developer/doxygen/deal.II/matrix__free_8h_source.html#l00109
 
   // 1. make sure ghosts are updated
-  src.update_ghost_values();
+  src_in_use->update_ghost_values();
 
   // 2. loop over all locally owned cell blocks
   local_apply_cell(*data_current,
                    dst,
-                   src,
+                   *src_in_use,
                    std::make_pair<unsigned int, unsigned int>(
                      0, data_current->n_cell_batches()));
 
@@ -613,7 +622,7 @@ NeoHookOperator<dim, Number>::vmult_add(VectorType       &dst,
 
   // 4. constraints
   for (const auto dof : data_current->get_constrained_dofs())
-    dst.local_element(dof) += src.local_element(dof);
+    dst.local_element(dof) += src_in_use->local_element(dof);
 }
 
 
