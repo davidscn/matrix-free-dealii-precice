@@ -1072,11 +1072,10 @@ namespace FSI
                  *mf_data_reference->get_vector_partitioner().get()),
                ExcInternalError());
 
-        // TODO: Use initialize_dof_vector
-        adjust_ghost_range_if_necessary(partitioner, newton_update);
-        adjust_ghost_range_if_necessary(partitioner, system_rhs);
-        adjust_ghost_range_if_necessary(partitioner, total_displacement);
-        adjust_ghost_range_if_necessary(partitioner, acceleration);
+        adjust_ghost_range_if_necessary(*mf_data_current, newton_update);
+        adjust_ghost_range_if_necessary(*mf_data_current, system_rhs);
+        adjust_ghost_range_if_necessary(*mf_data_current, total_displacement);
+        adjust_ghost_range_if_necessary(*mf_data_current, acceleration);
         total_displacement.update_ghost_values();
         acceleration.update_ghost_values();
       }
@@ -1091,7 +1090,7 @@ namespace FSI
                  *mg_mf_data_reference[level]->get_vector_partitioner().get()),
                ExcInternalError());
 
-        adjust_ghost_range_if_necessary(partitioner,
+        adjust_ghost_range_if_necessary(*mg_mf_data_current[level],
                                         mg_total_displacement[level]);
         mg_total_displacement[level].update_ghost_values();
       }
