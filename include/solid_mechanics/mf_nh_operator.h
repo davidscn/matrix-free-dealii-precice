@@ -595,31 +595,14 @@ NeoHookOperator<dim, Number>::vmult_add(VectorType       &dst,
       src_in_use = &src_compatible;
     }
 
-  // FIXME: use cell_loop, should work even though we need
-  // both matrix-free data objects.
   Assert(data_current->n_cell_batches() == data_reference->n_cell_batches(),
          ExcInternalError());
 
-  // MatrixFree::cell_loop() is more complicated than a simple
-  // update_ghost_values() / compress(), it loops on different cells (inner
-  // without ghosts and outer) in different order and do update_ghost_values()
-  // and compress_start()/compress_finish() in between.
-  // https://www.dealii.org/developer/doxygen/deal.II/matrix__free_8h_source.html#l00109
+  data_current->cell_loop(&NeoHookOperator::local_apply_cell,
+                          this,
+                          dst,
+                          *src_in_use);
 
-  // 1. make sure ghosts are updated
-  src_in_use->update_ghost_values();
-
-  // 2. loop over all locally owned cell blocks
-  local_apply_cell(*data_current,
-                   dst,
-                   *src_in_use,
-                   std::make_pair<unsigned int, unsigned int>(
-                     0, data_current->n_cell_batches()));
-
-  // 3. communicate results with MPI
-  dst.compress(VectorOperation::add);
-
-  // 4. constraints
   for (const auto dof : data_current->get_constrained_dofs())
     dst.local_element(dof) += src_in_use->local_element(dof);
 }
