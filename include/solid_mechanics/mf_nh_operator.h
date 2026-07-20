@@ -1071,3 +1071,8 @@ NeoHookOperator<dim, Number>::el(const unsigned int row,
   Assert(diagonal_is_available == true, ExcNotInitialized());
   return diagonal_entries->get_vector()(row);
 }
+
+extern template class NeoHookOperator<2, double>;
+extern template class NeoHookOperator<2, float>;
+extern template class NeoHookOperator<3, double>;
+extern template class NeoHookOperator<3, float>;

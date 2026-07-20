@@ -2134,3 +2134,6 @@ namespace FSI
     //                                             /*artificial*/ false);
   }
 } // namespace FSI
+
+extern template class FSI::Solid<2, double>;
+extern template class FSI::Solid<3, double>;

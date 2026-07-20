@@ -4,6 +4,8 @@
 
 #include <parameter/precice_parameter.h>
 
+#include <iostream>
+
 using namespace dealii;
 
 // @sect3{Run-time parameters}
@@ -75,7 +77,7 @@ namespace Parameters
   };
 
 
-  void
+  inline void
   FESystem::add_parameters(ParameterHandler &prm)
   {
     prm.enter_subsection("Finite element system");
@@ -106,7 +108,7 @@ namespace Parameters
     add_parameters(ParameterHandler &prm);
   };
 
-  void
+  inline void
   Geometry::add_parameters(ParameterHandler &prm)
   {
     prm.enter_subsection("Geometry");
@@ -144,7 +146,7 @@ namespace Parameters
     add_parameters(ParameterHandler &prm);
   };
 
-  void
+  inline void
   Materials::add_parameters(ParameterHandler &prm)
   {
     prm.enter_subsection("Material properties");
@@ -191,7 +193,7 @@ namespace Parameters
     add_parameters(ParameterHandler &prm);
   };
 
-  void
+  inline void
   LinearSolver::add_parameters(ParameterHandler &prm)
   {
     prm.enter_subsection("Linear solver");
@@ -270,7 +272,7 @@ namespace Parameters
     add_parameters(ParameterHandler &prm);
   };
 
-  void
+  inline void
   NonlinearSolver::add_parameters(ParameterHandler &prm)
   {
     prm.enter_subsection("Nonlinear solver");
@@ -315,7 +317,7 @@ namespace Parameters
     add_parameters(ParameterHandler &prm);
   };
 
-  void
+  inline void
   Time::add_parameters(ParameterHandler &prm)
   {
     prm.enter_subsection("Time");

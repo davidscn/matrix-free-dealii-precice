@@ -32,7 +32,7 @@ namespace Parameters
   };
 
 
-  void
+  inline void
   PreciceAdapterConfiguration::add_parameters(ParameterHandler &prm)
   {
     prm.enter_subsection("precice configuration");

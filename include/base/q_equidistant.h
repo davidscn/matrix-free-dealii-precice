@@ -22,7 +22,7 @@ public:
 
 
 template <>
-QEquidistant<1>::QEquidistant(const unsigned int n)
+inline QEquidistant<1>::QEquidistant(const unsigned int n)
   : Quadrature<1>(n)
 {
   if (n == 0)

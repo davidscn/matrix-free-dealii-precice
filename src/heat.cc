@@ -1,10 +1,17 @@
-#include <heat_transfer/heat_transfer.h>
+#include <deal.II/base/exceptions.h>
+#include <deal.II/base/mpi.h>
+#include <deal.II/base/parameter_handler.h>
+
+#include <base/solver_runners.h>
+#include <parameter/parameter_handling.h>
+
+#include <iostream>
+#include <string>
 
 int
 main(int argc, char *argv[])
 {
   using namespace dealii;
-  using namespace Heat_Transfer;
 
   try
     {
@@ -33,21 +40,11 @@ main(int argc, char *argv[])
 
       if (dim == 2)
         {
-          // query the testcase
-          TestCases::CaseSelector<2> selector;
-          auto testcase = selector.get_test_case(case_name, "heat_transfer");
-          Parameters::HeatParameters<2> parameters(parameter_filename);
-          LaplaceProblem<2>             laplace_problem(parameters);
-          laplace_problem.run(testcase);
+          SolverRunners::run_heat_2d(parameter_filename, case_name);
         }
       else if (dim == 3)
         {
-          // query the testcase
-          TestCases::CaseSelector<3> selector;
-          auto testcase = selector.get_test_case(case_name, "heat_transfer");
-          Parameters::HeatParameters<3> parameters(parameter_filename);
-          LaplaceProblem<3>             laplace_problem(parameters);
-          laplace_problem.run(testcase);
+          SolverRunners::run_heat_3d(parameter_filename, case_name);
         }
       else
         {
