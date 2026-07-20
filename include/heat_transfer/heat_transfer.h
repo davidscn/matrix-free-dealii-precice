@@ -34,7 +34,7 @@
 #include <base/fe_integrator.h>
 #include <base/time_handler.h>
 #include <base/utilities.h>
-#include <cases/case_selector.h>
+#include <cases/case_base.h>
 #include <parameter/parameter_handling.h>
 
 #include <fstream>
@@ -1036,3 +1036,10 @@ namespace Heat_Transfer
     pcout << std::endl;
   }
 } // namespace Heat_Transfer
+
+extern template class Heat_Transfer::LaplaceOperator<2, double>;
+extern template class Heat_Transfer::LaplaceOperator<2, float>;
+extern template class Heat_Transfer::LaplaceOperator<3, double>;
+extern template class Heat_Transfer::LaplaceOperator<3, float>;
+extern template class Heat_Transfer::LaplaceProblem<2>;
+extern template class Heat_Transfer::LaplaceProblem<3>;

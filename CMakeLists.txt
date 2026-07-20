@@ -75,22 +75,6 @@ IF(NOT ${DEAL_II_WITH_CXX17})
     SET(CMAKE_CXX_STANDARD_REQUIRED ON)
 ENDIF()
 
-# Build the version specific object
-ADD_LIBRARY(version OBJECT ${CMAKE_CURRENT_BINARY_DIR}/version.cc)
-
-# Build the executables
-ADD_EXECUTABLE(${SOLVER1}
-    src/${SOLVER1}.cc
-  )
-
-ADD_EXECUTABLE(${SOLVER2}
-    src/${SOLVER2}.cc
-  )
-
-# Setup targets
-DEAL_II_SETUP_TARGET(${SOLVER1})
-DEAL_II_SETUP_TARGET(${SOLVER2})
-
 # the environment variable precice_DIR is searched by default
 FIND_PACKAGE(precice 3.0
         HINTS ${precice_DIR} ${PRECICE_DIR} $ENV{PRECICE_DIR}
@@ -105,9 +89,82 @@ IF(NOT ${precice_FOUND})
 ENDIF()
 MESSAGE(STATUS "Found preCICE version ${precice_VERSION} at ${precice_DIR}")
 
-# Link targets to preCICE
-TARGET_LINK_LIBRARIES(${SOLVER1} version precice::precice)
-TARGET_LINK_LIBRARIES(${SOLVER2} version precice::precice)
+# Build the version specific object
+ADD_LIBRARY(version OBJECT ${CMAKE_CURRENT_BINARY_DIR}/version.cc)
+
+# Compile the expensive MatrixFree/template instantiations once per dimension.
+ADD_LIBRARY(solid_cases_2d STATIC src/solid_cases_2d.cc)
+ADD_LIBRARY(solid_cases_3d STATIC src/solid_cases_3d.cc)
+ADD_LIBRARY(solid_operator_2d STATIC src/solid_operator_2d.cc)
+ADD_LIBRARY(solid_operator_3d STATIC src/solid_operator_3d.cc)
+ADD_LIBRARY(solid_physics_2d STATIC src/solid_physics_2d.cc)
+ADD_LIBRARY(solid_physics_3d STATIC src/solid_physics_3d.cc)
+
+ADD_LIBRARY(heat_cases_2d STATIC src/heat_cases_2d.cc)
+ADD_LIBRARY(heat_cases_3d STATIC src/heat_cases_3d.cc)
+ADD_LIBRARY(heat_physics_2d STATIC src/heat_physics_2d.cc)
+ADD_LIBRARY(heat_physics_3d STATIC src/heat_physics_3d.cc)
+
+ADD_EXECUTABLE(${SOLVER1} src/${SOLVER1}.cc)
+ADD_EXECUTABLE(${SOLVER2} src/${SOLVER2}.cc)
+
+FOREACH(_target
+    solid_cases_2d
+    solid_cases_3d
+    solid_operator_2d
+    solid_operator_3d
+    solid_physics_2d
+    solid_physics_3d
+    heat_cases_2d
+    heat_cases_3d
+    heat_physics_2d
+    heat_physics_3d
+    ${SOLVER1}
+    ${SOLVER2})
+  DEAL_II_SETUP_TARGET(${_target})
+ENDFOREACH()
+
+TARGET_LINK_LIBRARIES(solid_physics_2d
+  solid_cases_2d solid_operator_2d precice::precice)
+TARGET_LINK_LIBRARIES(solid_physics_3d
+  solid_cases_3d solid_operator_3d precice::precice)
+TARGET_LINK_LIBRARIES(heat_physics_2d heat_cases_2d precice::precice)
+TARGET_LINK_LIBRARIES(heat_physics_3d heat_cases_3d precice::precice)
+
+TARGET_LINK_LIBRARIES(${SOLVER1}
+  version solid_physics_2d solid_physics_3d precice::precice)
+TARGET_LINK_LIBRARIES(${SOLVER2}
+  version heat_physics_2d heat_physics_3d precice::precice)
+
+# Avoid concurrent multi-gigabyte compiler processes even when the caller uses
+# a parallel build. The explicit target dependencies cover Unix Makefiles;
+# Ninja additionally gets a dedicated one-slot compile pool.
+ADD_DEPENDENCIES(solid_cases_3d solid_cases_2d)
+ADD_DEPENDENCIES(solid_operator_2d solid_cases_3d)
+ADD_DEPENDENCIES(solid_operator_3d solid_operator_2d)
+ADD_DEPENDENCIES(solid_physics_2d solid_operator_3d)
+ADD_DEPENDENCIES(solid_physics_3d solid_physics_2d)
+ADD_DEPENDENCIES(heat_cases_3d heat_cases_2d)
+ADD_DEPENDENCIES(heat_physics_2d heat_cases_3d)
+ADD_DEPENDENCIES(heat_physics_3d heat_physics_2d)
+
+IF(CMAKE_VERSION VERSION_GREATER_EQUAL 3.15 AND
+   CMAKE_GENERATOR MATCHES "Ninja")
+  SET_PROPERTY(GLOBAL PROPERTY JOB_POOLS matrixfree_compile=1)
+  FOREACH(_target
+      solid_cases_2d
+      solid_cases_3d
+      solid_operator_2d
+      solid_operator_3d
+      solid_physics_2d
+      solid_physics_3d
+      heat_cases_2d
+      heat_cases_3d
+      heat_physics_2d
+      heat_physics_3d)
+    SET_PROPERTY(TARGET ${_target} PROPERTY JOB_POOL_COMPILE matrixfree_compile)
+  ENDFOREACH()
+ENDIF()
 
 INCLUDE_DIRECTORIES (${CMAKE_CURRENT_BINARY_DIR}/include)
 

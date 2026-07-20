@@ -23,7 +23,7 @@ namespace Utilities
    *
    * @return int An integer which indicates if the creation was successfull (returns 0)
    */
-  int
+  inline int
   create_directory(std::string  pathname,
                    const mode_t mode = (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH |
                                         S_IXOTH))
@@ -64,7 +64,7 @@ namespace Utilities
    * @param[in] stream The output stream to which the information should be
    *            printed
    */
-  void
+  inline void
   print_configuration(ConditionalOStream &stream)
   {
     const int n_tasks = dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
