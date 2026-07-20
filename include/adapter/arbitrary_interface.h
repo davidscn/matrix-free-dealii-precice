@@ -218,6 +218,10 @@ namespace Adapter
                 {
                   fe_evaluator.evaluate(make_array_view(local_values),
                                         EvaluationFlags::gradients);
+                  // TODO: This coupling quantity is a normal gradient. Compute
+                  // the interface normal explicitly at this arbitrary point and
+                  // write grad(u) * n, as in the flexible-mappings monolithic
+                  // solver, instead of passing the full gradient.
                   const auto grad = fe_evaluator.get_gradient(0);
                   std::array<double, data_dim> grad_array;
                   grad.unroll(grad_array.begin(), grad_array.end());
