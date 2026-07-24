@@ -68,6 +68,8 @@ CONFIGURE_FILE(${CMAKE_SOURCE_DIR}/src/version.cc.in
 
 PROJECT(${TARGET} LANGUAGES CXX)
 
+INCLUDE(CTest)
+
 # This project requires c++17
 IF(NOT ${DEAL_II_WITH_CXX17})
     SET(CMAKE_CXX_STANDARD 17)
@@ -108,6 +110,10 @@ MESSAGE(STATUS "Found preCICE version ${precice_VERSION} at ${precice_DIR}")
 # Link targets to preCICE
 TARGET_LINK_LIBRARIES(${SOLVER1} version precice::precice)
 TARGET_LINK_LIBRARIES(${SOLVER2} version precice::precice)
+
+IF(BUILD_TESTING)
+  ADD_SUBDIRECTORY(tests)
+ENDIF()
 
 INCLUDE_DIRECTORIES (${CMAKE_CURRENT_BINARY_DIR}/include)
 
