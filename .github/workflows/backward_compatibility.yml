@@ -40,6 +40,9 @@ jobs:
 
       - name: run test
         run: |
-          cd $WORK_DIR && sudo -u dealii ./run_tests.sh
+          cd $WORK_DIR
+          sudo -u dealii cmake -S .. -B build -DCMAKE_BUILD_TYPE=Debug
+          sudo -u dealii cmake --build build --target solid heat
+          sudo -u dealii ctest --test-dir build --output-on-failure
         env:
           WORK_DIR: ${{ env.WORK_DIR }}
