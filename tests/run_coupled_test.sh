@@ -170,8 +170,7 @@ comparison_result_file=${result_file}
 comparison_reference_file=${reference_file}
 
 if [ "${result_kind}" = solid ]; then
-  cg_relative_tolerance=${tolerance%%,*}
-  cg_absolute_tolerance=${tolerance#*,}
+  cg_relative_tolerance=${tolerance}
   generated_cg_count=$(
     sed -n 's/^Average CG iter = \([0-9][0-9]*\)$/\1/p' "${result_file}"
   )
@@ -212,12 +211,12 @@ if [ "${result_kind}" = solid ] &&
    ! awk -v generated="${generated_cg_count}" \
          -v reference="${reference_cg_count}" \
          -v relative_tolerance="${cg_relative_tolerance}" \
-         -v absolute_tolerance="${cg_absolute_tolerance}" \
          'BEGIN {
             allowance = reference * relative_tolerance
-            if (allowance < absolute_tolerance)
-              allowance = absolute_tolerance
-            exit !(generated <= reference + allowance)
+            exit !(generated > 0 &&
+                   reference > 0 &&
+                   generated >= reference - allowance &&
+                   generated <= reference + allowance)
           }'; then
   {
     echo "----------------"
@@ -225,18 +224,16 @@ if [ "${result_kind}" = solid ] &&
       "${generated_cg_line}" "${generated_cg_count}"
     printf '##%s      #:5   ==> %s\n' \
       "${generated_cg_line}" "${reference_cg_count}"
-    printf '@ CG iteration regression exceeds tolerances: relative=%s, absolute=%s\n' \
-      "${cg_relative_tolerance}" "${cg_absolute_tolerance}"
-    printf '@ Maximum accepted value = %.6g\n' \
+    printf '@ CG iteration count must be positive and within +/-%g%% of the reference\n' \
+      "$(awk -v tolerance="${cg_relative_tolerance}" \
+             'BEGIN { print 100 * tolerance }')"
+    printf '@ Accepted range = [%.6g, %.6g]\n' \
       "$(awk -v reference="${reference_cg_count}" \
              -v relative_tolerance="${cg_relative_tolerance}" \
-             -v absolute_tolerance="${cg_absolute_tolerance}" \
-             'BEGIN {
-                allowance = reference * relative_tolerance
-                if (allowance < absolute_tolerance)
-                  allowance = absolute_tolerance
-                print reference + allowance
-              }')"
+             'BEGIN { print reference * (1 - relative_tolerance) }')" \
+      "$(awk -v reference="${reference_cg_count}" \
+             -v relative_tolerance="${cg_relative_tolerance}" \
+             'BEGIN { print reference * (1 + relative_tolerance) }')"
   } > comparison.diff
   show_comparison_failure
   exit 1

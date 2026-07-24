@@ -21,11 +21,10 @@ Every physical case is tested with one solver rank (`serial`) and four solver
 ranks (`parallel`). These modes are also available as CTest labels. The number
 of ranks and the 120-second timeout can be configured with
 `COUPLED_TEST_MPI_RANKS` and `COUPLED_TEST_TIMEOUT`, respectively.
-`SOLID_TEST_CG_RELATIVE_TOLERANCE` and
-`SOLID_TEST_CG_ABSOLUTE_TOLERANCE` control the accepted increase in the
-average CG iteration count; the larger allowance is used and lower counts are
-always accepted. Heat error values use the configurable absolute tolerance
-`HEAT_TEST_ABSOLUTE_TOLERANCE`.
+`SOLID_TEST_CG_RELATIVE_TOLERANCE` controls the accepted relative deviation in
+the average CG iteration count. The count must be positive and, by default,
+within 1% above or below the reference. Heat error values use the configurable
+absolute tolerance `HEAT_TEST_ABSOLUTE_TOLERANCE`.
 
 CTest builds the lightweight `dummy_tester` automatically before solid tests.
 It does not build `solid` or `heat`. Before each coupled run, a setup fixture

@@ -13,9 +13,7 @@ set(COUPLED_TEST_TIMEOUT 120 CACHE STRING
 set(COUPLED_TEST_MPI_RANKS 4 CACHE STRING
   "Number of MPI ranks used by each parallel test participant")
 set(SOLID_TEST_CG_RELATIVE_TOLERANCE 0.01 CACHE STRING
-  "Allowed relative increase in average CG iterations")
-set(SOLID_TEST_CG_ABSOLUTE_TOLERANCE 1 CACHE STRING
-  "Minimum allowed absolute increase in average CG iterations")
+  "Allowed relative deviation in average CG iterations")
 set(HEAT_TEST_ABSOLUTE_TOLERANCE 2e-13 CACHE STRING
   "Absolute tolerance used for heat error regression values")
 
@@ -98,7 +96,7 @@ function(add_solid_regression_test case_name mode mpi_ranks)
       "${BASH_EXECUTABLE}" "${_run_test_script}"
       solid "${_work_directory}" "${case_name}/output"
       "${_reference_file}" "${NUMDIFF_EXECUTABLE}"
-      "${SOLID_TEST_CG_RELATIVE_TOLERANCE},${SOLID_TEST_CG_ABSOLUTE_TOLERANCE}"
+      "${SOLID_TEST_CG_RELATIVE_TOLERANCE}"
       -- ${_solid_command}
       --and "$<TARGET_FILE:dummy_tester>")
   math(EXPR _processor_count "${mpi_ranks} + 1")
